@@ -1,0 +1,32 @@
+.bar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 10px;
+  background: var(--accent-dim);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.left, .right {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  height: 24px;
+  cursor: default;
+  transition: background 0.1s ease;
+  white-space: nowrap;
+}
+
+.item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}

@@ -1,0 +1,328 @@
+.sidebar {
+  flex-shrink: 0;
+  background: var(--surface-0);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.header {
+  height: 40px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.panelTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--zinc-400);
+}
+
+.headerActions {
+  display: flex;
+  gap: 2px;
+}
+
+.headerBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.headerBtn:hover {
+  background: var(--surface-2);
+  color: var(--zinc-200);
+}
+
+.panelContent {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.projectName {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--zinc-400);
+}
+
+.treeContainer {
+  padding-bottom: 12px;
+}
+
+/* Tree items */
+.treeItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 12px;
+  background: none;
+  border: none;
+  color: var(--zinc-300);
+  cursor: pointer;
+  font-size: 13px;
+  font-family: var(--font-sans);
+  transition: background 0.1s ease;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.treeItem:hover {
+  background: var(--surface-1);
+}
+
+.treeIcon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.treeIconFile {
+  color: var(--zinc-500);
+  flex-shrink: 0;
+}
+
+.treeName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Empty state */
+.noProject {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 16px;
+}
+
+.noProjectText {
+  font-size: 13px;
+  color: var(--zinc-500);
+}
+
+.openFolderBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--zinc-200);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.openFolderBtn:hover {
+  background: var(--surface-3);
+  border-color: var(--accent);
+}
+
+/* Search */
+.searchBox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.searchIcon {
+  color: var(--zinc-500);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--zinc-200);
+  font-size: 13px;
+  font-family: var(--font-sans);
+}
+
+.searchInput::placeholder {
+  color: var(--zinc-600);
+}
+
+.emptyHint {
+  padding: 24px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--zinc-600);
+}
+
+/* Git */
+.gitHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  color: var(--zinc-300);
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.branchName {
+  flex: 1;
+  font-weight: 500;
+}
+
+.gitActions {
+  display: flex;
+  gap: 2px;
+}
+
+.gitActionBtn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.gitActionBtn:hover {
+  background: var(--surface-2);
+  color: var(--zinc-200);
+}
+
+.gitActionBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.commitBox {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.commitInput {
+  width: 100%;
+  padding: 8px 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--zinc-200);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.commitInput:focus {
+  border-color: var(--accent);
+}
+
+.commitInput::placeholder {
+  color: var(--zinc-600);
+}
+
+.commitBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.commitBtn:hover {
+  background: var(--accent-dim);
+}
+
+.commitBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sectionTitle {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--zinc-500);
+}
+
+.changesList {
+  padding: 0 4px;
+}
+
+.changeItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+}
+
+.changeItem:hover {
+  background: var(--surface-1);
+}
+
+.changeStatus {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.changePath {
+  flex: 1;
+  color: var(--zinc-300);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.changeLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}

@@ -1,0 +1,396 @@
+/* ========================================
+   AccountSetup — Foundry IDE
+   Two-step onboarding flow
+   ======================================== */
+
+.root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--surface-0);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ---- Ambient glow ---- */
+.ambientOrb1 {
+  position: absolute;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.05) 0%, transparent 65%);
+  pointer-events: none;
+  animation: breathe 10s ease-in-out infinite;
+}
+
+.ambientOrb2 {
+  position: absolute;
+  bottom: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.04) 0%, transparent 65%);
+  pointer-events: none;
+  animation: breathe 12s ease-in-out infinite 3s;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+  50%      { opacity: 0.8; transform: translateX(-50%) scale(1.05); }
+}
+
+/* ---- Titlebar ---- */
+.titlebar {
+  height: 52px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+
+/* ---- Centered container ---- */
+.center {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 32px 48px;
+  position: relative;
+  z-index: 1;
+}
+
+.stepContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
+}
+
+/* ---- Heading ---- */
+.heading {
+  font-family: var(--font-sans);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--zinc-100);
+  letter-spacing: -0.02em;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--zinc-500);
+  margin-bottom: 32px;
+  text-align: center;
+}
+
+/* ---- Avatar ---- */
+.avatarSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 28px;
+}
+
+.avatarButton {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: 2px dashed var(--zinc-700);
+  background: var(--surface-1);
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.25s ease;
+  padding: 0;
+}
+
+.avatarButton:hover {
+  border-color: var(--accent);
+  border-style: solid;
+}
+
+.avatarImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.avatarPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--zinc-500);
+  font-size: 24px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  letter-spacing: 0.02em;
+}
+
+.avatarOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  border-radius: 50%;
+}
+
+.avatarButton:hover .avatarOverlay {
+  opacity: 1;
+}
+
+.avatarHint {
+  font-size: 12px;
+  color: var(--zinc-500);
+}
+
+/* ---- Fields ---- */
+.fields {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 28px;
+}
+
+.fieldGroup {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--zinc-400);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--zinc-100);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.input::placeholder {
+  color: var(--zinc-600);
+}
+
+.input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.1);
+}
+
+/* ---- Theme grid ---- */
+.themeGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 32px;
+}
+
+.themeCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 12px;
+  background: var(--surface-1);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: var(--zinc-300);
+}
+
+.themeCard:hover {
+  border-color: var(--zinc-600);
+  background: var(--surface-2);
+}
+
+.themeCardSelected {
+  border-color: var(--accent) !important;
+  background: rgba(167, 139, 250, 0.06);
+}
+
+.themePreview {
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.themePreviewBg {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+  gap: 4px;
+}
+
+.themePreviewBar {
+  height: 6px;
+  border-radius: 3px;
+  opacity: 0.5;
+}
+
+.themePreviewContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-top: 2px;
+}
+
+.themePreviewAccent {
+  width: 30%;
+  height: 5px;
+  border-radius: 2px;
+  opacity: 0.7;
+}
+
+.themePreviewLine {
+  width: 70%;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0.25;
+}
+
+.themePreviewLineShort {
+  width: 45%;
+  height: 3px;
+  border-radius: 2px;
+  opacity: 0.15;
+}
+
+.themeInfo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.themeCheck {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- Buttons ---- */
+.primaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: var(--accent);
+  color: white;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: -0.01em;
+}
+
+.primaryBtn:hover {
+  background: var(--accent-dim);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(167, 139, 250, 0.3);
+}
+
+.primaryBtnDisabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.primaryBtnDisabled:hover {
+  background: var(--accent);
+  transform: none;
+  box-shadow: none;
+}
+
+.secondaryBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 24px;
+  background: var(--surface-2);
+  color: var(--zinc-300);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.secondaryBtn:hover {
+  background: var(--surface-3);
+  color: var(--zinc-100);
+}
+
+.actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+/* ---- Dots ---- */
+.dots {
+  display: flex;
+  gap: 8px;
+  margin-top: 40px;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--zinc-700);
+  transition: all 0.3s ease;
+}
+
+.dotActive {
+  background: var(--accent);
+  box-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
+}
