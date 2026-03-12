@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1A1A1E"/>
+      <stop offset="1" stop-color="#09090B"/>
+    </linearGradient>
+    <linearGradient id="anvil" x1="256" y1="126" x2="256" y2="386" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E4E4E7"/>
+      <stop offset="1" stop-color="#52525B"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <rect x="70"  y="126" width="372" height="72"  rx="12" fill="url(#anvil)"/>
+  <rect x="148" y="198" width="216" height="112" rx="10" fill="url(#anvil)"/>
+  <rect x="108" y="310" width="296" height="48"  rx="10" fill="url(#anvil)"/>
+  <rect x="88"  y="358" width="336" height="28"  rx="12" fill="url(#anvil)"/>
+</svg>
