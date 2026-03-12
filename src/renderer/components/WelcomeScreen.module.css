@@ -1,5 +1,6 @@
 /* ========================================
    WelcomeScreen — Foundry IDE
+   Minimal, centered get-started flow
    ======================================== */
 
 .root {
@@ -12,41 +13,36 @@
   overflow: hidden;
 }
 
-/* ---- Ambient background effects ---- */
+/* ---- Ambient glow ---- */
 .ambientOrb1 {
   position: absolute;
-  top: -20%;
-  left: -10%;
-  width: 600px;
-  height: 600px;
+  top: -30%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 800px;
+  height: 800px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(167, 139, 250, 0.06) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.05) 0%, transparent 65%);
   pointer-events: none;
-  animation: subtlePulse 8s ease-in-out infinite;
+  animation: breathe 10s ease-in-out infinite;
 }
 
 .ambientOrb2 {
   position: absolute;
-  bottom: -30%;
-  right: -15%;
-  width: 700px;
-  height: 700px;
+  bottom: -40%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 600px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(124, 58, 237, 0.04) 0%, transparent 70%);
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.04) 0%, transparent 65%);
   pointer-events: none;
-  animation: subtlePulse 10s ease-in-out infinite 2s;
+  animation: breathe 12s ease-in-out infinite 3s;
 }
 
-.gridOverlay {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(63, 63, 70, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(63, 63, 70, 0.05) 1px, transparent 1px);
-  background-size: 64px 64px;
-  pointer-events: none;
-  mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black 20%, transparent 100%);
-  -webkit-mask-image: radial-gradient(ellipse 60% 60% at 50% 50%, black 20%, transparent 100%);
+@keyframes breathe {
+  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
+  50%      { opacity: 0.8; transform: translateX(-50%) scale(1.05); }
 }
 
 /* ---- Titlebar ---- */
@@ -57,224 +53,81 @@
   z-index: 10;
 }
 
-/* ---- Layout ---- */
-.wrapper {
+/* ---- Centered container ---- */
+.center {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0;
-  padding: 0 64px 48px;
-  max-width: 1200px;
-  width: 100%;
-  margin: 0 auto;
-  position: relative;
-  z-index: 1;
-  overflow-y: auto;
-}
-
-.left {
   display: flex;
   flex-direction: column;
-  padding-right: 48px;
-  border-right: 1px solid var(--border);
-}
-
-.right {
-  display: flex;
-  flex-direction: column;
-  padding-left: 48px;
-}
-
-/* ---- Branding ---- */
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 12px;
-}
-
-.brandText {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.wordmark {
-  font-size: 32px;
-  font-weight: 700;
-  letter-spacing: -0.03em;
-  color: var(--zinc-50);
-  line-height: 1;
-}
-
-.version {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--zinc-500);
-  font-family: var(--font-mono);
-}
-
-.tagline {
-  font-size: 15px;
-  color: var(--zinc-400);
-  margin-bottom: 40px;
-  line-height: 1.5;
-  font-weight: 400;
-}
-
-/* ---- Section title ---- */
-.sectionTitle {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--zinc-500);
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-/* ---- Quick Actions ---- */
-.actions {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-}
-
-.actionBtn {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-  color: var(--zinc-200);
-  position: relative;
-}
-
-.actionBtn:hover {
-  background: rgba(39, 39, 42, 0.6);
-  border-color: var(--border);
-}
-
-.actionIcon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--accent);
-  flex-shrink: 0;
-  transition: background 0.2s ease;
+  padding: 0 32px 48px;
+  position: relative;
+  z-index: 1;
+  gap: 0;
 }
 
-.actionBtn:hover .actionIcon {
-  background: var(--accent-glow);
+/* ---- Logo ---- */
+.logo {
+  margin-bottom: 32px;
+  display: inline-flex;
 }
 
-.actionContent {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.actionLabel {
-  font-size: 14px;
-  font-weight: 500;
+/* ---- Heading ---- */
+.heading {
+  font-family: var(--font-sans);
+  font-size: 28px;
+  font-weight: 600;
   color: var(--zinc-100);
+  letter-spacing: -0.02em;
+  margin-bottom: 40px;
 }
 
-.actionDesc {
-  font-size: 12px;
-  color: var(--zinc-500);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* ---- Actions grid ---- */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  max-width: 520px;
+  margin-bottom: 48px;
 }
 
-.kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  color: var(--zinc-500);
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.actionArrow {
-  color: var(--accent);
-  transition: opacity 0.2s ease;
-  flex-shrink: 0;
-}
-
-/* ---- Bottom links ---- */
-.bottomLinks {
-  display: flex;
-  gap: 24px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
-  margin-top: auto;
-}
-
-.link {
-  font-size: 13px;
-  color: var(--zinc-500);
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: color 0.2s ease;
-}
-
-.link:hover {
-  color: var(--zinc-200);
-}
-
-/* ---- Recent Projects ---- */
-.recentHeader {
-  margin-bottom: 4px;
-}
-
-.recentList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  flex: 1;
-}
-
-.projectCard {
+.card {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 16px;
-  background: rgba(24, 24, 27, 0.5);
+  padding: 16px 18px;
+  background: rgba(24, 24, 27, 0.4);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   text-align: left;
   color: var(--zinc-200);
+  position: relative;
+  overflow: hidden;
 }
 
-.projectCard:hover {
-  background: rgba(39, 39, 42, 0.5);
-  border-color: rgba(63, 63, 70, 0.8);
+.card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(167, 139, 250, 0.04) 0%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.projectIcon {
+.card:hover::before {
+  opacity: 1;
+}
+
+.card:hover {
+  background: rgba(39, 39, 42, 0.6);
+  border-color: rgba(167, 139, 250, 0.2);
+  transform: translateY(-1px);
+}
+
+.cardIcon {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-sm);
@@ -282,119 +135,66 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: var(--zinc-400);
-  flex-shrink: 0;
-}
-
-.projectCard:hover .projectIcon {
   color: var(--accent);
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 1;
 }
 
-.projectInfo {
+.card:hover .cardIcon {
+  background: var(--accent-glow);
+}
+
+.cardBody {
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  position: relative;
+  z-index: 1;
 }
 
-.projectName {
+.cardLabel {
   font-size: 14px;
   font-weight: 500;
   color: var(--zinc-100);
 }
 
-.projectPath {
+.cardDesc {
   font-size: 12px;
   color: var(--zinc-500);
-  font-family: var(--font-mono);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-.projectMeta {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  flex-shrink: 0;
-}
-
-.projectLang {
-  font-size: 11px;
-  font-weight: 500;
+.cardArrow {
   color: var(--accent);
-  background: var(--accent-glow);
-  padding: 2px 8px;
-  border-radius: 100px;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
 }
 
-.projectTime {
-  font-size: 11px;
+/* ---- Hint ---- */
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
   color: var(--zinc-500);
 }
 
-.projectArrow {
-  color: var(--zinc-600);
-  flex-shrink: 0;
-  transition: color 0.2s ease;
-}
-
-.projectCard:hover .projectArrow {
-  color: var(--zinc-400);
-}
-
-/* ---- Tip card ---- */
-.tipCard {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
-  background: linear-gradient(135deg, rgba(167, 139, 250, 0.06) 0%, rgba(124, 58, 237, 0.04) 100%);
-  border: 1px solid rgba(167, 139, 250, 0.12);
-  border-radius: var(--radius-md);
-}
-
-.tipIcon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-glow);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--accent);
-  flex-shrink: 0;
-}
-
-.tipContent {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.tipTitle {
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--accent);
-}
-
-.tipText {
-  font-size: 13px;
-  color: var(--zinc-400);
-  line-height: 1.5;
-}
-
-.kbdInline {
+.kbd {
   font-family: var(--font-mono);
   font-size: 11px;
-  color: var(--zinc-300);
-  background: rgba(39, 39, 42, 0.8);
+  font-weight: 500;
+  color: var(--zinc-400);
+  background: var(--surface-2);
   border: 1px solid var(--border);
-  padding: 1px 6px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.02em;
 }

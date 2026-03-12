@@ -1,31 +1,44 @@
 import React from 'react';
 
-export default function FoundryLogo({ size = 48 }) {
-  const scale = size / 512;
+export default function FoundryLogo({ size = 40, light = false }) {
+  const textColor = light ? '#18181B' : '#E4E4E7';
+  const gradId = light ? 'anvil-light' : 'anvil-dark';
+  const stopTop = light ? '#27272A' : '#E4E4E7';
+  const stopBot = light ? '#71717A' : '#52525B';
+
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 512 512"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      style={{ flexShrink: 0 }}
-    >
-      <defs>
-        <linearGradient id="logoBg" x1="256" y1="0" x2="256" y2="512" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#1A1A1E" />
-          <stop offset="1" stopColor="#09090B" />
-        </linearGradient>
-        <linearGradient id="logoAnvil" x1="256" y1="126" x2="256" y2="386" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#E4E4E7" />
-          <stop offset="1" stopColor="#52525B" />
-        </linearGradient>
-      </defs>
-      <rect width="512" height="512" rx="112" fill="url(#logoBg)" />
-      <rect x="70"  y="126" width="372" height="72"  rx="12" fill="url(#logoAnvil)" />
-      <rect x="148" y="198" width="216" height="112" rx="10" fill="url(#logoAnvil)" />
-      <rect x="108" y="310" width="296" height="48"  rx="10" fill="url(#logoAnvil)" />
-      <rect x="88"  y="358" width="336" height="28"  rx="12" fill="url(#logoAnvil)" />
-    </svg>
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 14 }}>
+      <svg
+        viewBox="0 0 56 43"
+        width={size}
+        height={size * (43 / 56)}
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <defs>
+          <linearGradient id={gradId} x1="28" y1="0" x2="28" y2="43" gradientUnits="userSpaceOnUse">
+            <stop stopColor={stopTop} />
+            <stop offset="1" stopColor={stopBot} />
+          </linearGradient>
+        </defs>
+        <rect x="0"  y="0"  width="56" height="11" rx="2.5" fill={`url(#${gradId})`} />
+        <rect x="14" y="11" width="28" height="17" rx="2"   fill={`url(#${gradId})`} />
+        <rect x="7"  y="28" width="42" height="7"  rx="2"   fill={`url(#${gradId})`} />
+        <rect x="4"  y="35" width="48" height="4"  rx="2"   fill={`url(#${gradId})`} />
+      </svg>
+      <span
+        style={{
+          fontFamily: "'Outfit', sans-serif",
+          fontWeight: 600,
+          fontSize: size * 0.85,
+          color: textColor,
+          letterSpacing: '-0.5px',
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+        }}
+      >
+        Foundry
+      </span>
+    </div>
   );
 }

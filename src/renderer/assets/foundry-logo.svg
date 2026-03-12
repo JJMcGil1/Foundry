@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 236 56" fill="none">
+  <defs>
+    <linearGradient id="anvil" x1="28" y1="0" x2="28" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E4E4E7"/>
+      <stop offset="1" stop-color="#52525B"/>
+    </linearGradient>
+  </defs>
+  <rect x="0"  y="4"  width="56" height="11" rx="2.5" fill="url(#anvil)"/>
+  <rect x="14" y="15" width="28" height="17" rx="2"   fill="url(#anvil)"/>
+  <rect x="7"  y="32" width="42" height="7"  rx="2"   fill="url(#anvil)"/>
+  <rect x="4"  y="39" width="48" height="4"  rx="2"   fill="url(#anvil)"/>
+  <text x="76" y="39" font-family="Outfit, sans-serif" font-weight="600" font-size="40" letter-spacing="-0.5" fill="#E4E4E7">Foundry</text>
+</svg>
