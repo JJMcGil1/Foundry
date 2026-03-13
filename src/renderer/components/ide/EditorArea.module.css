@@ -152,80 +152,127 @@
 .welcome {
   height: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 32px;
+  position: relative;
+  overflow: hidden;
 }
 
-.welcomeIcon {
-  margin-bottom: 8px;
-  opacity: 0.3;
+.welcomeGlow {
+  position: absolute;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.03) 0%, transparent 70%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -58%);
+  pointer-events: none;
+  animation: glowPulse 8s ease-in-out infinite;
+}
+
+@keyframes glowPulse {
+  0%, 100% { opacity: 0.5; transform: translate(-50%, -58%) scale(1); }
+  50% { opacity: 1; transform: translate(-50%, -58%) scale(1.05); }
+}
+
+.welcomeContent {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  position: relative;
+  z-index: 1;
+  animation: welcomeFadeIn 0.5s ease-out both;
+}
+
+@keyframes welcomeFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.welcomeLogo {
+  width: 56px;
+  height: auto;
+  margin-bottom: 24px;
+  opacity: 0.5;
 }
 
 .welcomeTitle {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--zinc-200);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.03em;
+  margin-bottom: 6px;
 }
 
 .welcomeDesc {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--zinc-500);
-  margin-bottom: 16px;
-}
-
-.welcomeActions {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
 }
 
 .welcomeBtn {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px 20px;
-  background: var(--surface-2);
+  padding: 9px 24px;
+  background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--zinc-200);
   font-size: 13px;
+  font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
 }
 
 .welcomeBtn:hover {
-  background: var(--surface-3);
-  border-color: var(--accent);
+  background: var(--surface-4);
+  border-color: var(--zinc-600);
+  color: var(--zinc-100);
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+}
+
+.welcomeBtn:active {
+  transform: translateY(0);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.welcomeDivider {
+  width: 32px;
+  height: 1px;
+  background: var(--border);
+  margin: 28px 0 20px;
 }
 
 .welcomeShortcuts {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  gap: 16px;
 }
 
 .shortcutRow {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 12px;
-  font-size: 12px;
-  color: var(--zinc-500);
+  gap: 6px;
+  font-size: 11px;
+  color: var(--zinc-600);
 }
 
 .kbd {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 500;
-  color: var(--zinc-400);
-  background: var(--surface-2);
+  color: var(--zinc-500);
+  background: var(--surface-3);
   border: 1px solid var(--border);
-  padding: 3px 8px;
+  padding: 4px 8px;
   border-radius: var(--radius-sm);
-  min-width: 44px;
+  min-width: 36px;
   text-align: center;
+  letter-spacing: 0.02em;
 }

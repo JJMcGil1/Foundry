@@ -1,6 +1,8 @@
 import React, { useRef, useEffect, useCallback } from 'react';
 import { FiX, FiFolder, FiFile } from 'react-icons/fi';
 import styles from './EditorArea.module.css';
+import foundryIconDark from '../../assets/foundry-icon-dark.svg';
+import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
 function getFileIcon(name) {
   const ext = name?.split('.').pop()?.toLowerCase();
@@ -96,46 +98,33 @@ function CodeEditor({ tab, onContentChange, onSave }) {
 }
 
 function WelcomePane({ onOpenFolder }) {
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const iconSrc = isDark ? foundryIconDark : foundryIconLight;
+
   return (
     <div className={styles.welcome}>
-      <div className={styles.welcomeIcon}>
-        <svg viewBox="0 0 56 43" width={48} height={37} fill="none">
-          <defs>
-            <linearGradient id="wg" x1="28" y1="0" x2="28" y2="43" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#E4E4E7" />
-              <stop offset="1" stopColor="#52525B" />
-            </linearGradient>
-          </defs>
-          <rect x="0" y="0" width="56" height="11" rx="2.5" fill="url(#wg)" />
-          <rect x="14" y="11" width="28" height="17" rx="2" fill="url(#wg)" />
-          <rect x="7" y="28" width="42" height="7" rx="2" fill="url(#wg)" />
-          <rect x="4" y="35" width="48" height="4" rx="2" fill="url(#wg)" />
-        </svg>
-      </div>
-      <h2 className={styles.welcomeTitle}>Welcome to Foundry</h2>
-      <p className={styles.welcomeDesc}>Open a project to start coding</p>
-      <div className={styles.welcomeActions}>
+      <div className={styles.welcomeGlow} />
+      <div className={styles.welcomeContent}>
+        <img src={iconSrc} alt="Foundry" className={styles.welcomeLogo} draggable={false} />
+        <h2 className={styles.welcomeTitle}>Foundry</h2>
+        <p className={styles.welcomeDesc}>Start building something great</p>
         <button className={styles.welcomeBtn} onClick={onOpenFolder}>
-          <FiFolder size={16} />
-          Open Folder
+          <FiFolder size={15} />
+          Open Project
         </button>
-      </div>
-      <div className={styles.welcomeShortcuts}>
-        <div className={styles.shortcutRow}>
-          <kbd className={styles.kbd}>⌘ B</kbd>
-          <span>Toggle sidebar</span>
-        </div>
-        <div className={styles.shortcutRow}>
-          <kbd className={styles.kbd}>⌘ J</kbd>
-          <span>Toggle chat</span>
-        </div>
-        <div className={styles.shortcutRow}>
-          <kbd className={styles.kbd}>⌘ S</kbd>
-          <span>Save file</span>
-        </div>
-        <div className={styles.shortcutRow}>
-          <kbd className={styles.kbd}>⌘ ,</kbd>
-          <span>Settings</span>
+        <div className={styles.welcomeDivider} />
+        <div className={styles.welcomeShortcuts}>
+          {[
+            ['⌘ B', 'Sidebar'],
+            ['⌘ J', 'Chat'],
+            ['⌘ S', 'Save'],
+            ['⌘ ,', 'Settings'],
+          ].map(([key, label]) => (
+            <div key={key} className={styles.shortcutRow}>
+              <kbd className={styles.kbd}>{key}</kbd>
+              <span>{label}</span>
+            </div>
+          ))}
         </div>
       </div>
     </div>

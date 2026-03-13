@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="512" height="512" fill="none">
+  <defs>
+    <linearGradient id="anvil" x1="80" y1="36" x2="80" y2="114" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#27272A"/>
+      <stop offset="1" stop-color="#71717A"/>
+    </linearGradient>
+  </defs>
+  <rect x="22" y="36" width="116" height="22" rx="4" fill="url(#anvil)"/>
+  <rect x="46" y="58" width="68" height="34" rx="3" fill="url(#anvil)"/>
+  <rect x="34" y="92" width="92" height="14" rx="3" fill="url(#anvil)"/>
+  <rect x="28" y="106" width="104" height="8" rx="4" fill="url(#anvil)"/>
+</svg>

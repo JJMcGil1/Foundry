@@ -16,7 +16,7 @@
 
 /* Spacer so traffic lights don't overlap icons */
 .trafficLightSpacer {
-  height: 44px;
+  height: 52px;
   flex-shrink: 0;
 }
 
@@ -30,7 +30,7 @@
 }
 
 .titlebar {
-  height: 44px;
+  height: 52px;
   flex-shrink: 0;
   background: var(--surface-0);
   border-bottom: 1px solid var(--border);
@@ -38,15 +38,28 @@
   z-index: 100;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
+}
+
+/* Left-side titlebar logo */
+.titlebarLeft {
+  display: flex;
+  align-items: center;
+  padding-left: 40px;
+}
+
+.titlebarLogo {
+  height: 34px;
+  width: auto;
+  opacity: 0.5;
 }
 
 /* Right-side titlebar controls */
 .titlebarActions {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding-right: 14px;
+  gap: 4px;
+  padding-right: 16px;
 }
 
 .titlebarBtn {
@@ -57,24 +70,31 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: var(--zinc-500);
+  color: var(--zinc-600);
   cursor: pointer;
   outline: none;
-  border-radius: var(--radius-sm);
+  border-radius: 8px;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .titlebarBtn:hover {
-  color: var(--zinc-300);
+  color: var(--zinc-100);
   background: var(--surface-1);
 }
 
 .titlebarBtn:active {
+  color: var(--zinc-100);
   background: var(--surface-2);
 }
 
 .titlebarBtnActive {
-  color: var(--zinc-200);
+  color: var(--zinc-400);
+  background: var(--surface-1);
+}
+
+.titlebarBtnActive:hover {
+  color: var(--zinc-100);
+  background: var(--surface-2);
 }
 
 .titlebarDivider {

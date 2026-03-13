@@ -10,6 +10,8 @@ import ChatPanel from './ChatPanel';
 import TerminalPanel from './TerminalPanel';
 import SettingsPage from './SettingsPage';
 import styles from './IDELayout.module.css';
+import foundryIconDark from '../../assets/foundry-icon-dark.svg';
+import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
 export default function IDELayout({ profile, onProfileChange }) {
   const [activePanel, setActivePanel] = useState('files');
@@ -136,20 +138,28 @@ export default function IDELayout({ profile, onProfileChange }) {
 
       <div className={styles.rightColumn}>
         <div className={`${styles.titlebar} titlebar-drag`}>
+          <div className={`${styles.titlebarLeft} titlebar-no-drag`}>
+            <img
+              src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
+              alt="Foundry"
+              className={styles.titlebarLogo}
+              draggable={false}
+            />
+          </div>
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
             <button
               className={`${styles.titlebarBtn} ${sidebarVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setSidebarVisible(v => !v)}
               title="Toggle Sidebar"
             >
-              {sidebarVisible ? <TbLayoutSidebarFilled size={16} /> : <TbLayoutSidebar size={16} />}
+              {sidebarVisible ? <TbLayoutSidebarFilled size={20} /> : <TbLayoutSidebar size={20} />}
             </button>
             <button
               className={`${styles.titlebarBtn} ${terminalVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setTerminalVisible(v => !v)}
               title="Toggle Terminal"
             >
-              {terminalVisible ? <PiTerminalWindowFill size={16} /> : <PiTerminalWindow size={16} />}
+              {terminalVisible ? <PiTerminalWindowFill size={20} /> : <PiTerminalWindow size={20} />}
             </button>
             <button
               className={`${styles.titlebarBtn} ${chatVisible ? styles.titlebarBtnActive : ''}`}
@@ -157,8 +167,8 @@ export default function IDELayout({ profile, onProfileChange }) {
               title="Toggle Right Panel"
             >
               {chatVisible
-                ? <TbLayoutSidebarRightFilled size={16} />
-                : <TbLayoutSidebarRight size={16} />}
+                ? <TbLayoutSidebarRightFilled size={20} />
+                : <TbLayoutSidebarRight size={20} />}
             </button>
             <div className={styles.titlebarDivider} />
             <button
@@ -166,7 +176,7 @@ export default function IDELayout({ profile, onProfileChange }) {
               onClick={handleToggleTheme}
               title={`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`}
             >
-              {currentTheme === 'dark' ? <FiSun size={15} /> : <FiMoon size={15} />}
+              {currentTheme === 'dark' ? <FiSun size={20} /> : <FiMoon size={20} />}
             </button>
           </div>
         </div>
