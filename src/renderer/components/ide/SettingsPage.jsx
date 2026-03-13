@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { FiX, FiGithub, FiCheck, FiEye, FiEyeOff, FiUser, FiMoon, FiSun, FiMonitor, FiSave, FiExternalLink } from 'react-icons/fi';
+import React, { useState, useEffect, useRef } from 'react';
+import { FiX, FiGithub, FiCheck, FiEye, FiEyeOff, FiUser, FiMoon, FiSun, FiMonitor, FiSave, FiExternalLink, FiCamera } from 'react-icons/fi';
 import styles from './SettingsPage.module.css';
 
 const SECTIONS = [
@@ -15,8 +15,15 @@ export default function SettingsPage({ profile, onClose, onProfileChange }) {
   const [tokenSaved, setTokenSaved] = useState(false);
   const [firstName, setFirstName] = useState(profile?.first_name || profile?.firstName || '');
   const [lastName, setLastName] = useState(profile?.last_name || profile?.lastName || '');
+  const [email, setEmail] = useState(profile?.email || '');
+  const [password, setPassword] = useState(profile?.password || '');
+  const [showPassword, setShowPassword] = useState(false);
+  const [photoData, setPhotoData] = useState(profile?.profile_photo_data || null);
   const [theme, setTheme] = useState(profile?.theme || 'dark');
   const [profileSaved, setProfileSaved] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
 
   useEffect(() => {
     async function loadSettings() {
@@ -32,10 +39,8 @@ export default function SettingsPage({ profile, onClose, onProfileChange }) {
     setTimeout(() => setTokenSaved(false), 2000);
   };
 
-  // Apply theme live when selecting
   const handleThemeChange = (newTheme) => {
     setTheme(newTheme);
-    // Apply immediately for instant feedback
     if (newTheme === 'system') {
       const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
       document.documentElement.setAttribute('data-theme', prefersDark ? 'dark' : 'light');
@@ -44,8 +49,29 @@ export default function SettingsPage({ profile, onClose, onProfileChange }) {
     }
   };
 
+  const handlePickPhoto = async () => {
+    if (window.foundry?.pickPhoto) {
+      const data = await window.foundry.pickPhoto();
+      if (data) setPhotoData(data);
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setPhotoData(reader.result);
+    reader.readAsDataURL(file);
+  };
+
   const handleSaveProfile = async () => {
-    await window.foundry?.updateProfile({ firstName, lastName, theme });
+    const updates = { firstName, lastName, email, password, theme };
+    if (photoData && photoData !== profile?.profile_photo_data) {
+      updates.profilePhoto = photoData;
+    }
+    await window.foundry?.updateProfile(updates);
     if (onProfileChange) await onProfileChange();
     setProfileSaved(true);
     setTimeout(() => setProfileSaved(false), 2000);
@@ -61,7 +87,6 @@ export default function SettingsPage({ profile, onClose, onProfileChange }) {
       </div>
 
       <div className={styles.layout}>
-        {/* Settings nav */}
         <div className={styles.nav}>
           {SECTIONS.map(s => {
             const Icon = s.icon;
@@ -78,12 +103,40 @@ export default function SettingsPage({ profile, onClose, onProfileChange }) {
           })}
         </div>
 
-        {/* Settings content */}
         <div className={styles.content}>
           {activeSection === 'account' && (
             <div className={styles.section}>
               <h3 className={styles.sectionTitle}>Account</h3>
               <p className={styles.sectionDesc}>Manage your profile information</p>
+
+              {/* Profile Photo */}
+              <div className={styles.photoSection}>
+                <button className={styles.photoButton} onClick={handlePickPhoto}>
+                  {photoData ? (
+                    <img src={photoData} alt="Profile" className={styles.photoImage} />
+                  ) : (
+                    <div className={styles.photoPlaceholder}>
+                      {initials || <FiUser size={20} />}
+                    </div>
+                  )}
+                  <div className={styles.photoOverlay}>
+                    <FiCamera size={14} />
+                  </div>
+                </button>
+                <div className={styles.photoInfo}>
+                  <span className={styles.photoName}>{firstName} {lastName}</span>
+                  <button className={styles.photoChangeBtn} onClick={handlePickPhoto}>
+                    Change photo
+                  </button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={handleFileSelect}
+                />
+              </div>
 
               <div className={styles.fieldRow}>
                 <div className={styles.field}>
@@ -103,6 +156,36 @@ export default function SettingsPage({ profile, onClose, onProfileChange }) {
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
                   />
+                </div>
+              </div>
+
+              <div className={styles.field} style={{ marginBottom: 20 }}>
+                <label className={styles.fieldLabel}>Email</label>
+                <input
+                  type="email"
+                  className={styles.input}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </div>
+
+              <div className={styles.field} style={{ marginBottom: 20 }}>
+                <label className={styles.fieldLabel}>Password</label>
+                <div className={styles.tokenInputWrapper}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className={styles.input}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Enter password"
+                  />
+                  <button
+                    className={styles.toggleBtn}
+                    onClick={() => setShowPassword(v => !v)}
+                  >
+                    {showPassword ? <FiEyeOff size={14} /> : <FiEye size={14} />}
+                  </button>
                 </div>
               </div>
 

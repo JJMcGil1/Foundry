@@ -37,4 +37,20 @@ contextBridge.exposeInMainWorld('foundry', {
 
   // Shell
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+
+  // Terminal
+  terminalCreate: (cwd) => ipcRenderer.invoke('terminal:create', cwd),
+  terminalWrite: (id, data) => ipcRenderer.send('terminal:write', id, data),
+  terminalResize: (id, cols, rows) => ipcRenderer.send('terminal:resize', id, cols, rows),
+  terminalKill: (id) => ipcRenderer.send('terminal:kill', id),
+  onTerminalData: (callback) => {
+    const handler = (_event, id, data) => callback(id, data);
+    ipcRenderer.on('terminal:data', handler);
+    return () => ipcRenderer.removeListener('terminal:data', handler);
+  },
+  onTerminalExit: (callback) => {
+    const handler = (_event, id, exitCode) => callback(id, exitCode);
+    ipcRenderer.on('terminal:exit', handler);
+    return () => ipcRenderer.removeListener('terminal:exit', handler);
+  },
 });

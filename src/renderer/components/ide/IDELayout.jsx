@@ -1,10 +1,13 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { FiSidebar, FiSun, FiMoon } from 'react-icons/fi';
+import { FiSun, FiMoon } from 'react-icons/fi';
+import { PiTerminalWindow, PiTerminalWindowFill } from 'react-icons/pi';
+import { TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled } from 'react-icons/tb';
 import ActivityBar from './ActivityBar';
 import Sidebar from './Sidebar';
 import EditorArea from './EditorArea';
 import ChatPanel from './ChatPanel';
+import TerminalPanel from './TerminalPanel';
 import SettingsPage from './SettingsPage';
 import styles from './IDELayout.module.css';
 
@@ -12,9 +15,15 @@ export default function IDELayout({ profile, onProfileChange }) {
   const [activePanel, setActivePanel] = useState('files');
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [chatWidth, setChatWidth] = useState(340);
+  const [terminalHeight, setTerminalHeight] = useState(240);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [chatVisible, setChatVisible] = useState(true);
+  const [terminalVisible, setTerminalVisible] = useState(false);
+  const [terminalMaximized, setTerminalMaximized] = useState(false);
+  const [preMaxTerminalHeight, setPreMaxTerminalHeight] = useState(240);
+  const [maxTerminalHeight, setMaxTerminalHeight] = useState(600);
   const [showSettings, setShowSettings] = useState(false);
+  const editorContainerRef = useRef(null);
 
   const [project, setProject] = useState(null);
   const [fileTree, setFileTree] = useState([]);
@@ -99,6 +108,7 @@ export default function IDELayout({ profile, onProfileChange }) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); if (activeTab) handleSaveFile(activeTab); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); setSidebarVisible(v => !v); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); setChatVisible(v => !v); }
+      if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); setTerminalVisible(v => !v); }
       if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setShowSettings(v => !v); }
     }
     window.addEventListener('keydown', handleKeyDown);
@@ -132,14 +142,23 @@ export default function IDELayout({ profile, onProfileChange }) {
               onClick={() => setSidebarVisible(v => !v)}
               title="Toggle Sidebar"
             >
-              <FiSidebar size={15} />
+              {sidebarVisible ? <TbLayoutSidebarFilled size={16} /> : <TbLayoutSidebar size={16} />}
+            </button>
+            <button
+              className={`${styles.titlebarBtn} ${terminalVisible ? styles.titlebarBtnActive : ''}`}
+              onClick={() => setTerminalVisible(v => !v)}
+              title="Toggle Terminal"
+            >
+              {terminalVisible ? <PiTerminalWindowFill size={16} /> : <PiTerminalWindow size={16} />}
             </button>
             <button
               className={`${styles.titlebarBtn} ${chatVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setChatVisible(v => !v)}
               title="Toggle Right Panel"
             >
-              <FiSidebar size={15} style={{ transform: 'scaleX(-1)' }} />
+              {chatVisible
+                ? <TbLayoutSidebarRightFilled size={16} />
+                : <TbLayoutSidebarRight size={16} />}
             </button>
             <div className={styles.titlebarDivider} />
             <button
@@ -170,16 +189,42 @@ export default function IDELayout({ profile, onProfileChange }) {
               />
             )}
           </AnimatePresence>
-          <div className={styles.editorContainer}>
-            {showSettings ? (
-              <SettingsPage profile={profile} onClose={() => setShowSettings(false)} onProfileChange={onProfileChange} />
-            ) : (
-              <EditorArea
-                tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
-                onCloseTab={handleCloseTab} onContentChange={handleContentChange}
-                onSaveFile={handleSaveFile} onOpenFolder={handleOpenFolder} project={project}
-              />
-            )}
+          <div className={styles.editorContainer} ref={editorContainerRef}>
+            <div className={`${styles.editorArea} ${terminalMaximized ? styles.editorAreaHidden : ''}`}>
+              {showSettings ? (
+                <SettingsPage profile={profile} onClose={() => setShowSettings(false)} onProfileChange={onProfileChange} />
+              ) : (
+                <EditorArea
+                  tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
+                  onCloseTab={handleCloseTab} onContentChange={handleContentChange}
+                  onSaveFile={handleSaveFile} onOpenFolder={handleOpenFolder} project={project}
+                />
+              )}
+            </div>
+            <AnimatePresence initial={false}>
+              {terminalVisible && !showSettings && (
+                <TerminalPanel
+                  key="terminal"
+                  height={terminalMaximized ? maxTerminalHeight : terminalHeight}
+                  onHeightChange={setTerminalHeight}
+                  projectPath={project?.path}
+                  onClose={() => { setTerminalVisible(false); setTerminalMaximized(false); }}
+                  isMaximized={terminalMaximized}
+                  onToggleMaximize={() => {
+                    if (!terminalMaximized) {
+                      // Capture the full container height BEFORE state change
+                      const fullHeight = editorContainerRef.current?.clientHeight || 600;
+                      setPreMaxTerminalHeight(terminalHeight);
+                      setMaxTerminalHeight(fullHeight);
+                      setTerminalMaximized(true);
+                    } else {
+                      setTerminalMaximized(false);
+                      setTerminalHeight(preMaxTerminalHeight);
+                    }
+                  }}
+                />
+              )}
+            </AnimatePresence>
           </div>
           <AnimatePresence initial={false}>
             {chatVisible && !showSettings && (

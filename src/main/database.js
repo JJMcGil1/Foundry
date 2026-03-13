@@ -13,9 +13,16 @@ function getDbPath() {
 
 function persistDb() {
   if (!db || !dbPath) return;
-  const data = db.export();
-  const buffer = Buffer.from(data);
-  fs.writeFileSync(dbPath, buffer);
+  try {
+    const data = db.export();
+    const buffer = Buffer.from(data);
+    // Write to temp file first, then rename for atomic write (prevents corruption on crash)
+    const tmpPath = dbPath + '.tmp';
+    fs.writeFileSync(tmpPath, buffer);
+    fs.renameSync(tmpPath, dbPath);
+  } catch (err) {
+    console.error('[Foundry DB] Failed to persist:', err);
+  }
 }
 
 async function initDatabase() {
@@ -40,12 +47,24 @@ async function initDatabase() {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       first_name TEXT NOT NULL,
       last_name TEXT NOT NULL,
+      email TEXT,
+      password TEXT,
       profile_photo TEXT,
       theme TEXT NOT NULL DEFAULT 'dark',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // Migrate existing databases: add email/password columns if missing
+  try {
+    const tableInfo = db.exec("PRAGMA table_info(user_profile)");
+    if (tableInfo.length > 0) {
+      const columns = tableInfo[0].values.map(row => row[1]);
+      if (!columns.includes('email')) db.run("ALTER TABLE user_profile ADD COLUMN email TEXT");
+      if (!columns.includes('password')) db.run("ALTER TABLE user_profile ADD COLUMN password TEXT");
+    }
+  } catch (e) { /* columns already exist */ }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS settings (
@@ -55,6 +74,12 @@ async function initDatabase() {
   `);
 
   persistDb();
+
+  // Auto-save every 30 seconds as a safety net against hard kills
+  setInterval(() => {
+    persistDb();
+  }, 30000);
+
   console.log('[Foundry DB] Initialized');
   return db;
 }
@@ -71,14 +96,13 @@ function getProfile() {
   return null;
 }
 
-function createProfile({ firstName, lastName, profilePhoto, theme }) {
+function createProfile({ firstName, lastName, email, password, profilePhoto, theme }) {
   if (!db) return null;
-  // Delete existing then insert (simpler than UPSERT with sql.js)
   db.run('DELETE FROM user_profile WHERE id = 1');
   db.run(
-    `INSERT INTO user_profile (id, first_name, last_name, profile_photo, theme, created_at, updated_at)
-     VALUES (1, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
-    [firstName, lastName, profilePhoto || null, theme || 'dark']
+    `INSERT INTO user_profile (id, first_name, last_name, email, password, profile_photo, theme, created_at, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))`,
+    [firstName, lastName, email || null, password || null, profilePhoto || null, theme || 'dark']
   );
   persistDb();
   return getProfile();
@@ -91,14 +115,16 @@ function updateProfile(updates) {
 
   const firstName = updates.firstName !== undefined ? updates.firstName : current.first_name;
   const lastName = updates.lastName !== undefined ? updates.lastName : current.last_name;
+  const email = updates.email !== undefined ? updates.email : current.email;
+  const password = updates.password !== undefined ? updates.password : current.password;
   const profilePhoto = updates.profilePhoto !== undefined ? updates.profilePhoto : current.profile_photo;
   const theme = updates.theme !== undefined ? updates.theme : current.theme;
 
   db.run(
     `UPDATE user_profile
-     SET first_name = ?, last_name = ?, profile_photo = ?, theme = ?, updated_at = datetime('now')
+     SET first_name = ?, last_name = ?, email = ?, password = ?, profile_photo = ?, theme = ?, updated_at = datetime('now')
      WHERE id = 1`,
-    [firstName, lastName, profilePhoto, theme]
+    [firstName, lastName, email, password, profilePhoto, theme]
   );
   persistDb();
   return getProfile();

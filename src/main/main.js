@@ -1,7 +1,9 @@
 const { app, BrowserWindow, nativeImage, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const { execSync, exec } = require('child_process');
+const pty = require('node-pty');
 const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, closeDatabase } = require('./database');
 
 const isDev = !app.isPackaged;
@@ -11,6 +13,10 @@ const iconPath = isDev
   : path.join(process.resourcesPath, 'build', 'icon.png');
 
 let mainWindow = null;
+
+// ---- PTY Terminal Management ---- //
+const ptyProcesses = new Map();
+let ptyIdCounter = 0;
 
 function createWindow() {
   const icon = nativeImage.createFromPath(iconPath);
@@ -357,6 +363,70 @@ function registerIPC() {
   ipcMain.handle('shell:openExternal', async (_event, url) => {
     shell.openExternal(url);
   });
+
+  // ---- Terminal (PTY) ---- //
+  ipcMain.handle('terminal:create', async (event, cwd) => {
+    const id = ++ptyIdCounter;
+
+    let shellPath;
+    if (process.platform === 'win32') {
+      shellPath = 'powershell.exe';
+    } else {
+      // Use SHELL env var, validate it exists, fallback through options
+      const candidates = [process.env.SHELL, '/bin/zsh', '/bin/bash', '/bin/sh'].filter(Boolean);
+      shellPath = candidates.find(s => { try { return fs.statSync(s).isFile(); } catch { return false; } }) || '/bin/sh';
+    }
+
+    const effectiveCwd = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
+
+    const ptyProcess = pty.spawn(shellPath, [], {
+      name: 'xterm-256color',
+      cols: 80,
+      rows: 24,
+      cwd: effectiveCwd,
+      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+    });
+
+    ptyProcesses.set(id, ptyProcess);
+
+    ptyProcess.onData((data) => {
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('terminal:data', id, data);
+      }
+    });
+
+    ptyProcess.onExit(({ exitCode }) => {
+      ptyProcesses.delete(id);
+      const win = BrowserWindow.fromWebContents(event.sender);
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('terminal:exit', id, exitCode);
+      }
+    });
+
+    const shellName = path.basename(shellPath);
+    return { id, shellName };
+  });
+
+  ipcMain.on('terminal:write', (_event, id, data) => {
+    const p = ptyProcesses.get(id);
+    if (p) p.write(data);
+  });
+
+  ipcMain.on('terminal:resize', (_event, id, cols, rows) => {
+    const p = ptyProcesses.get(id);
+    if (p) {
+      try { p.resize(cols, rows); } catch {}
+    }
+  });
+
+  ipcMain.on('terminal:kill', (_event, id) => {
+    const p = ptyProcesses.get(id);
+    if (p) {
+      p.kill();
+      ptyProcesses.delete(id);
+    }
+  });
 }
 
 app.on('ready', async () => {
@@ -373,6 +443,11 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  // Kill all PTY processes
+  for (const [id, p] of ptyProcesses) {
+    try { p.kill(); } catch {}
+  }
+  ptyProcesses.clear();
   closeDatabase();
 });
 

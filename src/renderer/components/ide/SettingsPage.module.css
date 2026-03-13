@@ -109,6 +109,96 @@
   line-height: 1.5;
 }
 
+/* Profile photo */
+.photoSection {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.photoButton {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--surface-1);
+  cursor: pointer;
+  overflow: hidden;
+  flex-shrink: 0;
+  padding: 0;
+  transition: border-color 0.15s ease;
+}
+
+.photoButton:hover {
+  border-color: var(--zinc-500);
+}
+
+.photoImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.photoPlaceholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--zinc-500);
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+}
+
+.photoOverlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  border-radius: 50%;
+}
+
+.photoButton:hover .photoOverlay {
+  opacity: 1;
+}
+
+.photoInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.photoName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--zinc-200);
+}
+
+.photoChangeBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s ease;
+}
+
+.photoChangeBtn:hover {
+  color: var(--zinc-200);
+}
+
 /* Fields */
 .fieldRow {
   display: flex;

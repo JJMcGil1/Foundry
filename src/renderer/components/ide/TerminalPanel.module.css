@@ -1,0 +1,199 @@
+.panel {
+  flex-shrink: 0;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.panelMaximized {
+  border-top: none;
+}
+
+/* Top resize handle */
+.resizeHandle {
+  position: absolute;
+  top: -2px;
+  left: 0;
+  right: 0;
+  height: 5px;
+  cursor: row-resize;
+  z-index: 20;
+}
+
+.resizeHandle:hover,
+.resizeHandle:active {
+  background: var(--zinc-600);
+}
+
+/* Header bar with tabs */
+.header {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: transparent;
+  border: none;
+  color: var(--zinc-500);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  transition: color 0.15s ease, background 0.15s ease;
+  outline: none;
+}
+
+.tab:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.tabActive {
+  color: var(--zinc-200);
+  background: var(--surface-2);
+}
+
+.tabClose {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.1s ease, background 0.1s ease;
+}
+
+.tab:hover .tabClose {
+  opacity: 0.6;
+}
+
+.tabClose:hover {
+  opacity: 1 !important;
+  background: var(--surface-4);
+}
+
+.newBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background 0.15s ease;
+  outline: none;
+  flex-shrink: 0;
+}
+
+.newBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s ease, background 0.15s ease;
+  outline: none;
+}
+
+.actionBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+/* Terminal container */
+.terminalContainer {
+  flex: 1;
+  padding: 4px 4px 4px 12px;
+  overflow: hidden;
+  background: var(--surface-1);
+}
+
+/* xterm fills its container */
+.terminalContainer :global(.xterm) {
+  height: 100%;
+}
+
+.terminalContainer :global(.xterm-viewport) {
+  background-color: var(--surface-1) !important;
+}
+
+.terminalContainer :global(.xterm-screen) {
+  background-color: var(--surface-1) !important;
+}
+
+/* Force cursor color to match foreground — override any shell escape codes */
+.terminalContainer :global(.xterm-cursor-block) {
+  background-color: var(--zinc-200) !important;
+  color: var(--surface-1) !important;
+}
+
+.terminalContainer :global(.xterm-cursor-bar) {
+  background-color: var(--zinc-200) !important;
+}
+
+.terminalContainer :global(.xterm-cursor-underline) {
+  border-bottom-color: var(--zinc-200) !important;
+}
+
+/* Custom scrollbar matching app theme */
+.terminalContainer :global(.xterm-viewport)::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminalContainer :global(.xterm-viewport)::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminalContainer :global(.xterm-viewport)::-webkit-scrollbar-thumb {
+  background: var(--surface-3);
+  border-radius: 3px;
+}
+
+.terminalContainer :global(.xterm-viewport)::-webkit-scrollbar-thumb:hover {
+  background: var(--zinc-500);
+}

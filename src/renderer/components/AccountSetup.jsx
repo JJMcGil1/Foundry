@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiCamera, FiCheck, FiArrowRight, FiSun, FiMoon, FiMonitor } from 'react-icons/fi';
+import { FiCamera, FiCheck, FiArrowRight, FiSun, FiMoon, FiMonitor, FiEye, FiEyeOff } from 'react-icons/fi';
 import FoundryLogo from './FoundryLogo';
 import styles from './AccountSetup.module.css';
 
@@ -23,21 +23,23 @@ export default function AccountSetup({ onComplete }) {
   const [step, setStep] = useState(1);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [photoData, setPhotoData] = useState(null);
   const [theme, setTheme] = useState('dark');
   const [saving, setSaving] = useState(false);
   const fileInputRef = useRef(null);
 
   const initials = `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase();
-  const canProceed = firstName.trim().length > 0 && lastName.trim().length > 0;
+  const canProceed = firstName.trim().length > 0 && lastName.trim().length > 0
+    && email.trim().length > 0 && password.trim().length >= 6;
 
   async function handlePickPhoto() {
-    // Use native dialog via IPC
     if (window.foundry?.pickPhoto) {
       const data = await window.foundry.pickPhoto();
       if (data) setPhotoData(data);
     } else {
-      // Fallback for browser dev
       fileInputRef.current?.click();
     }
   }
@@ -57,6 +59,8 @@ export default function AccountSetup({ onComplete }) {
         await window.foundry.createProfile({
           firstName: firstName.trim(),
           lastName: lastName.trim(),
+          email: email.trim(),
+          password: password,
           profilePhoto: photoData,
           theme,
         });
@@ -64,6 +68,7 @@ export default function AccountSetup({ onComplete }) {
       onComplete?.({
         firstName: firstName.trim(),
         lastName: lastName.trim(),
+        email: email.trim(),
         profilePhoto: photoData,
         theme,
       });
@@ -147,8 +152,42 @@ export default function AccountSetup({ onComplete }) {
                     placeholder="Enter your last name"
                     value={lastName}
                     onChange={(e) => setLastName(e.target.value)}
+                  />
+                </div>
+              </motion.div>
+
+              {/* Email */}
+              <motion.div variants={fade} className={styles.fullField}>
+                <label className={styles.fieldLabel}>Email</label>
+                <input
+                  type="email"
+                  className={styles.input}
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </motion.div>
+
+              {/* Password */}
+              <motion.div variants={fade} className={styles.fullField}>
+                <label className={styles.fieldLabel}>Password</label>
+                <div className={styles.passwordWrapper}>
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    className={styles.input}
+                    placeholder="Min 6 characters"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && canProceed && setStep(2)}
                   />
+                  <button
+                    type="button"
+                    className={styles.passwordToggle}
+                    onClick={() => setShowPassword(v => !v)}
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <FiEyeOff size={15} /> : <FiEye size={15} />}
+                  </button>
                 </div>
               </motion.div>
 
@@ -253,7 +292,7 @@ export default function AccountSetup({ onComplete }) {
                   onClick={handleFinish}
                   disabled={saving}
                 >
-                  {saving ? 'Setting up…' : 'Get Started'}
+                  {saving ? 'Setting up...' : 'Get Started'}
                   {!saving && <FiCheck size={16} />}
                 </button>
               </motion.div>
