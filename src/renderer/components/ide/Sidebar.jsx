@@ -104,28 +104,7 @@ function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusCo
 }
 
 const SYNC_STEPS = ['pull', 'stage', 'commit', 'push'];
-const STEP_LABELS = { pull: 'Pulling', stage: 'Staging', commit: 'Committing', push: 'Pushing' };
-
-function SyncProgress({ currentStep, completedSteps, error }) {
-  return (
-    <div className={styles.syncProgress}>
-      {SYNC_STEPS.map((step, i) => {
-        const isDone = completedSteps.has(step);
-        const isActive = currentStep === step;
-        const isFailed = error && isActive;
-        return (
-          <div key={step} className={styles.syncStep} data-state={isFailed ? 'error' : isDone ? 'done' : isActive ? 'active' : 'pending'}>
-            <span className={styles.syncStepIcon}>
-              {isFailed ? <FiX size={10} /> : isDone ? <FiCheck size={10} /> : isActive ? <FiRefreshCw size={10} className={styles.spinning} /> : <span className={styles.syncDot} />}
-            </span>
-            <span className={styles.syncStepLabel}>{STEP_LABELS[step]}</span>
-            {i < SYNC_STEPS.length - 1 && <span className={styles.syncStepLine} data-done={isDone ? 'true' : 'false'} />}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+const STEP_LABELS = { pull: 'Pulling…', stage: 'Staging…', commit: 'Committing…', push: 'Pushing…' };
 
 function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile }) {
   const [commitMsg, setCommitMsg] = useState('');
@@ -318,23 +297,28 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCommit(); } }}
           rows={2}
         />
-        <button className={styles.commitBtn} disabled={!commitMsg.trim() || loading} onClick={handleCommit}>
-          {loading ? <FiRefreshCw size={12} className={styles.spinning} /> : <FiCheck size={12} />}
-          <span>{loading ? (STEP_LABELS[syncStep] || 'Syncing') + '…' : 'Commit'}</span>
+        <button
+          className={`${styles.commitBtn} ${statusMessage ? styles['commitBtn--' + statusMessage.type] : ''}`}
+          disabled={!commitMsg.trim() && !loading && !statusMessage}
+          onClick={handleCommit}
+        >
+          {loading ? <FiRefreshCw size={12} className={styles.spinning} /> : statusMessage?.type === 'error' ? <FiX size={12} /> : <FiCheck size={12} />}
+          <span>
+            {statusMessage
+              ? statusMessage.text
+              : loading
+                ? (STEP_LABELS[syncStep] || 'Syncing…')
+                : 'Commit'}
+          </span>
+          {loading && (
+            <div className={styles.commitProgress}>
+              <div
+                className={styles.commitProgressBar}
+                style={{ width: `${((completedSteps.size + 0.5) / SYNC_STEPS.length) * 100}%` }}
+              />
+            </div>
+          )}
         </button>
-        {(syncStep || statusMessage) && (
-          <div className={styles.syncContainer}>
-            {syncStep && <SyncProgress currentStep={syncStep} completedSteps={completedSteps} error={statusMessage?.type === 'error'} />}
-            {statusMessage && (
-              <div className={styles.statusMessage} data-type={statusMessage.type}>
-                {statusMessage.type === 'error' && <FiX size={12} />}
-                {statusMessage.type === 'success' && <FiCheck size={12} />}
-                {statusMessage.type === 'warning' && <FiX size={12} />}
-                <span>{statusMessage.text}</span>
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {staged.length > 0 && (

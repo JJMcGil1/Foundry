@@ -347,7 +347,9 @@
   font-family: var(--font-sans);
   cursor: pointer;
   outline: none;
-  transition: background 0.15s ease, opacity 0.15s ease;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.2s ease, color 0.2s ease;
 }
 
 .commitBtn:hover {
@@ -535,121 +537,48 @@
   animation: spin 1s linear infinite;
 }
 
-/* ── Sync container ── */
-.syncContainer {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* ── Commit button progress bar ── */
+.commitProgress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: rgba(0, 0, 0, 0.15);
 }
 
-/* ── Sync progress steps ── */
-.syncProgress {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 6px 4px 2px;
+.commitProgressBar {
+  height: 100%;
+  background: var(--zinc-900);
+  opacity: 0.3;
+  border-radius: 0 2px 2px 0;
+  transition: width 0.4s ease;
 }
 
-.syncStep {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  flex: 1;
-  min-width: 0;
-}
-
-.syncStepIcon {
-  width: 16px;
-  height: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  border-radius: 50%;
-  transition: all 0.2s ease;
-}
-
-.syncStep[data-state="done"] .syncStepIcon {
-  color: #98C379;
-}
-
-.syncStep[data-state="active"] .syncStepIcon {
-  color: var(--zinc-200);
-}
-
-.syncStep[data-state="pending"] .syncStepIcon {
-  color: var(--zinc-600);
-}
-
-.syncStep[data-state="error"] .syncStepIcon {
-  color: #E06C75;
-}
-
-.syncDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--zinc-600);
-  display: block;
-}
-
-.syncStepLabel {
-  font-size: 10px;
-  font-weight: 500;
-  white-space: nowrap;
-  transition: color 0.2s ease;
-}
-
-.syncStep[data-state="done"] .syncStepLabel {
-  color: #98C379;
-}
-
-.syncStep[data-state="active"] .syncStepLabel {
-  color: var(--zinc-200);
-}
-
-.syncStep[data-state="pending"] .syncStepLabel {
-  color: var(--zinc-600);
-}
-
-.syncStep[data-state="error"] .syncStepLabel {
-  color: #E06C75;
-}
-
-.syncStepLine {
-  flex: 1;
-  height: 1px;
-  margin: 0 4px;
-  background: var(--zinc-700);
-  transition: background 0.2s ease;
-}
-
-.syncStepLine[data-done="true"] {
+/* ── Commit button state variants ── */
+.commitBtn--success {
   background: #98C379;
+  color: #1a1a1a;
 }
 
-/* ── Status message ── */
-.statusMessage {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 5px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 500;
+.commitBtn--success:hover {
+  background: #a9d18a;
 }
 
-.statusMessage[data-type="success"] {
-  color: #98C379;
-  background: rgba(152, 195, 121, 0.1);
+.commitBtn--error {
+  background: #E06C75;
+  color: #fff;
 }
 
-.statusMessage[data-type="error"] {
-  color: #E06C75;
-  background: rgba(224, 108, 117, 0.1);
+.commitBtn--error:hover {
+  background: #e88189;
 }
 
-.statusMessage[data-type="warning"] {
-  color: #E5C07B;
-  background: rgba(229, 192, 123, 0.1);
+.commitBtn--warning {
+  background: #E5C07B;
+  color: #1a1a1a;
+}
+
+.commitBtn--warning:hover {
+  background: #eacd93;
 }
