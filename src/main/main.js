@@ -359,6 +359,152 @@ function registerIPC() {
     }
   });
 
+  // ---- Workspace Search ---- //
+  ipcMain.handle('search:files', async (_event, dirPath, query) => {
+    if (!dirPath || !query) return [];
+    const results = [];
+    const lowerQuery = query.toLowerCase();
+    function walkDir(dir, depth = 0) {
+      if (depth > 6 || results.length >= 50) return;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
+          const fullPath = path.join(dir, entry.name);
+          const relativePath = path.relative(dirPath, fullPath);
+          if (entry.isDirectory()) {
+            walkDir(fullPath, depth + 1);
+          } else {
+            if (entry.name.toLowerCase().includes(lowerQuery) || relativePath.toLowerCase().includes(lowerQuery)) {
+              results.push({ name: entry.name, path: fullPath, relativePath });
+            }
+          }
+          if (results.length >= 50) return;
+        }
+      } catch {}
+    }
+    walkDir(dirPath);
+    // Sort: prefer starts-with matches, then by path length
+    results.sort((a, b) => {
+      const aStarts = a.name.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+      const bStarts = b.name.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
+      if (aStarts !== bStarts) return aStarts - bStarts;
+      return a.relativePath.length - b.relativePath.length;
+    });
+    return results;
+  });
+
+  ipcMain.handle('search:inFiles', async (_event, dirPath, query, options = {}) => {
+    if (!dirPath || !query) return [];
+    const results = [];
+    const caseSensitive = options.caseSensitive || false;
+    const isRegex = options.isRegex || false;
+    const wholeWord = options.wholeWord || false;
+    let pattern;
+    try {
+      let src = isRegex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (wholeWord) src = `\\b${src}\\b`;
+      pattern = new RegExp(src, caseSensitive ? 'g' : 'gi');
+    } catch {
+      return [];
+    }
+    function walkDir(dir, depth = 0) {
+      if (depth > 6 || results.length >= 200) return;
+      try {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
+          const fullPath = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            walkDir(fullPath, depth + 1);
+          } else {
+            // Skip binary / large files
+            try {
+              const stats = fs.statSync(fullPath);
+              if (stats.size > 1024 * 1024) continue; // skip > 1MB
+            } catch { continue; }
+            try {
+              const content = fs.readFileSync(fullPath, 'utf8');
+              const lines = content.split('\n');
+              const fileMatches = [];
+              for (let i = 0; i < lines.length; i++) {
+                pattern.lastIndex = 0;
+                if (pattern.test(lines[i])) {
+                  fileMatches.push({ line: i + 1, text: lines[i].substring(0, 500) });
+                  if (fileMatches.length >= 20) break;
+                }
+              }
+              if (fileMatches.length > 0) {
+                results.push({
+                  path: fullPath,
+                  relativePath: path.relative(dirPath, fullPath),
+                  name: path.basename(fullPath),
+                  matches: fileMatches,
+                });
+              }
+            } catch {}
+          }
+          if (results.length >= 200) return;
+        }
+      } catch {}
+    }
+    walkDir(dirPath);
+    return results;
+  });
+
+  ipcMain.handle('search:replaceInFiles', async (_event, dirPath, searchQuery, replaceText, options = {}) => {
+    if (!dirPath || !searchQuery) return { success: false, error: 'Missing parameters' };
+    const caseSensitive = options.caseSensitive || false;
+    const isRegex = options.isRegex || false;
+    const wholeWord = options.wholeWord || false;
+    const filePaths = options.filePaths || null; // optional: limit to specific files
+    let pattern;
+    try {
+      let src = isRegex ? searchQuery : searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (wholeWord) src = `\\b${src}\\b`;
+      pattern = new RegExp(src, caseSensitive ? 'g' : 'gi');
+    } catch (err) {
+      return { success: false, error: 'Invalid regex: ' + err.message };
+    }
+    let totalReplacements = 0;
+    let filesModified = 0;
+    function processFile(filePath) {
+      try {
+        const stats = fs.statSync(filePath);
+        if (stats.size > 1024 * 1024) return; // skip > 1MB
+        const content = fs.readFileSync(filePath, 'utf8');
+        pattern.lastIndex = 0;
+        if (!pattern.test(content)) return;
+        pattern.lastIndex = 0;
+        let count = 0;
+        const newContent = content.replace(pattern, (match) => { count++; return replaceText; });
+        if (count > 0) {
+          fs.writeFileSync(filePath, newContent, 'utf8');
+          totalReplacements += count;
+          filesModified++;
+        }
+      } catch {}
+    }
+    if (filePaths && filePaths.length > 0) {
+      for (const fp of filePaths) processFile(fp);
+    } else {
+      function walkDir(dir, depth = 0) {
+        if (depth > 6) return;
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
+            const fullPath = path.join(dir, entry.name);
+            if (entry.isDirectory()) walkDir(fullPath, depth + 1);
+            else processFile(fullPath);
+          }
+        } catch {}
+      }
+      walkDir(dirPath);
+    }
+    return { success: true, totalReplacements, filesModified };
+  });
+
   // Shell open
   ipcMain.handle('shell:openExternal', async (_event, url) => {
     shell.openExternal(url);

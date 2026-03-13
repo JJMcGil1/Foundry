@@ -51,7 +51,8 @@
 .titlebarLogo {
   height: 34px;
   width: auto;
-  opacity: 0.5;
+  opacity: 0.85;
+  filter: var(--welcome-logo-glow);
 }
 
 /* Right-side titlebar controls */
@@ -70,7 +71,7 @@
   justify-content: center;
   background: transparent;
   border: none;
-  color: var(--zinc-600);
+  color: var(--zinc-400);
   cursor: pointer;
   outline: none;
   border-radius: 8px;
@@ -79,23 +80,43 @@
 
 .titlebarBtn:hover {
   color: var(--zinc-100);
-  background: var(--surface-1);
+  background: var(--titlebar-btn-hover);
 }
 
 .titlebarBtn:active {
   color: var(--zinc-100);
-  background: var(--surface-2);
+  background: var(--titlebar-btn-hover);
 }
 
 .titlebarBtnActive {
-  color: var(--zinc-400);
-  background: var(--surface-1);
+  color: var(--zinc-200);
 }
 
 .titlebarBtnActive:hover {
   color: var(--zinc-100);
-  background: var(--surface-2);
 }
+
+/* Icon crossfade for smooth outline ↔ filled transitions */
+.iconCrossfade {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.iconBase,
+.iconFill {
+  position: absolute;
+  transition: opacity 0.2s ease;
+}
+
+.iconBase { opacity: 1; }
+.iconFill { opacity: 0; }
+
+.iconHidden { opacity: 0; }
+.iconFill:not(.iconHidden) { opacity: 1; }
 
 .titlebarDivider {
   width: 1px;

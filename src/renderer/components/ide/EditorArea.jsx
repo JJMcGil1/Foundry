@@ -112,20 +112,6 @@ function WelcomePane({ onOpenFolder }) {
           <FiFolder size={15} />
           Open Project
         </button>
-        <div className={styles.welcomeDivider} />
-        <div className={styles.welcomeShortcuts}>
-          {[
-            ['⌘ B', 'Sidebar'],
-            ['⌘ J', 'Chat'],
-            ['⌘ S', 'Save'],
-            ['⌘ ,', 'Settings'],
-          ].map(([key, label]) => (
-            <div key={key} className={styles.shortcutRow}>
-              <kbd className={styles.kbd}>{key}</kbd>
-              <span>{label}</span>
-            </div>
-          ))}
-        </div>
       </div>
     </div>
   );

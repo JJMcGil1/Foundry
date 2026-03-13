@@ -9,6 +9,7 @@ import EditorArea from './EditorArea';
 import ChatPanel from './ChatPanel';
 import TerminalPanel from './TerminalPanel';
 import SettingsPage from './SettingsPage';
+import SearchBar from './SearchBar';
 import styles from './IDELayout.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
 import foundryIconLight from '../../assets/foundry-icon-light.svg';
@@ -146,29 +147,37 @@ export default function IDELayout({ profile, onProfileChange }) {
               draggable={false}
             />
           </div>
+          <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
             <button
               className={`${styles.titlebarBtn} ${sidebarVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setSidebarVisible(v => !v)}
               title="Toggle Sidebar"
             >
-              {sidebarVisible ? <TbLayoutSidebarFilled size={20} /> : <TbLayoutSidebar size={20} />}
+              <span className={styles.iconCrossfade}>
+                <TbLayoutSidebar size={20} className={`${styles.iconBase} ${sidebarVisible ? styles.iconHidden : ''}`} />
+                <TbLayoutSidebarFilled size={20} className={`${styles.iconFill} ${sidebarVisible ? '' : styles.iconHidden}`} />
+              </span>
             </button>
             <button
               className={`${styles.titlebarBtn} ${terminalVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setTerminalVisible(v => !v)}
               title="Toggle Terminal"
             >
-              {terminalVisible ? <PiTerminalWindowFill size={20} /> : <PiTerminalWindow size={20} />}
+              <span className={styles.iconCrossfade}>
+                <PiTerminalWindow size={20} className={`${styles.iconBase} ${terminalVisible ? styles.iconHidden : ''}`} />
+                <PiTerminalWindowFill size={20} className={`${styles.iconFill} ${terminalVisible ? '' : styles.iconHidden}`} />
+              </span>
             </button>
             <button
               className={`${styles.titlebarBtn} ${chatVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setChatVisible(v => !v)}
               title="Toggle Right Panel"
             >
-              {chatVisible
-                ? <TbLayoutSidebarRightFilled size={20} />
-                : <TbLayoutSidebarRight size={20} />}
+              <span className={styles.iconCrossfade}>
+                <TbLayoutSidebarRight size={20} className={`${styles.iconBase} ${chatVisible ? styles.iconHidden : ''}`} />
+                <TbLayoutSidebarRightFilled size={20} className={`${styles.iconFill} ${chatVisible ? '' : styles.iconHidden}`} />
+              </span>
             </button>
             <div className={styles.titlebarDivider} />
             <button

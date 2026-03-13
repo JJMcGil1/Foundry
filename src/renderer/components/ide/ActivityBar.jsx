@@ -1,16 +1,10 @@
 import React, { useState } from 'react';
-import {
-  HiOutlineDocumentText, HiDocumentText,
-  HiOutlineSearch, HiSearch,
-  HiOutlineCog, HiCog,
-} from 'react-icons/hi';
-import { TbGitBranch, TbGitMerge } from 'react-icons/tb';
+import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
 import styles from './ActivityBar.module.css';
 
 const panels = [
-  { id: 'files',  icon: HiOutlineDocumentText, activeIcon: HiDocumentText, label: 'Files' },
-  { id: 'search', icon: HiOutlineSearch,       activeIcon: HiSearch,       label: 'Search' },
-  { id: 'git',    icon: TbGitBranch,           activeIcon: TbGitMerge,     label: 'Source Control' },
+  { id: 'files',  icon: VscFiles,          label: 'Explorer' },
+  { id: 'git',    icon: VscSourceControl,  label: 'Source Control' },
 ];
 
 export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings }) {
@@ -25,7 +19,7 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
       <div className={styles.top}>
         {panels.map(p => {
           const active = activePanel === p.id && !showSettings;
-          const Icon = active ? p.activeIcon : p.icon;
+          const Icon = p.icon;
           return (
             <div key={p.id} className={styles.itemWrap}>
               <button
@@ -35,6 +29,12 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
                 onMouseLeave={() => setHoveredId(null)}
               >
                 <Icon size={24} />
+                {active && (
+                  <span className={styles.indicator}>
+                    <span className={styles.indicatorLine} />
+                    <span className={styles.indicatorGlow} />
+                  </span>
+                )}
               </button>
               {hoveredId === p.id && (
                 <div className={styles.tooltip}>
@@ -54,7 +54,13 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
             onMouseEnter={() => setHoveredId('settings')}
             onMouseLeave={() => setHoveredId(null)}
           >
-            {showSettings ? <HiCog size={24} /> : <HiOutlineCog size={24} />}
+            <VscSettingsGear size={22} />
+            {showSettings && (
+              <span className={styles.indicator}>
+                <span className={styles.indicatorLine} />
+                <span className={styles.indicatorGlow} />
+              </span>
+            )}
           </button>
           {hoveredId === 'settings' && (
             <div className={styles.tooltip}>

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
   FiFolder, FiFolderPlus, FiRefreshCw, FiFile, FiChevronRight,
-  FiSearch, FiGitBranch, FiCheck, FiUpload, FiDownload, FiX,
+  FiGitBranch, FiCheck, FiUpload, FiDownload, FiX,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import styles from './Sidebar.module.css';
@@ -81,38 +81,6 @@ function FileTreeItem({ item, depth = 0, onOpenFile, activeFile }) {
       <span className={styles.fileDot} style={{ background: dotColor }} />
       <span className={styles.treeName}>{item.name}</span>
     </button>
-  );
-}
-
-/* ── Search Panel ── */
-function SearchPanel() {
-  const [query, setQuery] = useState('');
-  const inputRef = useRef(null);
-
-  return (
-    <div className={styles.panelScroll}>
-      <div className={styles.searchBox}>
-        <FiSearch size={13} className={styles.searchIcon} />
-        <input
-          ref={inputRef}
-          type="text"
-          className={styles.searchInput}
-          placeholder="Search files…"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        {query && (
-          <button className={styles.searchClear} onClick={() => { setQuery(''); inputRef.current?.focus(); }}>
-            <FiX size={11} />
-          </button>
-        )}
-      </div>
-      {!query && (
-        <div className={styles.emptyState}>
-          <span className={styles.emptyText}>Type to search across files</span>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -221,7 +189,7 @@ export default function Sidebar({
   onOpenFile, onOpenFolder, onRefresh, projectPath,
   onWidthChange, activeFile
 }) {
-  const panelTitles = { files: 'Explorer', search: 'Search', git: 'Source Control' };
+  const panelTitles = { files: 'Explorer', git: 'Source Control' };
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef(null);
 
@@ -302,7 +270,7 @@ export default function Sidebar({
                 </div>
               )
             )}
-            {panel === 'search' && <SearchPanel />}
+
             {panel === 'git' && <GitPanel gitStatus={gitStatus} projectPath={projectPath} />}
           </motion.div>
         </AnimatePresence>

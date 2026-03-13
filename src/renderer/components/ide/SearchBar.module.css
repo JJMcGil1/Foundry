@@ -1,0 +1,454 @@
+/* ========================================
+   SearchBar — Centered Titlebar Search
+   ======================================== */
+
+.searchBarWrapper {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10;
+}
+
+/* ---- The actual search input in the titlebar ---- */
+.searchInput {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  min-width: 320px;
+  height: 30px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.searchInput:focus-within {
+  border-color: var(--zinc-600);
+  background: var(--surface-3);
+}
+
+.searchInputIcon {
+  flex-shrink: 0;
+  color: var(--zinc-500);
+  opacity: 0.6;
+}
+
+.searchField {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--zinc-200);
+  font-size: 12.5px;
+  font-family: var(--font-sans);
+  height: 100%;
+  min-width: 0;
+}
+
+.searchField::placeholder {
+  color: var(--zinc-600);
+}
+
+.searchShortcut {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-family: var(--font-sans);
+  color: var(--zinc-600);
+  background: var(--surface-1);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+}
+
+/* Options row — inline in the titlebar input */
+.optionsRow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.optionBtn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--zinc-600);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.optionBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.optionBtnActive {
+  color: var(--accent);
+  border-color: var(--accent-dim);
+  background: var(--accent-glow);
+}
+
+/* ---- Overlay / Dropdown ---- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: transparent;
+}
+
+.dropdown {
+  position: fixed;
+  top: 52px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  width: 560px;
+  max-height: 420px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dropdownIn 0.12s ease;
+}
+
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* ---- Tabs ---- */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  padding: 9px 0;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.tab:hover {
+  color: var(--zinc-300);
+  background: var(--surface-2);
+}
+
+.tabActive {
+  color: var(--zinc-200);
+}
+
+.tabActive::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  right: 20%;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+}
+
+/* ---- Replace area inside dropdown ---- */
+.replaceArea {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.replaceRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.replaceIcon {
+  flex-shrink: 0;
+  color: var(--zinc-500);
+}
+
+.replaceField {
+  flex: 1;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  color: var(--zinc-200);
+  font-size: 13px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.replaceField:focus {
+  border-color: var(--accent-dim);
+}
+
+.replaceField::placeholder {
+  color: var(--zinc-600);
+}
+
+.replaceBtn {
+  padding: 6px 12px;
+  background: var(--accent-dim);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  white-space: nowrap;
+}
+
+.replaceBtn:hover {
+  background: var(--accent);
+}
+
+.replaceBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Results ---- */
+.results {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.resultItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+  border-bottom: 1px solid var(--border);
+}
+
+.resultItem:last-child {
+  border-bottom: none;
+}
+
+.resultItem:hover,
+.resultItemActive {
+  background: var(--surface-2);
+}
+
+.resultIcon {
+  flex-shrink: 0;
+  color: var(--zinc-500);
+}
+
+.resultInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.resultName {
+  font-size: 13px;
+  color: var(--zinc-200);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resultPath {
+  font-size: 11px;
+  color: var(--zinc-600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.resultMatchCount {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--zinc-500);
+  background: var(--surface-3);
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+/* Content search file group */
+.fileGroup {
+  border-bottom: 1px solid var(--border);
+}
+
+.fileGroupHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--zinc-300);
+  font-weight: 500;
+  transition: background 0.1s ease;
+}
+
+.fileGroupHeader:hover {
+  background: var(--surface-2);
+}
+
+.matchLine {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 4px 14px 4px 36px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  transition: background 0.1s ease;
+}
+
+.matchLine:hover {
+  background: var(--surface-2);
+}
+
+.matchLineNumber {
+  flex-shrink: 0;
+  color: var(--zinc-600);
+  font-size: 11px;
+  min-width: 32px;
+  text-align: right;
+}
+
+.matchLineText {
+  color: var(--zinc-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+/* ---- Status / empty ---- */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 16px;
+  color: var(--zinc-600);
+  font-size: 13px;
+  gap: 6px;
+}
+
+.emptyIcon {
+  opacity: 0.4;
+}
+
+.statusBar {
+  padding: 8px 14px;
+  font-size: 11px;
+  color: var(--zinc-500);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.highlight {
+  background: rgba(167, 139, 250, 0.3);
+  color: var(--zinc-100);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.replaceConfirm {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.replaceConfirmText {
+  flex: 1;
+  font-size: 12px;
+  color: var(--zinc-300);
+}
+
+.replaceConfirmBtnDanger {
+  padding: 6px 14px;
+  background: #DC2626;
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.replaceConfirmBtnDanger:hover {
+  background: #EF4444;
+}
+
+.replaceConfirmBtnCancel {
+  padding: 6px 14px;
+  background: var(--surface-3);
+  color: var(--zinc-300);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.replaceConfirmBtnCancel:hover {
+  background: var(--surface-4);
+}
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--zinc-700);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

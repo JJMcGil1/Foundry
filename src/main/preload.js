@@ -35,6 +35,11 @@ contextBridge.exposeInMainWorld('foundry', {
   gitPull: (dirPath) => ipcRenderer.invoke('git:pull', dirPath),
   gitClone: (url, destPath) => ipcRenderer.invoke('git:clone', url, destPath),
 
+  // Search
+  searchFiles: (dirPath, query) => ipcRenderer.invoke('search:files', dirPath, query),
+  searchInFiles: (dirPath, query, options) => ipcRenderer.invoke('search:inFiles', dirPath, query, options),
+  replaceInFiles: (dirPath, searchQuery, replaceText, options) => ipcRenderer.invoke('search:replaceInFiles', dirPath, searchQuery, replaceText, options),
+
   // Shell
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
