@@ -130,6 +130,16 @@ export default function IDELayout({ profile, onProfileChange }) {
     if (status) setGitStatus(status);
   }, [project]);
 
+  // Poll git status for real-time updates
+  useEffect(() => {
+    if (!project) return;
+    const interval = setInterval(async () => {
+      const status = await window.foundry?.gitStatus(project.path);
+      if (status) setGitStatus(status);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [project]);
+
   useEffect(() => {
     function handleKeyDown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); if (activeTab) handleSaveFile(activeTab); }

@@ -144,13 +144,29 @@ function getGitStatus(dirPath) {
     const result = execSync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
     const branch = execSync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
     const lines = result.split('\n').filter(Boolean);
+    const staged = [];
+    const unstaged = [];
+    for (const line of lines) {
+      const x = line[0]; // staged status
+      const y = line[1]; // unstaged status
+      const filePath = line.substring(3);
+      // Staged changes (index column has a letter)
+      if (x !== ' ' && x !== '?') {
+        staged.push({ status: x, path: filePath });
+      }
+      // Unstaged changes (working tree column has a letter, or untracked)
+      if (y !== ' ' || x === '?') {
+        unstaged.push({ status: x === '?' ? '??' : y, path: filePath });
+      }
+    }
+    // Keep flat files list for backward compat (commit uses it)
     const files = lines.map(line => ({
       status: line.substring(0, 2).trim(),
       path: line.substring(3),
     }));
-    return { branch, files, isRepo: true };
+    return { branch, files, staged, unstaged, isRepo: true };
   } catch {
-    return { branch: '', files: [], isRepo: false };
+    return { branch: '', files: [], staged: [], unstaged: [], isRepo: false };
   }
 }
 
@@ -437,6 +453,21 @@ function registerIPC() {
   ipcMain.handle('git:unstage', async (_event, dirPath, filePath) => {
     try {
       execSync(`git reset HEAD "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:discard', async (_event, dirPath, filePath) => {
+    try {
+      // For untracked files, remove them; for tracked files, restore them
+      const status = execSync(`git status --porcelain "${filePath}"`, { cwd: dirPath, timeout: 5000 }).toString().trim();
+      if (status.startsWith('??')) {
+        fs.unlinkSync(path.join(dirPath, filePath));
+      } else {
+        execSync(`git checkout -- "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      }
       return { success: true };
     } catch (err) {
       return { error: err.message };

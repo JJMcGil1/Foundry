@@ -312,8 +312,8 @@
 .commitInput {
   width: 100%;
   padding: 7px 10px;
-  background: var(--surface-0);
-  border: 1px solid transparent;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--zinc-200);
   font-size: 12px;
@@ -360,49 +360,93 @@
 }
 
 .sectionLabel {
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px 4px;
-  font-size: 10px;
-  font-weight: 600;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--zinc-600);
+  letter-spacing: 0.04em;
+  color: var(--zinc-200);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+  outline: none;
+  transition: background 0.1s ease;
 }
 
-.badge {
-  font-size: 9px;
-  font-weight: 700;
-  min-width: 16px;
-  height: 16px;
+.sectionLabel:hover {
+  background: var(--tree-hover);
+}
+
+.sectionChevron {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--surface-2);
-  border-radius: 8px;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
   color: var(--zinc-400);
-  padding: 0 4px;
+}
+
+.sectionActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-3);
+  border-radius: 10px;
+  color: var(--zinc-300);
+  padding: 0 6px;
 }
 
 .changesList {
-  padding: 0 8px 12px;
+  padding: 0 0 4px;
 }
 
 .changeItem {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 4px 8px;
+  gap: 4px;
+  padding: 0 30px 0 8px;
+  height: 28px;
   font-size: 12px;
-  border-radius: var(--radius-sm);
-  cursor: default;
-  transition: background 0.1s ease;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.15s ease-out, background 0.15s ease-out, border-color 0.15s ease-out;
 }
 
 .changeItem:hover {
-  background: var(--surface-3);
+  background: var(--tree-hover);
+  padding-right: 70px;
 }
+
+.changeItemActive {
+  background: var(--tree-active);
+  border-left-color: var(--zinc-600);
+}
+
+.changeItemActive:hover {
+  background: var(--tree-active-hover);
+}
+
+
 
 .changeIndicator {
   width: 4px;
@@ -419,10 +463,64 @@
   white-space: nowrap;
 }
 
+.changeFileName {
+  color: var(--zinc-200);
+  font-weight: 500;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.changeDirPath {
+  flex: 1;
+  color: var(--zinc-500);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.changeActions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.changeItem:hover .changeActions {
+  display: flex;
+}
+
+.changeActionBtn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  outline: none;
+  padding: 0;
+  transition: color 0.1s ease, background 0.1s ease;
+}
+
+.changeActionBtn:hover {
+  background: var(--tree-active);
+  color: var(--zinc-200);
+}
+
 .changeLabel {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   font-family: var(--font-mono);
-  flex-shrink: 0;
-  opacity: 0.7;
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
 }

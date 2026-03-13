@@ -1,19 +1,73 @@
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { FiX, FiFolder, FiFile } from 'react-icons/fi';
+import Editor from '@monaco-editor/react';
+import FileIcon from './FileIcon';
 import styles from './EditorArea.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
 import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
-function getFileIcon(name) {
-  const ext = name?.split('.').pop()?.toLowerCase();
-  const colors = {
-    js: '#F7DF1E', jsx: '#61DAFB', ts: '#3178C6', tsx: '#3178C6',
-    py: '#3776AB', rb: '#CC342D', go: '#00ADD8', rs: '#DEA584',
-    css: '#1572B6', scss: '#CD6799', html: '#E34F26',
-    json: '#A1A1AA', md: '#A1A1AA', yml: '#A1A1AA', yaml: '#A1A1AA',
-    svg: '#FFB13B',
-  };
-  return colors[ext] || 'var(--zinc-500)';
+/* ── Theme detection hook ───────────────────────────────── */
+function useAppTheme() {
+  const [theme, setTheme] = useState(
+    () => document.documentElement.getAttribute('data-theme') || 'dark'
+  );
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const t = document.documentElement.getAttribute('data-theme') || 'dark';
+      setTheme(t);
+    });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return theme;
+}
+
+const EXT_TO_LANGUAGE = {
+  js: 'javascript', jsx: 'javascript', mjs: 'javascript', cjs: 'javascript',
+  ts: 'typescript', tsx: 'typescript', mts: 'typescript',
+  json: 'json', jsonc: 'json',
+  html: 'html', htm: 'html',
+  css: 'css', scss: 'scss', less: 'less',
+  md: 'markdown', mdx: 'markdown',
+  py: 'python', pyw: 'python',
+  rb: 'ruby',
+  rs: 'rust',
+  go: 'go',
+  java: 'java',
+  c: 'c', h: 'c',
+  cpp: 'cpp', cc: 'cpp', cxx: 'cpp', hpp: 'cpp',
+  cs: 'csharp',
+  php: 'php',
+  swift: 'swift',
+  kt: 'kotlin', kts: 'kotlin',
+  sh: 'shell', bash: 'shell', zsh: 'shell',
+  sql: 'sql',
+  xml: 'xml', svg: 'xml',
+  yaml: 'yaml', yml: 'yaml',
+  toml: 'ini',
+  ini: 'ini',
+  lua: 'lua',
+  r: 'r',
+  dart: 'dart',
+  dockerfile: 'dockerfile',
+  graphql: 'graphql', gql: 'graphql',
+  vue: 'html',
+  makefile: 'shell',
+};
+
+function getLanguageFromFilename(filename) {
+  if (!filename) return 'plaintext';
+  const lower = filename.toLowerCase();
+  // Handle special filenames
+  if (lower === 'dockerfile') return 'dockerfile';
+  if (lower === 'makefile' || lower === 'gnumakefile') return 'shell';
+  const ext = lower.split('.').pop();
+  return EXT_TO_LANGUAGE[ext] || 'plaintext';
 }
 
 function TabBar({ tabs, activeTab, onSelectTab, onCloseTab }) {
@@ -25,7 +79,7 @@ function TabBar({ tabs, activeTab, onSelectTab, onCloseTab }) {
           className={`${styles.tab} ${activeTab === tab.path ? styles.tabActive : ''}`}
           onClick={() => onSelectTab(tab.path)}
         >
-          <div className={styles.tabDot} style={{ background: getFileIcon(tab.name) }} />
+          <FileIcon name={tab.name} type="file" size={14} />
           <span className={styles.tabName}>{tab.name}</span>
           {tab.modified && <span className={styles.tabModified} />}
           <button
@@ -41,57 +95,164 @@ function TabBar({ tabs, activeTab, onSelectTab, onCloseTab }) {
 }
 
 function CodeEditor({ tab, onContentChange, onSave }) {
-  const textareaRef = useRef(null);
-  const lineCountRef = useRef(null);
+  const editorRef = useRef(null);
+  const monacoRef = useRef(null);
+  const appTheme = useAppTheme();
+  const language = useMemo(() => getLanguageFromFilename(tab?.name), [tab?.name]);
+  const monacoTheme = appTheme === 'light' ? 'foundry-light' : 'foundry-dark';
 
-  const lines = (tab?.content || '').split('\n');
-  const lineNumbers = lines.map((_, i) => i + 1);
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
 
-  const handleKeyDown = (e) => {
-    // Tab key inserts 2 spaces
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const textarea = textareaRef.current;
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const value = textarea.value;
-      const newValue = value.substring(0, start) + '  ' + value.substring(end);
-      onContentChange(tab.path, newValue);
-      // Restore cursor position after React re-renders
-      requestAnimationFrame(() => {
-        textarea.selectionStart = textarea.selectionEnd = start + 2;
-      });
-    }
-    if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-      e.preventDefault();
+    // Cmd/Ctrl+S to save
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
       onSave(tab.path);
-    }
-  };
+    });
+  }, [tab?.path, onSave]);
 
-  const handleScroll = () => {
-    if (lineCountRef.current && textareaRef.current) {
-      lineCountRef.current.scrollTop = textareaRef.current.scrollTop;
+  // Reactively switch Monaco theme when app theme changes
+  useEffect(() => {
+    if (monacoRef.current) {
+      monacoRef.current.editor.setTheme(monacoTheme);
     }
-  };
+  }, [monacoTheme]);
+
+  const handleEditorChange = useCallback((value) => {
+    onContentChange(tab.path, value || '');
+  }, [tab?.path, onContentChange]);
+
+  const handleBeforeMount = useCallback((monaco) => {
+    // Dark theme
+    monaco.editor.defineTheme('foundry-dark', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '6A737D', fontStyle: 'italic' },
+        { token: 'keyword', foreground: 'C678DD' },
+        { token: 'string', foreground: '98C379' },
+        { token: 'number', foreground: 'D19A66' },
+        { token: 'type', foreground: 'E5C07B' },
+        { token: 'function', foreground: '61AFEF' },
+        { token: 'variable', foreground: 'E06C75' },
+        { token: 'constant', foreground: 'D19A66' },
+        { token: 'tag', foreground: 'E06C75' },
+        { token: 'attribute.name', foreground: 'D19A66' },
+        { token: 'attribute.value', foreground: '98C379' },
+        { token: 'delimiter', foreground: 'ABB2BF' },
+        { token: 'operator', foreground: '56B6C2' },
+      ],
+      colors: {
+        'editor.background': '#18181B',
+        'editor.foreground': '#D4D4D8',
+        'editor.lineHighlightBackground': '#27272A',
+        'editor.selectionBackground': '#A78BFA33',
+        'editor.inactiveSelectionBackground': '#A78BFA1A',
+        'editorLineNumber.foreground': '#3F3F46',
+        'editorLineNumber.activeForeground': '#A1A1AA',
+        'editorCursor.foreground': '#A78BFA',
+        'editor.selectionHighlightBackground': '#A78BFA1A',
+        'editorIndentGuide.background': '#27272A',
+        'editorIndentGuide.activeBackground': '#3F3F46',
+        'editorWidget.background': '#18181B',
+        'editorWidget.border': '#27272A',
+        'editorSuggestWidget.background': '#18181B',
+        'editorSuggestWidget.border': '#27272A',
+        'editorSuggestWidget.selectedBackground': '#27272A',
+        'scrollbarSlider.background': '#3F3F4666',
+        'scrollbarSlider.hoverBackground': '#52525B88',
+        'scrollbarSlider.activeBackground': '#71717AAA',
+      },
+    });
+
+    // Light theme
+    monaco.editor.defineTheme('foundry-light', {
+      base: 'vs',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '6A737D', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '7C3AED' },
+        { token: 'string', foreground: '16A34A' },
+        { token: 'number', foreground: 'C2410C' },
+        { token: 'type', foreground: 'B45309' },
+        { token: 'function', foreground: '2563EB' },
+        { token: 'variable', foreground: 'DC2626' },
+        { token: 'constant', foreground: 'C2410C' },
+        { token: 'tag', foreground: 'DC2626' },
+        { token: 'attribute.name', foreground: 'B45309' },
+        { token: 'attribute.value', foreground: '16A34A' },
+        { token: 'delimiter', foreground: '3F3F46' },
+        { token: 'operator', foreground: '0891B2' },
+      ],
+      colors: {
+        'editor.background': '#FAFAFA',
+        'editor.foreground': '#27272A',
+        'editor.lineHighlightBackground': '#F4F4F5',
+        'editor.selectionBackground': '#7C3AED22',
+        'editor.inactiveSelectionBackground': '#7C3AED11',
+        'editorLineNumber.foreground': '#D4D4D8',
+        'editorLineNumber.activeForeground': '#71717A',
+        'editorCursor.foreground': '#7C3AED',
+        'editor.selectionHighlightBackground': '#7C3AED11',
+        'editorIndentGuide.background': '#E4E4E7',
+        'editorIndentGuide.activeBackground': '#D4D4D8',
+        'editorWidget.background': '#FAFAFA',
+        'editorWidget.border': '#E4E4E7',
+        'editorSuggestWidget.background': '#FAFAFA',
+        'editorSuggestWidget.border': '#E4E4E7',
+        'editorSuggestWidget.selectedBackground': '#F4F4F5',
+        'scrollbarSlider.background': '#D4D4D844',
+        'scrollbarSlider.hoverBackground': '#A1A1AA66',
+        'scrollbarSlider.activeBackground': '#71717A88',
+      },
+    });
+  }, []);
 
   return (
     <div className={styles.editorWrapper}>
-      <div className={styles.lineNumbers} ref={lineCountRef}>
-        {lineNumbers.map(n => (
-          <div key={n} className={styles.lineNumber}>{n}</div>
-        ))}
-      </div>
-      <textarea
-        ref={textareaRef}
-        className={styles.codeArea}
+      <Editor
+        key={tab?.path}
+        height="100%"
+        language={language}
         value={tab?.content || ''}
-        onChange={(e) => onContentChange(tab.path, e.target.value)}
-        onKeyDown={handleKeyDown}
-        onScroll={handleScroll}
-        spellCheck={false}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="off"
+        theme={monacoTheme}
+        beforeMount={handleBeforeMount}
+        onMount={handleEditorDidMount}
+        onChange={handleEditorChange}
+        options={{
+          fontSize: 13,
+          fontFamily: '"SF Mono", "Fira Code", "JetBrains Mono", Menlo, Monaco, "Courier New", monospace',
+          lineHeight: 20,
+          tabSize: 2,
+          insertSpaces: true,
+          minimap: { enabled: false },
+          scrollBeyondLastLine: false,
+          renderLineHighlight: 'line',
+          cursorBlinking: 'smooth',
+          cursorSmoothCaretAnimation: 'on',
+          smoothScrolling: true,
+          padding: { top: 12 },
+          automaticLayout: true,
+          wordWrap: 'off',
+          bracketPairColorization: { enabled: true },
+          guides: {
+            indentation: true,
+            bracketPairs: true,
+          },
+          scrollbar: {
+            verticalScrollbarSize: 8,
+            horizontalScrollbarSize: 8,
+          },
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
+          overviewRulerBorder: false,
+          contextmenu: true,
+          formatOnPaste: false,
+          formatOnType: false,
+        }}
+        loading={
+          <div className={styles.editorLoading}>Loading editor...</div>
+        }
       />
     </div>
   );

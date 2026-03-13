@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('foundry', {
   gitDiff: (dirPath, filePath) => ipcRenderer.invoke('git:diff', dirPath, filePath),
   gitStage: (dirPath, filePath) => ipcRenderer.invoke('git:stage', dirPath, filePath),
   gitUnstage: (dirPath, filePath) => ipcRenderer.invoke('git:unstage', dirPath, filePath),
+  gitDiscard: (dirPath, filePath) => ipcRenderer.invoke('git:discard', dirPath, filePath),
   gitCommit: (dirPath, message) => ipcRenderer.invoke('git:commit', dirPath, message),
   gitPush: (dirPath) => ipcRenderer.invoke('git:push', dirPath),
   gitPull: (dirPath) => ipcRenderer.invoke('git:pull', dirPath),

@@ -102,50 +102,19 @@
 
 /* Code editor */
 .editorWrapper {
-  display: flex;
   height: 100%;
-  overflow: hidden;
-}
-
-.lineNumbers {
-  padding: 12px 0;
-  background: var(--surface-2);
-  border-right: 1px solid var(--border);
-  overflow: hidden;
-  flex-shrink: 0;
-  min-width: 50px;
-  text-align: right;
-}
-
-.lineNumber {
-  padding: 0 12px 0 8px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--zinc-700);
-  user-select: none;
-}
-
-.codeArea {
-  flex: 1;
   width: 100%;
-  padding: 12px 16px;
-  background: var(--surface-2);
-  color: var(--zinc-200);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 20px;
-  border: none;
-  outline: none;
-  resize: none;
-  overflow: auto;
-  tab-size: 2;
-  white-space: pre;
-  word-wrap: off;
+  overflow: hidden;
 }
 
-.codeArea::selection {
-  background: rgba(167, 139, 250, 0.2);
+.editorLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--zinc-500);
+  font-size: 13px;
+  font-family: var(--font-sans);
 }
 
 /* Welcome pane */
