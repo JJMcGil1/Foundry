@@ -501,6 +501,56 @@ function registerIPC() {
     }
   });
 
+  // Commit & Sync: pull → stage → commit → push (single atomic-ish operation)
+  ipcMain.handle('git:commitAndSync', async (_event, dirPath, message) => {
+    try {
+      // Check if remote exists
+      let hasRemote = false;
+      try {
+        const remotes = execSync('git remote', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
+        hasRemote = remotes.length > 0;
+      } catch { /* no remote */ }
+
+      // Step 1: Pull remote changes first (if remote exists)
+      if (hasRemote) {
+        try {
+          execSync('git pull --rebase=false', { cwd: dirPath, encoding: 'utf8', timeout: 30000 });
+        } catch (pullErr) {
+          // Check if it's a merge conflict
+          const status = execSync('git status', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+          if (status.includes('Unmerged') || status.includes('both modified') || status.includes('fix conflicts')) {
+            // Abort the merge so we don't leave dirty state
+            try { execSync('git merge --abort', { cwd: dirPath, timeout: 5000 }); } catch { /* ignore */ }
+            return { error: 'Merge conflicts detected when pulling remote changes. Please resolve conflicts manually before committing.' };
+          }
+          // If pull failed for other reasons (e.g. no tracking branch), continue with commit+push
+        }
+      }
+
+      // Step 2: Commit (staging is handled on the renderer side already)
+      execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
+
+      // Step 3: Push (if remote exists)
+      if (hasRemote) {
+        try {
+          execSync('git push', { cwd: dirPath, timeout: 30000 });
+        } catch (pushErr) {
+          // Commit succeeded but push failed — try setting upstream
+          try {
+            const branch = execSync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
+            execSync(`git push --set-upstream origin ${branch}`, { cwd: dirPath, timeout: 30000 });
+          } catch (upstreamErr) {
+            return { success: true, warning: 'Commit succeeded but push failed: ' + pushErr.message };
+          }
+        }
+      }
+
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   ipcMain.handle('git:clone', async (_event, url, destPath) => {
     try {
       execSync(`git clone "${url}" "${destPath}"`, { timeout: 60000 });

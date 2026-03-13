@@ -103,11 +103,49 @@ function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusCo
   );
 }
 
+const SYNC_STEPS = ['pull', 'stage', 'commit', 'push'];
+const STEP_LABELS = { pull: 'Pulling', stage: 'Staging', commit: 'Committing', push: 'Pushing' };
+
+function SyncProgress({ currentStep, completedSteps, error }) {
+  return (
+    <div className={styles.syncProgress}>
+      {SYNC_STEPS.map((step, i) => {
+        const isDone = completedSteps.has(step);
+        const isActive = currentStep === step;
+        const isFailed = error && isActive;
+        return (
+          <div key={step} className={styles.syncStep} data-state={isFailed ? 'error' : isDone ? 'done' : isActive ? 'active' : 'pending'}>
+            <span className={styles.syncStepIcon}>
+              {isFailed ? <FiX size={10} /> : isDone ? <FiCheck size={10} /> : isActive ? <FiRefreshCw size={10} className={styles.spinning} /> : <span className={styles.syncDot} />}
+            </span>
+            <span className={styles.syncStepLabel}>{STEP_LABELS[step]}</span>
+            {i < SYNC_STEPS.length - 1 && <span className={styles.syncStepLine} data-done={isDone ? 'true' : 'false'} />}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile }) {
   const [commitMsg, setCommitMsg] = useState('');
   const [loading, setLoading] = useState(false);
+  const [syncStep, setSyncStep] = useState(null); // current step name
+  const [completedSteps, setCompletedSteps] = useState(new Set());
+  const [statusMessage, setStatusMessage] = useState(null);
   const [stagedOpen, setStagedOpen] = useState(true);
   const [changesOpen, setChangesOpen] = useState(true);
+
+  // Auto-clear status messages after 5 seconds
+  useEffect(() => {
+    if (!statusMessage) return;
+    const t = setTimeout(() => {
+      setStatusMessage(null);
+      setSyncStep(null);
+      setCompletedSteps(new Set());
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [statusMessage]);
 
   const refreshGit = async () => {
     onRefreshGit?.();
@@ -133,37 +171,76 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
     onOpenFile?.(fullPath);
   };
 
+  const markDone = (step) => setCompletedSteps(prev => new Set([...prev, step]));
+
   const handleCommit = async () => {
     if (!commitMsg.trim() || !projectPath) return;
     setLoading(true);
+    setStatusMessage(null);
+    setSyncStep(null);
+    setCompletedSteps(new Set());
+
     try {
-      // If nothing is staged, stage everything first
+      // Step 1: Pull
+      setSyncStep('pull');
+      const pullResult = await window.foundry?.gitPull(projectPath);
+      if (pullResult?.error) {
+        // Check if it's just "no remote" or "no tracking" — that's fine, skip pull
+        const errLower = pullResult.error.toLowerCase();
+        const isNoRemote = errLower.includes('no remote') || errLower.includes('no such remote') || errLower.includes('no tracking') || errLower.includes('does not have') || errLower.includes('no upstream');
+        if (!isNoRemote) {
+          setStatusMessage({ type: 'error', text: pullResult.error });
+          setLoading(false);
+          return;
+        }
+      }
+      markDone('pull');
+
+      // Step 2: Stage (if nothing staged, stage everything)
+      setSyncStep('stage');
       const staged = gitStatus.staged || [];
       if (staged.length === 0) {
-        for (const f of gitStatus.files) {
+        for (const f of (gitStatus.files || [])) {
           await window.foundry?.gitStage(projectPath, f.path);
         }
       }
-      await window.foundry?.gitCommit(projectPath, commitMsg);
+      markDone('stage');
+
+      // Step 3: Commit
+      setSyncStep('commit');
+      const commitResult = await window.foundry?.gitCommit(projectPath, commitMsg);
+      if (commitResult?.error) {
+        setStatusMessage({ type: 'error', text: commitResult.error });
+        setLoading(false);
+        return;
+      }
+      markDone('commit');
+
+      // Step 4: Push
+      setSyncStep('push');
+      const pushResult = await window.foundry?.gitPush(projectPath);
+      if (pushResult?.error) {
+        // If push fails, try setting upstream
+        const errLower = pushResult.error.toLowerCase();
+        const isNoUpstream = errLower.includes('no upstream') || errLower.includes('does not have') || errLower.includes('no configured push') || errLower.includes('set-upstream');
+        if (isNoUpstream) {
+          // No remote to push to — commit succeeded, that's fine
+          markDone('push');
+          setStatusMessage({ type: 'success', text: 'Committed (no remote to push)' });
+        } else {
+          setStatusMessage({ type: 'warning', text: 'Committed but push failed: ' + pushResult.error });
+        }
+      } else {
+        markDone('push');
+        setStatusMessage({ type: 'success', text: 'Committed & synced' });
+      }
+
       setCommitMsg('');
       refreshGit();
     } catch (err) {
       console.error(err);
+      setStatusMessage({ type: 'error', text: err.message || 'Sync failed' });
     }
-    setLoading(false);
-  };
-
-  const handlePush = async () => {
-    if (!projectPath) return;
-    setLoading(true);
-    await window.foundry?.gitPush(projectPath);
-    setLoading(false);
-  };
-
-  const handlePull = async () => {
-    if (!projectPath) return;
-    setLoading(true);
-    await window.foundry?.gitPull(projectPath);
     setLoading(false);
   };
 
@@ -230,12 +307,6 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
       <div className={styles.gitBranch}>
         <FiGitBranch size={12} />
         <span className={styles.branchName}>{gitStatus.branch || 'HEAD'}</span>
-        <button className={styles.miniBtn} onClick={handlePull} disabled={loading} title="Pull">
-          <FiDownload size={12} />
-        </button>
-        <button className={styles.miniBtn} onClick={handlePush} disabled={loading} title="Push">
-          <FiUpload size={12} />
-        </button>
       </div>
 
       <div className={styles.commitArea}>
@@ -248,9 +319,22 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
           rows={2}
         />
         <button className={styles.commitBtn} disabled={!commitMsg.trim() || loading} onClick={handleCommit}>
-          <FiCheck size={12} />
-          <span>Commit</span>
+          {loading ? <FiRefreshCw size={12} className={styles.spinning} /> : <FiCheck size={12} />}
+          <span>{loading ? (STEP_LABELS[syncStep] || 'Syncing') + '…' : 'Commit'}</span>
         </button>
+        {(syncStep || statusMessage) && (
+          <div className={styles.syncContainer}>
+            {syncStep && <SyncProgress currentStep={syncStep} completedSteps={completedSteps} error={statusMessage?.type === 'error'} />}
+            {statusMessage && (
+              <div className={styles.statusMessage} data-type={statusMessage.type}>
+                {statusMessage.type === 'error' && <FiX size={12} />}
+                {statusMessage.type === 'success' && <FiCheck size={12} />}
+                {statusMessage.type === 'warning' && <FiX size={12} />}
+                <span>{statusMessage.text}</span>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {staged.length > 0 && (

@@ -524,3 +524,132 @@
   top: 50%;
   transform: translateY(-50%);
 }
+
+/* ── Spinning animation ── */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}
+
+/* ── Sync container ── */
+.syncContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Sync progress steps ── */
+.syncProgress {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 6px 4px 2px;
+}
+
+.syncStep {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.syncStepIcon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.syncStep[data-state="done"] .syncStepIcon {
+  color: #98C379;
+}
+
+.syncStep[data-state="active"] .syncStepIcon {
+  color: var(--zinc-200);
+}
+
+.syncStep[data-state="pending"] .syncStepIcon {
+  color: var(--zinc-600);
+}
+
+.syncStep[data-state="error"] .syncStepIcon {
+  color: #E06C75;
+}
+
+.syncDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--zinc-600);
+  display: block;
+}
+
+.syncStepLabel {
+  font-size: 10px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.2s ease;
+}
+
+.syncStep[data-state="done"] .syncStepLabel {
+  color: #98C379;
+}
+
+.syncStep[data-state="active"] .syncStepLabel {
+  color: var(--zinc-200);
+}
+
+.syncStep[data-state="pending"] .syncStepLabel {
+  color: var(--zinc-600);
+}
+
+.syncStep[data-state="error"] .syncStepLabel {
+  color: #E06C75;
+}
+
+.syncStepLine {
+  flex: 1;
+  height: 1px;
+  margin: 0 4px;
+  background: var(--zinc-700);
+  transition: background 0.2s ease;
+}
+
+.syncStepLine[data-done="true"] {
+  background: #98C379;
+}
+
+/* ── Status message ── */
+.statusMessage {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.statusMessage[data-type="success"] {
+  color: #98C379;
+  background: rgba(152, 195, 121, 0.1);
+}
+
+.statusMessage[data-type="error"] {
+  color: #E06C75;
+  background: rgba(224, 108, 117, 0.1);
+}
+
+.statusMessage[data-type="warning"] {
+  color: #E5C07B;
+  background: rgba(229, 192, 123, 0.1);
+}

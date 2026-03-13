@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('foundry', {
   gitCommit: (dirPath, message) => ipcRenderer.invoke('git:commit', dirPath, message),
   gitPush: (dirPath) => ipcRenderer.invoke('git:push', dirPath),
   gitPull: (dirPath) => ipcRenderer.invoke('git:pull', dirPath),
+  gitCommitAndSync: (dirPath, message) => ipcRenderer.invoke('git:commitAndSync', dirPath, message),
   gitClone: (url, destPath) => ipcRenderer.invoke('git:clone', url, destPath),
 
   // Search
