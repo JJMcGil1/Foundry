@@ -34,20 +34,20 @@
 
 /* ── Header ── */
 .header {
-  height: 40px;
-  padding: 0 12px 0 16px;
+  height: 42px;
+  padding: 0 10px 0 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .panelTitle {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--zinc-500);
+  letter-spacing: 0.02em;
+  color: var(--zinc-300);
 }
 
 .headerActions {
@@ -94,11 +94,11 @@
 
 /* ── Project label ── */
 .projectLabel {
-  padding: 0 16px 6px;
+  padding: 8px 14px 4px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--zinc-500);
 }
 
@@ -111,47 +111,66 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 28px;
+  gap: 5px;
+  height: 26px;
   padding-right: 12px;
   background: none;
   border: none;
+  border-left: 2px solid transparent;
   color: var(--zinc-400);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-family: var(--font-sans);
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
   outline: none;
-  transition: color 0.1s ease, background 0.1s ease;
+  transition: color 0.15s ease-out, background 0.15s ease-out, border-color 0.15s ease-out;
+}
+
+.treeItem img {
+  image-rendering: auto;
+  -webkit-font-smoothing: antialiased;
 }
 
 .treeItem:hover {
-  background: var(--surface-3);
-  color: var(--zinc-200);
+  background: var(--tree-hover);
+  color: var(--zinc-300);
 }
 
 .treeFile {}
 
 .treeItemActive {
-  background: var(--surface-3);
-  color: var(--zinc-100);
+  background: var(--tree-active);
+  border-left-color: var(--zinc-600);
+  color: var(--zinc-200);
+}
+
+.treeItemActive:hover {
+  background: var(--tree-active-hover);
 }
 
 .chevron {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   flex-shrink: 0;
-  color: var(--zinc-600);
+  color: var(--zinc-400);
 }
 
 .chevronSpacer {
-  width: 12px;
+  width: 16px;
   flex-shrink: 0;
+}
+
+.treeItemDimmed {
+  opacity: 0.45;
+}
+
+.treeItemDimmed:hover {
+  opacity: 0.7;
 }
 
 .folderIcon {
@@ -170,7 +189,7 @@
 .treeName {
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1;
+  line-height: 1.4;
 }
 
 /* ── Empty State ── */

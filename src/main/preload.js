@@ -14,6 +14,11 @@ contextBridge.exposeInMainWorld('foundry', {
   getSetting: (key) => ipcRenderer.invoke('settings:get', key),
   setSetting: (key, value) => ipcRenderer.invoke('settings:set', key, value),
 
+  // GitHub
+  validateGithubToken: (token) => ipcRenderer.invoke('github:validateToken', token),
+  listGithubRepos: (token, page, perPage) => ipcRenderer.invoke('github:listRepos', token, page, perPage),
+  cloneGithubRepo: (token, cloneUrl, repoName) => ipcRenderer.invoke('github:cloneRepo', token, cloneUrl, repoName),
+
   // File system
   openFolder: () => ipcRenderer.invoke('fs:openFolder'),
   readDir: (dirPath) => ipcRenderer.invoke('fs:readDir', dirPath),

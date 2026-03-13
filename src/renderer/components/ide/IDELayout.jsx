@@ -34,6 +34,28 @@ export default function IDELayout({ profile, onProfileChange }) {
   const [activeTab, setActiveTab] = useState(null);
   const [gitStatus, setGitStatus] = useState({ branch: '', files: [], isRepo: false });
 
+  // Restore last opened project on mount
+  useEffect(() => {
+    async function restoreProject() {
+      const lastPath = await window.foundry?.getSetting('last_project_path');
+      if (!lastPath) return;
+      try {
+        const tree = await window.foundry?.readDir(lastPath);
+        if (tree) {
+          const name = lastPath.split('/').pop() || lastPath.split('\\').pop() || lastPath;
+          setProject({ path: lastPath, name });
+          setFileTree(tree);
+          const status = await window.foundry?.gitStatus(lastPath);
+          if (status) setGitStatus(status);
+        }
+      } catch {
+        // Folder no longer exists, clear it
+        await window.foundry?.setSetting('last_project_path', '');
+      }
+    }
+    restoreProject();
+  }, []);
+
   // Derive current effective theme
   const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
 
@@ -57,6 +79,8 @@ export default function IDELayout({ profile, onProfileChange }) {
       setActiveTab(null);
       const status = await window.foundry?.gitStatus(result.path);
       if (status) setGitStatus(status);
+      // Persist last project
+      await window.foundry?.setSetting('last_project_path', result.path);
     }
   }, []);
 
@@ -211,7 +235,22 @@ export default function IDELayout({ profile, onProfileChange }) {
           <div className={styles.editorContainer} ref={editorContainerRef}>
             <div className={`${styles.editorArea} ${terminalMaximized ? styles.editorAreaHidden : ''}`}>
               {showSettings ? (
-                <SettingsPage profile={profile} onClose={() => setShowSettings(false)} onProfileChange={onProfileChange} />
+                <SettingsPage
+                  profile={profile}
+                  onClose={() => setShowSettings(false)}
+                  onProfileChange={onProfileChange}
+                  onCloneRepo={(result) => {
+                    setProject({ path: result.path, name: result.name });
+                    setFileTree(result.tree);
+                    setOpenTabs([]);
+                    setActiveTab(null);
+                    setShowSettings(false);
+                    window.foundry?.setSetting('last_project_path', result.path);
+                    window.foundry?.gitStatus(result.path).then(status => {
+                      if (status) setGitStatus(status);
+                    });
+                  }}
+                />
               ) : (
                 <EditorArea
                   tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}

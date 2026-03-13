@@ -70,12 +70,16 @@
 /* ── Content ── */
 .content {
   flex: 1;
-  padding: 24px 32px;
+  padding: 32px 40px;
   overflow-y: auto;
   background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
 .section {
+  width: 100%;
   max-width: 560px;
 }
 
@@ -480,6 +484,435 @@
 
 .link:hover {
   color: var(--zinc-200);
+}
+
+/* ── GitHub Connected State ── */
+.ghConnected {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ghAvatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  object-fit: cover;
+}
+
+.ghInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ghName {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--zinc-100);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.ghUsername {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--zinc-500);
+  font-size: 11px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-align: left;
+  transition: color 0.15s ease;
+  width: fit-content;
+  line-height: 1.3;
+}
+
+.ghUsername:hover {
+  color: var(--zinc-300);
+}
+
+.ghBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: #34d399;
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.15);
+  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.ghDisconnectBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--zinc-600);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.ghDisconnectBtn:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.2);
+  background: rgba(248, 113, 113, 0.06);
+}
+
+.ghLoadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  color: var(--zinc-500);
+  font-size: 13px;
+  font-family: var(--font-sans);
+}
+
+.ghSpinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border);
+  border-top-color: var(--zinc-400);
+  border-radius: 50%;
+  animation: ghSpin 0.6s linear infinite;
+}
+
+@keyframes ghSpin {
+  to { transform: rotate(360deg); }
+}
+
+.ghError {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(248, 113, 113, 0.06);
+  border: 1px solid rgba(248, 113, 113, 0.15);
+  color: #f87171;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+}
+
+.inputError {
+  border-color: rgba(248, 113, 113, 0.4) !important;
+}
+
+.inputError:focus {
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.1) !important;
+}
+
+/* ── Repositories ── */
+.reposSection {
+  margin-top: 24px;
+}
+
+.reposHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.reposTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--zinc-400);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.reposCount {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--zinc-500);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: 100px;
+  font-family: var(--font-mono);
+}
+
+.reposSearchWrap {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.reposSearchIcon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--zinc-600);
+  pointer-events: none;
+}
+
+.reposSearchInput {
+  width: 100%;
+  padding: 9px 32px 9px 34px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.reposSearchInput:focus {
+  border-color: var(--zinc-500);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+}
+
+.reposSearchInput::placeholder {
+  color: var(--zinc-600);
+}
+
+.reposSearchClear {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  transition: color 0.15s ease;
+}
+
+.reposSearchClear:hover {
+  color: var(--zinc-300);
+}
+
+/* ── Repo Cards Grid ── */
+.reposGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repoCard {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease;
+}
+
+.repoCard:hover {
+  border-color: var(--zinc-700);
+}
+
+.repoCardTop {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.repoCardHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.repoOwnerAvatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.repoName {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+  cursor: pointer;
+  text-align: left;
+  transition: color 0.15s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.3;
+}
+
+.repoName:hover {
+  color: var(--zinc-50);
+}
+
+.repoOwnerPrefix {
+  font-weight: 400;
+  color: var(--zinc-500);
+}
+
+.repoVisIcon {
+  color: var(--zinc-600);
+  flex-shrink: 0;
+}
+
+.repoDesc {
+  font-size: 11.5px;
+  color: var(--zinc-500);
+  line-height: 1.4;
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.repoCardBottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.repoMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.repoLang {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--zinc-500);
+  white-space: nowrap;
+}
+
+.repoLangDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.repoStars {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  color: var(--zinc-500);
+}
+
+.repoUpdated {
+  font-size: 11px;
+  color: var(--zinc-600);
+}
+
+.repoCloneBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--zinc-500);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  min-width: 60px;
+  justify-content: center;
+}
+
+.repoCloneBtn:hover:not(:disabled) {
+  color: var(--zinc-100);
+  border-color: var(--zinc-500);
+  background: var(--surface-3);
+}
+
+.repoCloneBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.reposEmpty {
+  padding: 24px 16px;
+  text-align: center;
+  color: var(--zinc-600);
+  font-size: 12px;
+  font-family: var(--font-sans);
+}
+
+.reposLoadingRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--zinc-500);
+  font-size: 11px;
+  font-family: var(--font-sans);
+}
+
+.reposLoadMore {
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px 16px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--zinc-500);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.reposLoadMore:hover {
+  background: var(--surface-2);
+  border-color: var(--zinc-700);
+  color: var(--zinc-300);
 }
 
 /* Save button — default (no changes) */

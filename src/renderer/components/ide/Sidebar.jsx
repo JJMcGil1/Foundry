@@ -1,36 +1,23 @@
 import React, { useState, useRef, useCallback } from 'react';
 import {
-  FiFolder, FiFolderPlus, FiRefreshCw, FiFile, FiChevronRight,
+  FiFolderPlus, FiRefreshCw, FiChevronRight,
   FiGitBranch, FiCheck, FiUpload, FiDownload, FiX,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
+import FileIcon from './FileIcon';
 import styles from './Sidebar.module.css';
 
-/* ── File type color mapping ── */
-const FILE_COLORS = {
-  js: '#F7DF1E', jsx: '#61DAFB', ts: '#3178C6', tsx: '#3178C6',
-  py: '#3776AB', rb: '#CC342D', go: '#00ADD8', rs: '#DEA584',
-  css: '#1572B6', scss: '#CD6799', html: '#E34F26', vue: '#42B883',
-  svelte: '#FF3E00', json: '#71717A', md: '#71717A', yml: '#71717A',
-  yaml: '#71717A', toml: '#71717A', svg: '#FFB13B', png: '#8B5CF6',
-  jpg: '#8B5CF6', gif: '#8B5CF6', lock: '#52525B', gitignore: '#52525B',
-};
-
-function getFileColor(name) {
-  const ext = name?.split('.').pop()?.toLowerCase();
-  return FILE_COLORS[ext] || 'var(--zinc-500)';
-}
-
 /* ── File Tree ── */
-function FileTreeItem({ item, depth = 0, onOpenFile, activeFile }) {
+function FileTreeItem({ item, depth = 0, onOpenFile, activeFile, parentDimmed = false }) {
   const [expanded, setExpanded] = useState(depth < 1);
+  const dimmed = parentDimmed || item.ignored;
 
   if (item.type === 'directory') {
     return (
       <div>
         <button
-          className={styles.treeItem}
-          style={{ paddingLeft: 16 + depth * 16 }}
+          className={`${styles.treeItem} ${dimmed ? styles.treeItemDimmed : ''}`}
+          style={{ paddingLeft: 12 + depth * 8 }}
           onClick={() => setExpanded(!expanded)}
         >
           <motion.span
@@ -38,9 +25,8 @@ function FileTreeItem({ item, depth = 0, onOpenFile, activeFile }) {
             animate={{ rotate: expanded ? 90 : 0 }}
             transition={{ duration: 0.12, ease: 'easeOut' }}
           >
-            <FiChevronRight size={11} />
+            <FiChevronRight size={15} />
           </motion.span>
-          <FiFolder size={13} className={styles.folderIcon} />
           <span className={styles.treeName}>{item.name}</span>
         </button>
         <AnimatePresence initial={false}>
@@ -59,6 +45,7 @@ function FileTreeItem({ item, depth = 0, onOpenFile, activeFile }) {
                   depth={depth + 1}
                   onOpenFile={onOpenFile}
                   activeFile={activeFile}
+                  parentDimmed={dimmed}
                 />
               ))}
             </motion.div>
@@ -69,16 +56,15 @@ function FileTreeItem({ item, depth = 0, onOpenFile, activeFile }) {
   }
 
   const isActive = activeFile === item.path;
-  const dotColor = getFileColor(item.name);
 
   return (
     <button
-      className={`${styles.treeItem} ${styles.treeFile} ${isActive ? styles.treeItemActive : ''}`}
-      style={{ paddingLeft: 16 + depth * 16 }}
+      className={`${styles.treeItem} ${styles.treeFile} ${isActive ? styles.treeItemActive : ''} ${dimmed ? styles.treeItemDimmed : ''}`}
+      style={{ paddingLeft: 12 + depth * 8 }}
       onClick={() => onOpenFile(item.path)}
     >
       <span className={styles.chevronSpacer} />
-      <span className={styles.fileDot} style={{ background: dotColor }} />
+      <FileIcon name={item.name} type="file" size={16} />
       <span className={styles.treeName}>{item.name}</span>
     </button>
   );
@@ -264,7 +250,7 @@ export default function Sidebar({
                 <div className={styles.emptyState}>
                   <span className={styles.emptyText}>No folder open</span>
                   <button className={styles.openFolderBtn} onClick={onOpenFolder}>
-                    <FiFolder size={14} />
+                    <FiFolderPlus size={14} />
                     <span>Open Folder</span>
                   </button>
                 </div>

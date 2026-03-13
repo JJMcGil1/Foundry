@@ -51,20 +51,37 @@ function createWindow() {
 }
 
 // ---- File System Helpers ---- //
-const IGNORED = new Set([
-  'node_modules', '.git', '.DS_Store', '.next', 'dist', 'build',
-  '__pycache__', '.cache', '.vscode', '.idea', 'coverage', '.env',
-  'thumbs.db', '.svn', '.hg',
+const ignore = require('ignore');
+
+// These are always hidden from the tree entirely (never useful to see)
+const HIDDEN = new Set([
+  '.git', '.DS_Store', '.svn', '.hg', 'thumbs.db',
 ]);
 
-function readDirTree(dirPath, depth = 0, maxDepth = 4) {
+function loadGitignore(projectRoot) {
+  const ig = ignore();
+  try {
+    const gitignorePath = path.join(projectRoot, '.gitignore');
+    if (fs.existsSync(gitignorePath)) {
+      const content = fs.readFileSync(gitignorePath, 'utf8');
+      ig.add(content);
+    }
+  } catch { /* ignore errors */ }
+  return ig;
+}
+
+function readDirTree(dirPath, depth = 0, maxDepth = 4, projectRoot = null, ig = null) {
+  if (depth === 0) {
+    projectRoot = projectRoot || dirPath;
+    ig = loadGitignore(projectRoot);
+  }
   if (depth > maxDepth) return [];
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
     const result = [];
     // Sort: folders first, then files, alphabetical
     const sorted = entries
-      .filter(e => !IGNORED.has(e.name) && !e.name.startsWith('.'))
+      .filter(e => !HIDDEN.has(e.name))
       .sort((a, b) => {
         if (a.isDirectory() && !b.isDirectory()) return -1;
         if (!a.isDirectory() && b.isDirectory()) return 1;
@@ -73,18 +90,26 @@ function readDirTree(dirPath, depth = 0, maxDepth = 4) {
 
     for (const entry of sorted) {
       const fullPath = path.join(dirPath, entry.name);
+      // Get path relative to project root for gitignore matching
+      // Append '/' for directories so patterns like "node_modules/" match correctly
+      const relativePath = path.relative(projectRoot, fullPath);
+      const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+      const isIgnored = ig ? ig.ignores(testPath) : false;
+
       if (entry.isDirectory()) {
         result.push({
           name: entry.name,
           path: fullPath,
           type: 'directory',
-          children: readDirTree(fullPath, depth + 1, maxDepth),
+          ignored: isIgnored,
+          children: readDirTree(fullPath, depth + 1, maxDepth, projectRoot, ig),
         });
       } else {
         result.push({
           name: entry.name,
           path: fullPath,
           type: 'file',
+          ignored: isIgnored,
         });
       }
     }
@@ -212,6 +237,101 @@ function registerIPC() {
   ipcMain.handle('settings:set', async (_event, key, value) => {
     setSetting(key, value);
     return true;
+  });
+
+  // GitHub: validate token and fetch user profile
+  ipcMain.handle('github:validateToken', async (_event, token) => {
+    if (!token) return { valid: false };
+    try {
+      const res = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+        },
+      });
+      if (!res.ok) return { valid: false };
+      const user = await res.json();
+      return {
+        valid: true,
+        login: user.login,
+        name: user.name || user.login,
+        avatar_url: user.avatar_url,
+        html_url: user.html_url,
+        bio: user.bio,
+      };
+    } catch {
+      return { valid: false };
+    }
+  });
+
+  // GitHub: fetch all repos the user has access to (paginated)
+  ipcMain.handle('github:listRepos', async (_event, token, page = 1, perPage = 50) => {
+    if (!token) return { repos: [], hasMore: false };
+    try {
+      const res = await fetch(
+        `https://api.github.com/user/repos?per_page=${perPage}&page=${page}&sort=updated&direction=desc&affiliation=owner,collaborator,organization_member`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+          },
+        }
+      );
+      if (!res.ok) return { repos: [], hasMore: false };
+      const repos = await res.json();
+      const linkHeader = res.headers.get('link') || '';
+      const hasMore = linkHeader.includes('rel="next"');
+      return {
+        repos: repos.map(r => ({
+          id: r.id,
+          name: r.name,
+          full_name: r.full_name,
+          description: r.description,
+          private: r.private,
+          html_url: r.html_url,
+          clone_url: r.clone_url,
+          ssh_url: r.ssh_url,
+          language: r.language,
+          stargazers_count: r.stargazers_count,
+          updated_at: r.updated_at,
+          owner: {
+            login: r.owner.login,
+            avatar_url: r.owner.avatar_url,
+          },
+        })),
+        hasMore,
+      };
+    } catch {
+      return { repos: [], hasMore: false };
+    }
+  });
+
+  // GitHub: clone a repo with token auth embedded
+  ipcMain.handle('github:cloneRepo', async (event, token, cloneUrl, repoName) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    // Ask user where to clone
+    const result = await dialog.showOpenDialog(win, {
+      title: `Clone ${repoName}`,
+      properties: ['openDirectory', 'createDirectory'],
+      buttonLabel: 'Clone Here',
+    });
+    if (result.canceled || !result.filePaths.length) return { cancelled: true };
+    const parentDir = result.filePaths[0];
+    const destPath = path.join(parentDir, repoName);
+
+    // Inject token into HTTPS URL for auth
+    const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
+    try {
+      execSync(`git clone "${authedUrl}" "${destPath}"`, { timeout: 120000 });
+      return {
+        success: true,
+        path: destPath,
+        name: repoName,
+        tree: readDirTree(destPath),
+      };
+    } catch (err) {
+      return { error: err.message };
+    }
   });
 
   // File system
