@@ -1,8 +1,8 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   FiFolderPlus, FiRefreshCw, FiChevronRight,
   FiGitBranch, FiCheck, FiUpload, FiDownload, FiX,
-  FiPlus, FiMinus, FiRotateCcw, FiExternalLink,
+  FiPlus, FiMinus, FiRotateCcw, FiExternalLink, FiGitCommit,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import FileIcon from './FileIcon';
@@ -103,6 +103,223 @@ function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusCo
   );
 }
 
+/* ── Commit Graph ── */
+const GRAPH_COLORS = ['#61AFEF', '#C678DD', '#98C379', '#E5C07B', '#E06C75', '#56B6C2'];
+
+function buildGraph(commits) {
+  // Assign each commit a lane (column) for the graph visualization
+  const lanes = []; // array of active branch hashes occupying each lane
+  const rows = [];
+
+  for (const commit of commits) {
+    let lane = -1;
+
+    // Find if this commit is already expected in a lane
+    for (let i = 0; i < lanes.length; i++) {
+      if (lanes[i] === commit.hash) {
+        lane = i;
+        break;
+      }
+    }
+
+    // If not found, take the first empty lane or append
+    if (lane === -1) {
+      const empty = lanes.indexOf(null);
+      lane = empty !== -1 ? empty : lanes.length;
+      if (empty !== -1) lanes[empty] = commit.hash;
+      else lanes.push(commit.hash);
+    }
+
+    // Build merge lines: for each parent, find or assign a lane
+    const parentLanes = [];
+    for (let pi = 0; pi < commit.parents.length; pi++) {
+      const parentHash = commit.parents[pi];
+      if (pi === 0) {
+        // First parent continues in the same lane
+        lanes[lane] = parentHash;
+        parentLanes.push(lane);
+      } else {
+        // Merge parent — find existing lane or open a new one
+        let pLane = lanes.indexOf(parentHash);
+        if (pLane === -1) {
+          const empty = lanes.indexOf(null);
+          pLane = empty !== -1 ? empty : lanes.length;
+          if (empty !== -1) lanes[empty] = parentHash;
+          else lanes.push(parentHash);
+        }
+        lanes[pLane] = parentHash;
+        parentLanes.push(pLane);
+      }
+    }
+
+    // If commit has no parents (root), free the lane
+    if (commit.parents.length === 0) {
+      lanes[lane] = null;
+    }
+
+    // Trim trailing nulls
+    while (lanes.length > 0 && lanes[lanes.length - 1] === null) lanes.pop();
+
+    rows.push({
+      ...commit,
+      lane,
+      parentLanes,
+      activeLanes: [...lanes],
+      totalLanes: Math.max(lanes.length, 1),
+    });
+  }
+
+  return rows;
+}
+
+function CommitGraph({ commits }) {
+  const [graphOpen, setGraphOpen] = useState(true);
+  const [graphHeight, setGraphHeight] = useState(240);
+  const [isResizing, setIsResizing] = useState(false);
+  const rows = useMemo(() => buildGraph(commits), [commits]);
+
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = graphHeight;
+    setIsResizing(true);
+
+    const onMove = (e) => {
+      const delta = startY - e.clientY;
+      setGraphHeight(Math.max(80, Math.min(600, startH + delta)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      setIsResizing(false);
+    };
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }, [graphHeight]);
+
+  if (commits.length === 0) return null;
+
+  const LANE_W = 14;
+  const ROW_H = 24;
+  const DOT_R = 3;
+  const maxLanes = Math.max(rows.reduce((m, r) => Math.max(m, r.totalLanes), 1), 1);
+  const graphW = maxLanes * LANE_W + 6;
+
+  return (
+    <div className={styles.graphSection} style={graphOpen ? { flexShrink: 0 } : undefined}>
+      <div className={styles.graphResizeHandle} onMouseDown={handleResizeStart} />
+      <button className={`${styles.sectionLabel} ${styles.graphSectionLabel}`} onClick={() => setGraphOpen(!graphOpen)}>
+        <motion.span
+          className={styles.sectionChevron}
+          animate={{ rotate: graphOpen ? 90 : 0 }}
+          transition={{ duration: 0.12, ease: 'easeOut' }}
+        >
+          <FiChevronRight size={14} />
+        </motion.span>
+        <span>Commit Graph</span>
+        <div className={styles.sectionActions}>
+          <span className={styles.badge}>{commits.length}</span>
+        </div>
+      </button>
+      <AnimatePresence initial={false}>
+        {graphOpen && (
+          <motion.div
+            className={styles.commitGraph}
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: graphHeight, opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={isResizing ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
+            style={{ overflow: 'auto' }}
+          >
+            {rows.map((row, ri) => {
+              const color = GRAPH_COLORS[row.lane % GRAPH_COLORS.length];
+              const isHead = row.refs && row.refs.includes('HEAD');
+              const isLast = ri === rows.length - 1;
+
+              return (
+                <div key={row.hash} className={styles.graphRow} title={`${row.short} — ${row.message}\n${row.author}, ${row.date}`}>
+                  <svg className={styles.graphSvg} width={graphW} height={ROW_H}>
+                    {/* Vertical lane lines for all active lanes */}
+                    {row.activeLanes.map((laneHash, li) => {
+                      if (laneHash === null) return null;
+                      return (
+                        <line
+                          key={`v-${li}`}
+                          x1={li * LANE_W + LANE_W / 2}
+                          y1={0}
+                          x2={li * LANE_W + LANE_W / 2}
+                          y2={isLast && li === row.lane ? ROW_H / 2 : ROW_H}
+                          stroke={GRAPH_COLORS[li % GRAPH_COLORS.length]}
+                          strokeWidth={1.5}
+                          opacity={0.4}
+                        />
+                      );
+                    })}
+                    {/* Top half of this commit's lane (connect from above) */}
+                    {ri > 0 && (
+                      <line
+                        x1={row.lane * LANE_W + LANE_W / 2}
+                        y1={0}
+                        x2={row.lane * LANE_W + LANE_W / 2}
+                        y2={ROW_H / 2}
+                        stroke={color}
+                        strokeWidth={1.5}
+                        opacity={0.6}
+                      />
+                    )}
+                    {/* Bottom half — connect to first parent */}
+                    {row.parents.length > 0 && (
+                      <line
+                        x1={row.lane * LANE_W + LANE_W / 2}
+                        y1={ROW_H / 2}
+                        x2={row.parentLanes[0] * LANE_W + LANE_W / 2}
+                        y2={ROW_H}
+                        stroke={color}
+                        strokeWidth={1.5}
+                        opacity={0.6}
+                      />
+                    )}
+                    {/* Merge lines to additional parents */}
+                    {row.parentLanes.slice(1).map((pLane, pi) => {
+                      const x1 = row.lane * LANE_W + LANE_W / 2;
+                      const x2 = pLane * LANE_W + LANE_W / 2;
+                      return (
+                        <path
+                          key={`m-${pi}`}
+                          d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.85}, ${x2} ${ROW_H * 0.5}, ${x2} ${ROW_H}`}
+                          stroke={GRAPH_COLORS[pLane % GRAPH_COLORS.length]}
+                          strokeWidth={1.5}
+                          fill="none"
+                          opacity={0.5}
+                        />
+                      );
+                    })}
+                    {/* Commit dot */}
+                    <circle
+                      cx={row.lane * LANE_W + LANE_W / 2}
+                      cy={ROW_H / 2}
+                      r={isHead ? DOT_R + 1 : DOT_R}
+                      fill={isHead ? color : 'var(--surface-1)'}
+                      stroke={color}
+                      strokeWidth={isHead ? 2 : 1.5}
+                    />
+                  </svg>
+                  <span className={styles.graphMsg}>{row.message}</span>
+                  <span className={styles.graphDate}>{row.date}</span>
+                </div>
+              );
+            })}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 const SYNC_STEPS = ['pull', 'stage', 'commit', 'push'];
 const STEP_LABELS = { pull: 'Pulling…', stage: 'Staging…', commit: 'Committing…', push: 'Pushing…' };
 
@@ -113,9 +330,24 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   const [completedSteps, setCompletedSteps] = useState(new Set());
   const [stagedOpen, setStagedOpen] = useState(true);
   const [changesOpen, setChangesOpen] = useState(true);
+  const [commits, setCommits] = useState([]);
+
+  // Fetch commit log on mount and after refreshes
+  useEffect(() => {
+    if (!projectPath || !gitStatus.isRepo) return;
+    let cancelled = false;
+    (async () => {
+      const log = await window.foundry?.gitLog(projectPath, 30);
+      if (!cancelled && log) setCommits(log);
+    })();
+    return () => { cancelled = true; };
+  }, [projectPath, gitStatus]);
 
   const refreshGit = async () => {
     onRefreshGit?.();
+    // Also refresh commits
+    const log = await window.foundry?.gitLog(projectPath, 30);
+    if (log) setCommits(log);
   };
 
   const handleStageFile = async (filePath) => {
@@ -368,6 +600,8 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
           </motion.div>
         )}
       </AnimatePresence>
+
+      <CommitGraph commits={commits} projectPath={projectPath} />
     </div>
   );
 }

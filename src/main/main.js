@@ -173,12 +173,12 @@ function getGitStatus(dirPath) {
 function getGitLog(dirPath, count = 20) {
   try {
     const result = execSync(
-      `git log --oneline --pretty=format:"%H|||%h|||%s|||%an|||%ar" -${count}`,
+      `git log --all --pretty=format:"%H|||%h|||%s|||%an|||%ar|||%P|||%D" -${count}`,
       { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
     );
     return result.split('\n').filter(Boolean).map(line => {
-      const [hash, short, message, author, date] = line.split('|||');
-      return { hash, short, message, author, date };
+      const [hash, short, message, author, date, parents, refs] = line.split('|||');
+      return { hash, short, message, author, date, parents: parents ? parents.split(' ') : [], refs: refs || '' };
     });
   } catch {
     return [];

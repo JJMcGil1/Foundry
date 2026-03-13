@@ -90,6 +90,9 @@
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ── Project label ── */
@@ -553,5 +556,77 @@
   opacity: 0.3;
   border-radius: 0 2px 2px 0;
   transition: width 0.4s ease;
+}
+
+/* ── Commit Graph Section ── */
+.graphSection {
+  margin-top: auto;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.graphResizeHandle {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  right: 0;
+  height: 6px;
+  cursor: row-resize;
+  z-index: 20;
+}
+
+.graphResizeHandle:hover,
+.graphResizeHandle:active {
+  background: linear-gradient(to bottom, var(--zinc-600) 0px, var(--zinc-600) 3px, transparent 3px);
+}
+
+.graphSectionLabel {
+  border-top: none;
+}
+
+.commitGraph {
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.graphRow {
+  display: flex;
+  align-items: center;
+  height: 24px;
+  padding-right: 10px;
+  cursor: default;
+  transition: background 0.1s ease;
+  gap: 0;
+}
+
+.graphRow:hover {
+  background: var(--tree-hover);
+}
+
+.graphSvg {
+  flex-shrink: 0;
+}
+
+.graphMsg {
+  flex: 1;
+  font-size: 11px;
+  color: var(--zinc-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1;
+  padding-left: 2px;
+  min-width: 0;
+}
+
+.graphDate {
+  font-size: 10px;
+  color: var(--zinc-600);
+  white-space: nowrap;
+  flex-shrink: 0;
+  padding-left: 6px;
 }
 
