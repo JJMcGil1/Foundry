@@ -24,13 +24,14 @@
   --accent-dim: #7C3AED;
   --accent-glow: rgba(167, 139, 250, 0.15);
 
-  /* Surface */
-  --surface-0: #09090B;
-  --surface-1: #18181B;
-  --surface-2: #27272A;
-  --surface-3: #3F3F46;
+  /* Surface — 3-tier depth system */
+  --surface-0: #09090B;   /* deepest: activity bar, titlebar */
+  --surface-1: #111113;   /* panels: sidebars, chat */
+  --surface-2: #18181B;   /* editor: center content area */
+  --surface-3: #27272A;   /* raised: hovers, cards, inputs */
+  --surface-4: #3F3F46;   /* highest: active states */
 
-  --border: rgba(63, 63, 70, 0.5);
+  --border: rgba(255, 255, 255, 0.06);
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
@@ -58,12 +59,13 @@
   --accent-dim: #6D28D9;
   --accent-glow: rgba(124, 58, 237, 0.12);
 
-  --surface-0: #FAFAFA;
-  --surface-1: #F4F4F5;
-  --surface-2: #E4E4E7;
-  --surface-3: #D4D4D8;
+  --surface-0: #F0F0F2;
+  --surface-1: #F5F5F6;
+  --surface-2: #FAFAFA;
+  --surface-3: #E4E4E7;
+  --surface-4: #D4D4D8;
 
-  --border: rgba(212, 212, 216, 0.7);
+  --border: rgba(0, 0, 0, 0.06);
 }
 
 * {

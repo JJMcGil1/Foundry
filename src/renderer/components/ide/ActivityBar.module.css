@@ -1,69 +1,109 @@
 .bar {
-  width: 48px;
+  width: 52px;
   flex-shrink: 0;
   background: var(--surface-0);
-  border-right: 1px solid var(--border);
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: 12px 0 16px;
+  z-index: 10;
+  border-right: 1px solid var(--border);
 }
 
 .top, .bottom {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
+  width: 100%;
+  padding: 0 8px;
 }
 
+/* ── Nav Item ── */
 .item {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
-  background: none;
+  background: transparent;
   color: var(--zinc-500);
   cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
+  outline: none;
+  border-radius: 10px;
+  transition: color 0.2s ease, background 0.2s ease;
 }
 
 .item:hover {
-  color: var(--zinc-200);
+  color: var(--zinc-300);
   background: var(--surface-1);
 }
 
-.itemActive {
+.item:active {
+  color: var(--zinc-200);
+  background: var(--surface-2);
+  transition: color 0.05s, background 0.05s;
+}
+
+/* Active state */
+.active {
   color: var(--zinc-100);
+  background: var(--surface-1);
 }
 
-.activeIndicator {
-  position: absolute;
-  left: -4px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  background: var(--accent);
-  border-radius: 0 2px 2px 0;
+.active:hover {
+  background: var(--surface-2);
 }
 
+/* Icon container */
+.iconWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
+
+/* Label under icon */
+.label {
+  font-size: 9px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
+  line-height: 1;
+  text-align: center;
+}
+
+/* ── Divider ── */
+.divider {
+  width: 24px;
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+/* ── Avatar ── */
 .avatar {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
+  background: var(--surface-1);
+  border: 2px solid var(--surface-2);
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  margin-top: 8px;
+  margin-top: 4px;
   cursor: default;
+  transition: border-color 0.2s ease;
+}
+
+.avatar:hover {
+  border-color: var(--zinc-600);
 }
 
 .avatarImg {

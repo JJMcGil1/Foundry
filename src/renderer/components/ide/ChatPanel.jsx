@@ -1,8 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { FiSend, FiMessageSquare, FiUser, FiCpu, FiChevronDown } from 'react-icons/fi';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { FiSend, FiMessageSquare, FiUser, FiCpu } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
 
-export default function ChatPanel({ width }) {
+export default function ChatPanel({ width, onWidthChange }) {
+  const [isResizing, setIsResizing] = useState(false);
   const [messages, setMessages] = useState([
     {
       role: 'assistant',
@@ -32,7 +34,6 @@ export default function ChatPanel({ width }) {
     setInput('');
     setIsTyping(true);
 
-    // Simulate AI response
     setTimeout(() => {
       const responses = [
         "I can see you're working on that. Let me analyze the code structure and suggest some improvements.",
@@ -58,8 +59,39 @@ export default function ChatPanel({ width }) {
     }
   };
 
+  const handleResizeStart = useCallback((e) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startWidth = width;
+
+    const handleMouseMove = (e) => {
+      const newWidth = Math.max(280, Math.min(600, startWidth - (e.clientX - startX)));
+      onWidthChange(newWidth);
+    };
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [width, onWidthChange]);
+
   return (
-    <div className={styles.panel} style={{ width }}>
+    <motion.div
+      className={styles.panel}
+      style={{ width: isResizing ? width : undefined }}
+      initial={{ width: 0, opacity: 0 }}
+      animate={{ width, opacity: 1 }}
+      exit={{ width: 0, opacity: 0 }}
+      transition={isResizing ? { duration: 0 } : { duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+    >
+      <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
       <div className={styles.header}>
         <FiMessageSquare size={14} />
         <span className={styles.headerTitle}>Chat</span>
@@ -133,6 +165,6 @@ export default function ChatPanel({ width }) {
           <span>new line</span>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }

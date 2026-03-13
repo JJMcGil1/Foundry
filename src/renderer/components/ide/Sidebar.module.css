@@ -1,19 +1,44 @@
+/* ── Sidebar Shell ── */
 .sidebar {
   flex-shrink: 0;
-  background: var(--surface-0);
+  background: var(--surface-1);
   border-right: 1px solid var(--border);
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.inner {
+  flex: 1;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  min-width: 0;
 }
 
+/* ── Resize Handle ── */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+}
+
+.resizeHandle:hover,
+.resizeHandle:active {
+  background: var(--zinc-600);
+}
+
+/* ── Header ── */
 .header {
   height: 40px;
-  padding: 0 12px;
+  padding: 0 12px 0 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -21,8 +46,8 @@
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--zinc-400);
+  letter-spacing: 0.08em;
+  color: var(--zinc-500);
 }
 
 .headerActions {
@@ -30,9 +55,10 @@
   gap: 2px;
 }
 
-.headerBtn {
-  width: 28px;
-  height: 28px;
+/* ── Mini button (shared) ── */
+.miniBtn {
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -41,113 +67,164 @@
   color: var(--zinc-500);
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
+  outline: none;
+  transition: color 0.15s ease, background 0.15s ease;
 }
 
-.headerBtn:hover {
-  background: var(--surface-2);
-  color: var(--zinc-200);
+.miniBtn:hover {
+  background: var(--surface-3);
+  color: var(--zinc-300);
 }
 
-.panelContent {
+.miniBtn:active {
+  background: var(--surface-4);
+}
+
+.miniBtn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Panel Scroll ── */
+.panelScroll {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
 }
 
-.projectName {
-  padding: 8px 12px;
+/* ── Project label ── */
+.projectLabel {
+  padding: 0 16px 6px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--zinc-400);
+  color: var(--zinc-500);
 }
 
+/* ── File Tree ── */
 .treeContainer {
-  padding-bottom: 12px;
+  padding: 0 0 16px;
 }
 
-/* Tree items */
 .treeItem {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 3px 12px;
+  gap: 6px;
+  height: 28px;
+  padding-right: 12px;
   background: none;
   border: none;
-  color: var(--zinc-300);
+  color: var(--zinc-400);
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-family: var(--font-sans);
-  transition: background 0.1s ease;
   text-align: left;
   white-space: nowrap;
   overflow: hidden;
+  outline: none;
+  transition: color 0.1s ease, background 0.1s ease;
 }
 
 .treeItem:hover {
-  background: var(--surface-1);
+  background: var(--surface-3);
+  color: var(--zinc-200);
 }
 
-.treeIcon {
-  color: var(--accent);
+.treeFile {}
+
+.treeItemActive {
+  background: var(--surface-3);
+  color: var(--zinc-100);
+}
+
+.chevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--zinc-600);
+}
+
+.chevronSpacer {
+  width: 12px;
   flex-shrink: 0;
 }
 
-.treeIconFile {
+.folderIcon {
   color: var(--zinc-500);
   flex-shrink: 0;
+}
+
+.fileDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  opacity: 0.6;
 }
 
 .treeName {
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1;
 }
 
-/* Empty state */
-.noProject {
+/* ── Empty State ── */
+.emptyState {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 20px;
-  gap: 16px;
+  padding: 40px 24px;
+  gap: 12px;
 }
 
-.noProjectText {
-  font-size: 13px;
-  color: var(--zinc-500);
+.emptyText {
+  font-size: 12px;
+  color: var(--zinc-600);
 }
 
 .openFolderBtn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  background: var(--surface-2);
+  gap: 6px;
+  padding: 6px 14px;
+  background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  color: var(--zinc-200);
-  font-size: 13px;
+  color: var(--zinc-300);
+  font-size: 12px;
+  font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
+  outline: none;
   transition: all 0.15s ease;
 }
 
 .openFolderBtn:hover {
-  background: var(--surface-3);
-  border-color: var(--accent);
+  background: var(--surface-4);
+  color: var(--zinc-100);
 }
 
-/* Search */
+/* ── Search ── */
 .searchBox {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--border);
+  margin: 8px 12px 0;
+  padding: 6px 10px;
+  background: var(--surface-0);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s ease;
+}
+
+.searchBox:focus-within {
+  border-color: var(--zinc-600);
 }
 
 .searchIcon {
@@ -161,7 +238,7 @@
   border: none;
   outline: none;
   color: var(--zinc-200);
-  font-size: 13px;
+  font-size: 12px;
   font-family: var(--font-sans);
 }
 
@@ -169,81 +246,67 @@
   color: var(--zinc-600);
 }
 
-.emptyHint {
-  padding: 24px 16px;
-  text-align: center;
-  font-size: 12px;
-  color: var(--zinc-600);
+.searchClear {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: 3px;
+  outline: none;
 }
 
-/* Git */
-.gitHeader {
+.searchClear:hover {
+  color: var(--zinc-200);
+}
+
+/* ── Git Panel ── */
+.gitBranch {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 12px;
-  color: var(--zinc-300);
-  font-size: 13px;
-  border-bottom: 1px solid var(--border);
+  padding: 8px 14px 6px;
+  font-size: 12px;
+  color: var(--zinc-400);
 }
 
 .branchName {
   flex: 1;
   font-weight: 500;
+  color: var(--zinc-300);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.gitActions {
-  display: flex;
-  gap: 2px;
-}
-
-.gitActionBtn {
-  width: 26px;
-  height: 26px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--zinc-500);
-  cursor: pointer;
-  border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
-}
-
-.gitActionBtn:hover {
-  background: var(--surface-2);
-  color: var(--zinc-200);
-}
-
-.gitActionBtn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.commitBox {
-  padding: 10px 12px;
+.commitArea {
+  padding: 6px 12px 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  border-bottom: 1px solid var(--border);
+  gap: 6px;
 }
 
 .commitInput {
   width: 100%;
-  padding: 8px 10px;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
+  padding: 7px 10px;
+  background: var(--surface-0);
+  border: 1px solid transparent;
   border-radius: var(--radius-sm);
   color: var(--zinc-200);
   font-size: 12px;
   font-family: var(--font-sans);
   outline: none;
+  resize: none;
+  line-height: 1.4;
   transition: border-color 0.15s ease;
 }
 
 .commitInput:focus {
-  border-color: var(--accent);
+  border-color: var(--zinc-600);
 }
 
 .commitInput::placeholder {
@@ -254,39 +317,57 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 5px;
   padding: 6px 12px;
-  background: var(--accent);
-  color: white;
+  background: var(--zinc-200);
+  color: var(--zinc-900);
   border: none;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: all 0.15s ease;
+  outline: none;
+  transition: background 0.15s ease, opacity 0.15s ease;
 }
 
 .commitBtn:hover {
-  background: var(--accent-dim);
+  background: var(--zinc-100);
 }
 
 .commitBtn:disabled {
-  opacity: 0.4;
+  opacity: 0.2;
   cursor: not-allowed;
 }
 
-.sectionTitle {
-  padding: 8px 12px;
-  font-size: 11px;
+.sectionLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px 4px;
+  font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--zinc-500);
+  letter-spacing: 0.06em;
+  color: var(--zinc-600);
+}
+
+.badge {
+  font-size: 9px;
+  font-weight: 700;
+  min-width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-2);
+  border-radius: 8px;
+  color: var(--zinc-400);
+  padding: 0 4px;
 }
 
 .changesList {
-  padding: 0 4px;
+  padding: 0 8px 12px;
 }
 
 .changeItem {
@@ -297,24 +378,23 @@
   font-size: 12px;
   border-radius: var(--radius-sm);
   cursor: default;
+  transition: background 0.1s ease;
 }
 
 .changeItem:hover {
-  background: var(--surface-1);
+  background: var(--surface-3);
 }
 
-.changeStatus {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  width: 20px;
-  text-align: center;
+.changeIndicator {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
   flex-shrink: 0;
 }
 
 .changePath {
   flex: 1;
-  color: var(--zinc-300);
+  color: var(--zinc-400);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -322,7 +402,8 @@
 
 .changeLabel {
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-weight: 600;
+  font-family: var(--font-mono);
   flex-shrink: 0;
+  opacity: 0.7;
 }
