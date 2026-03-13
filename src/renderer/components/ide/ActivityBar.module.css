@@ -11,6 +11,7 @@
   z-index: 10;
   border-right: 1px solid var(--border);
   position: relative;
+  overflow: visible;
 }
 
 /* ── Indicator (lives inside each active button) ── */
@@ -103,31 +104,32 @@
   cursor: pointer;
   outline: none;
   border-radius: 8px;
-  transition: color 0.15s ease, background 0.15s ease, transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.item svg {
+  transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
 .item:hover {
   color: var(--zinc-200);
-  background: rgba(255, 255, 255, 0.05);
+}
+
+.item:hover svg {
   transform: scale(1.15);
 }
 
 .item:active {
   color: var(--zinc-100);
-  background: rgba(255, 255, 255, 0.08);
-  transform: scale(0.95);
-  transition: color 0.05s, background 0.05s, transform 0.1s ease;
 }
 
 /* Active state */
 .active {
   color: var(--zinc-100);
-  background: rgba(255, 255, 255, 0.06);
 }
 
 .active:hover {
   color: var(--zinc-50);
-  background: rgba(255, 255, 255, 0.08);
 }
 
 /* ── Flyout Tooltip ── */

@@ -24,6 +24,11 @@
   --accent-dim: #7C3AED;
   --accent-glow: rgba(167, 139, 250, 0.15);
 
+  /* Primary action — foundry orange */
+  --primary:       #F97316;
+  --primary-hover: #FB923C;
+  --primary-text:  #FFFFFF;
+
   /* Surface — 3-tier depth system */
   --surface-0: #09090B;   /* deepest: activity bar, titlebar */
   --surface-1: #111113;   /* panels: sidebars, chat */
@@ -65,6 +70,11 @@
   --accent:     #7C3AED;
   --accent-dim: #6D28D9;
   --accent-glow: rgba(124, 58, 237, 0.12);
+
+  /* Primary action — foundry orange */
+  --primary:       #EA580C;
+  --primary-hover: #C2410C;
+  --primary-text:  #FFFFFF;
 
   --surface-0: #F0F0F2;
   --surface-1: #F5F5F6;
