@@ -26,7 +26,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 12px;
+  padding: 0 8px 0 12px;
   height: 100%;
   font-size: 12px;
   color: var(--zinc-500);
@@ -34,8 +34,9 @@
   border-right: 1px solid var(--border);
   white-space: nowrap;
   transition: all 0.1s ease;
-  min-width: 0;
+  min-width: 80px;
   flex-shrink: 0;
+  user-select: none;
 }
 
 .tab:hover {
@@ -81,6 +82,7 @@
   cursor: pointer;
   border-radius: 3px;
   flex-shrink: 0;
+  margin-left: auto;
   opacity: 0;
   transition: all 0.1s ease;
 }
@@ -92,6 +94,15 @@
 .tabClose:hover {
   background: var(--surface-3);
   color: var(--zinc-200);
+}
+
+/* Drag and drop states */
+.tabDragging {
+  opacity: 0.4;
+}
+
+.tabDragOver {
+  border-left: 2px solid var(--accent, #A78BFA);
 }
 
 /* Editor content */
@@ -209,5 +220,41 @@
 .welcomeBtn:active {
   transform: translateY(0);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+/* Shortcut hints (in-project empty state) */
+.welcomeShortcuts {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.shortcutRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--zinc-400);
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+}
+
+.shortcutLabel {
+  font-size: 12.5px;
+  color: var(--zinc-500);
 }
 

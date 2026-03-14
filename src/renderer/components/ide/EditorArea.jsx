@@ -70,14 +70,61 @@ function getLanguageFromFilename(filename) {
   return EXT_TO_LANGUAGE[ext] || 'plaintext';
 }
 
-function TabBar({ tabs, activeTab, onSelectTab, onCloseTab }) {
+function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReorderTabs }) {
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+
+  const handleDragStart = (e, index) => {
+    setDragIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+    // Make the drag image slightly transparent
+    if (e.currentTarget) {
+      e.currentTarget.style.opacity = '0.5';
+    }
+  };
+
+  const handleDragEnd = (e) => {
+    if (e.currentTarget) {
+      e.currentTarget.style.opacity = '1';
+    }
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (index !== dragOverIndex) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDrop = (e, dropIndex) => {
+    e.preventDefault();
+    if (dragIndex !== null && dragIndex !== dropIndex && onReorderTabs) {
+      const reordered = [...tabs];
+      const [moved] = reordered.splice(dragIndex, 1);
+      reordered.splice(dropIndex, 0, moved);
+      onReorderTabs(reordered);
+    }
+    setDragIndex(null);
+    setDragOverIndex(null);
+  };
+
   return (
     <div className={styles.tabBar}>
-      {tabs.map(tab => (
+      {tabs.map((tab, index) => (
         <div
           key={tab.path}
-          className={`${styles.tab} ${activeTab === tab.path ? styles.tabActive : ''}`}
+          className={`${styles.tab} ${activeTab === tab.path ? styles.tabActive : ''} ${dragOverIndex === index && dragIndex !== index ? styles.tabDragOver : ''} ${dragIndex === index ? styles.tabDragging : ''}`}
           onClick={() => onSelectTab(tab.path)}
+          draggable
+          onDragStart={(e) => handleDragStart(e, index)}
+          onDragEnd={handleDragEnd}
+          onDragOver={(e) => handleDragOver(e, index)}
+          onDrop={(e) => handleDrop(e, index)}
+          onDragLeave={() => setDragOverIndex(null)}
         >
           <FileIcon name={tab.name} type="file" size={14} />
           <span className={styles.tabName}>{tab.name}</span>
@@ -258,27 +305,47 @@ function CodeEditor({ tab, onContentChange, onSave }) {
   );
 }
 
-function WelcomePane({ onOpenFolder }) {
+function WelcomePane({ onOpenFolder, project }) {
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
   const iconSrc = isDark ? foundryIconDark : foundryIconLight;
+  const hasProject = !!project;
 
   return (
     <div className={styles.welcome}>
       <div className={styles.welcomeGlow} />
       <div className={styles.welcomeContent}>
         <img src={iconSrc} alt="Foundry" className={styles.welcomeLogo} draggable={false} />
-        <h2 className={styles.welcomeTitle}>Foundry</h2>
-        <p className={styles.welcomeDesc}>Start building something great</p>
-        <button className={styles.welcomeBtn} onClick={onOpenFolder}>
-          <FiFolder size={15} />
-          Open Project
-        </button>
+        {hasProject ? (
+          <>
+            <h2 className={styles.welcomeTitle}>{project.name || 'Project'}</h2>
+            <p className={styles.welcomeDesc}>Open a file from the sidebar to get started</p>
+            <div className={styles.welcomeShortcuts}>
+              <div className={styles.shortcutRow}>
+                <kbd className={styles.kbd}>&#8984; P</kbd>
+                <span className={styles.shortcutLabel}>Quick open file</span>
+              </div>
+              <div className={styles.shortcutRow}>
+                <kbd className={styles.kbd}>&#8984; B</kbd>
+                <span className={styles.shortcutLabel}>Toggle sidebar</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <>
+            <h2 className={styles.welcomeTitle}>Foundry</h2>
+            <p className={styles.welcomeDesc}>Start building something great</p>
+            <button className={styles.welcomeBtn} onClick={onOpenFolder}>
+              <FiFolder size={15} />
+              Open Project
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, onContentChange, onSaveFile, onOpenFolder, project }) {
+export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, onContentChange, onSaveFile, onOpenFolder, project, onReorderTabs }) {
   const currentTab = tabs.find(t => t.path === activeTab);
 
   return (
@@ -289,6 +356,7 @@ export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, o
           activeTab={activeTab}
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
+          onReorderTabs={onReorderTabs}
         />
       )}
       <div className={styles.editorContent}>
@@ -299,7 +367,7 @@ export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, o
             onSave={onSaveFile}
           />
         ) : (
-          <WelcomePane onOpenFolder={onOpenFolder} />
+          <WelcomePane onOpenFolder={onOpenFolder} project={project} />
         )}
       </div>
     </div>

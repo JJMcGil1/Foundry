@@ -43,6 +43,19 @@ function createWindow() {
     mainWindow.show();
   });
 
+  // Forward window state changes to renderer
+  const sendWindowState = () => {
+    mainWindow.webContents.send('window:state-changed', {
+      isFullScreen: mainWindow.isFullScreen(),
+      isMaximized: mainWindow.isMaximized(),
+    });
+  };
+  mainWindow.on('enter-full-screen', sendWindowState);
+  mainWindow.on('leave-full-screen', sendWindowState);
+  mainWindow.on('maximize', sendWindowState);
+  mainWindow.on('unmaximize', sendWindowState);
+  mainWindow.on('resize', sendWindowState);
+
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
   } else {
@@ -196,6 +209,13 @@ function getGitDiff(dirPath, filePath) {
 
 // ---- IPC Handlers ---- //
 function registerIPC() {
+  // Window
+  ipcMain.handle('window:isFullScreen', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return { isFullScreen: false, isMaximized: false };
+    return { isFullScreen: win.isFullScreen(), isMaximized: win.isMaximized() };
+  });
+
   // Profile
   ipcMain.handle('profile:get', async () => {
     const profile = getProfile();
@@ -546,6 +566,198 @@ function registerIPC() {
       }
 
       return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  // Branch operations
+  ipcMain.handle('git:listBranches', async (_event, dirPath) => {
+    try {
+      const current = execSync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
+
+      // Get local branches with last commit info in one shot
+      const localRaw = execSync(
+        'git branch --no-color --format="%(refname:short)|||%(objectname:short)|||%(authorname)|||%(committerdate:relative)|||%(subject)"',
+        { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
+      );
+      const localBranches = localRaw.split('\n').filter(Boolean).map(line => {
+        const [name, hash, author, date, message] = line.split('|||');
+        return { name, current: name === current, remote: false, hash, author, date, message };
+      });
+
+      // Get remote branches with last commit info
+      let remoteBranches = [];
+      try {
+        const remoteRaw = execSync(
+          'git branch -r --no-color --format="%(refname:short)|||%(objectname:short)|||%(authorname)|||%(committerdate:relative)|||%(subject)"',
+          { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
+        );
+        remoteBranches = remoteRaw.split('\n').filter(Boolean)
+          .filter(line => !line.includes('HEAD'))
+          .map(line => {
+            const [name, hash, author, date, message] = line.split('|||');
+            const shortName = name.replace(/^origin\//, '');
+            return { name, shortName, remote: true, hash, author, date, message };
+          })
+          .filter(rb => !localBranches.some(lb => lb.name === rb.shortName));
+      } catch { /* no remote */ }
+
+      return { current, local: localBranches, remote: remoteBranches };
+    } catch (err) {
+      return { error: err.message, current: '', local: [], remote: [] };
+    }
+  });
+
+  ipcMain.handle('git:checkout', async (_event, dirPath, branchName) => {
+    try {
+      execSync(`git checkout "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:createBranch', async (_event, dirPath, branchName, checkout = true) => {
+    try {
+      if (checkout) {
+        execSync(`git checkout -b "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      } else {
+        execSync(`git branch "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      }
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:deleteBranch', async (_event, dirPath, branchName, force = false) => {
+    try {
+      const flag = force ? '-D' : '-d';
+      execSync(`git branch ${flag} "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:checkoutRemoteBranch', async (_event, dirPath, remoteBranch) => {
+    try {
+      const localName = remoteBranch.replace(/^origin\//, '');
+      execSync(`git checkout -b "${localName}" "${remoteBranch}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:generateCommitMsg', async (_event, dirPath) => {
+    try {
+      // Get diff — prefer staged, fall back to unstaged
+      let diff = '';
+      try {
+        diff = execSync('git diff --cached --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+      } catch {}
+      if (!diff.trim()) {
+        try {
+          diff = execSync('git diff --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        } catch {}
+      }
+      if (!diff.trim()) {
+        // Try status for untracked
+        diff = execSync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+      }
+
+      // Get the actual diff content for smarter messages
+      let fullDiff = '';
+      try {
+        fullDiff = execSync('git diff --cached', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        if (!fullDiff.trim()) {
+          fullDiff = execSync('git diff', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        }
+      } catch {}
+
+      // Parse changed files from stat
+      const statLines = diff.trim().split('\n').filter(Boolean);
+      const files = [];
+      const actions = { added: [], modified: [], deleted: [], renamed: [] };
+
+      // Parse from porcelain or stat
+      for (const line of statLines) {
+        // porcelain format: "XY filename"
+        const porcelainMatch = line.match(/^(.{2})\s+(.+)$/);
+        if (porcelainMatch) {
+          const [, status, filepath] = porcelainMatch;
+          const name = path.basename(filepath);
+          if (status.includes('?') || status.includes('A')) actions.added.push(name);
+          else if (status.includes('D')) actions.deleted.push(name);
+          else if (status.includes('R')) actions.renamed.push(name);
+          else actions.modified.push(name);
+          files.push(name);
+          continue;
+        }
+        // stat format: " filename | 5 ++-"
+        const statMatch = line.match(/^\s*(.+?)\s+\|/);
+        if (statMatch) {
+          const name = path.basename(statMatch[1].trim());
+          files.push(name);
+          actions.modified.push(name);
+        }
+      }
+
+      if (files.length === 0) {
+        return { message: 'Update files' };
+      }
+
+      // Detect patterns from file names and diff content
+      const allFiles = files.join(' ').toLowerCase();
+      const diffLower = fullDiff.toLowerCase();
+      let prefix = 'update';
+      let scope = '';
+
+      // Detect type from content
+      if (actions.added.length > 0 && actions.modified.length === 0 && actions.deleted.length === 0) {
+        prefix = 'add';
+      } else if (actions.deleted.length > 0 && actions.added.length === 0 && actions.modified.length === 0) {
+        prefix = 'remove';
+      } else if (diffLower.includes('fix') || diffLower.includes('bug') || diffLower.includes('error') || diffLower.includes('issue')) {
+        prefix = 'fix';
+      } else if (allFiles.includes('test') || allFiles.includes('spec')) {
+        prefix = 'test';
+      } else if (allFiles.includes('readme') || allFiles.includes('.md')) {
+        prefix = 'docs';
+      } else if (allFiles.includes('.css') || allFiles.includes('.scss') || allFiles.includes('style')) {
+        prefix = 'style';
+      } else if (allFiles.includes('config') || allFiles.includes('.env') || allFiles.includes('package.json')) {
+        prefix = 'chore';
+      } else if (diffLower.includes('refactor') || diffLower.includes('rename') || diffLower.includes('reorganize')) {
+        prefix = 'refactor';
+      }
+
+      // Build description
+      if (files.length === 1) {
+        scope = files[0];
+      } else if (files.length <= 3) {
+        scope = files.join(', ');
+      } else {
+        // Find common directory
+        const dirs = new Set();
+        for (const line of statLines) {
+          const match = line.match(/^\s*(.+?)\s+\|/) || line.match(/^.{2}\s+(.+)$/);
+          if (match) {
+            const parts = match[1].trim().split('/');
+            if (parts.length > 1) dirs.add(parts[parts.length - 2]);
+          }
+        }
+        if (dirs.size === 1) {
+          scope = `${[...dirs][0]} (${files.length} files)`;
+        } else {
+          scope = `${files.length} files`;
+        }
+      }
+
+      const message = `${prefix}: ${scope}`;
+      return { message };
     } catch (err) {
       return { error: err.message };
     }

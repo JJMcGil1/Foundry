@@ -28,6 +28,28 @@ export default function IDELayout({ profile, onProfileChange }) {
   const [showSettings, setShowSettings] = useState(false);
   const editorContainerRef = useRef(null);
 
+  const [windowState, setWindowState] = useState({ isFullScreen: false, isMaximized: false });
+
+  // Convenience booleans
+  const isFullScreen = windowState.isFullScreen;
+  const isMaximizedOrFullscreen = windowState.isFullScreen || windowState.isMaximized;
+
+  useEffect(() => {
+    // Live window state updates from main process
+    const cleanup = window.foundry?.onWindowStateChange?.((state) => {
+      setWindowState(state);
+    });
+
+    // Initial check
+    window.foundry?.getWindowState?.().then(state => {
+      if (state && typeof state === 'object') setWindowState(state);
+    }).catch(() => {});
+
+    return () => {
+      cleanup?.();
+    };
+  }, []);
+
   const [project, setProject] = useState(null);
   const [fileTree, setFileTree] = useState([]);
   const [openTabs, setOpenTabs] = useState([]);
@@ -162,7 +184,16 @@ export default function IDELayout({ profile, onProfileChange }) {
   return (
     <div className={styles.root}>
       <div className={styles.activityColumn}>
-        <div className={`${styles.trafficLightSpacer} titlebar-drag`} />
+        <div className={`${styles.trafficLightSpacer} titlebar-drag`}>
+          {isFullScreen && (
+            <img
+              src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
+              alt="Foundry"
+              className={styles.titlebarLogo}
+              draggable={false}
+            />
+          )}
+        </div>
         <ActivityBar
           activePanel={activePanel}
           onPanelClick={handleActivityClick}
@@ -174,12 +205,14 @@ export default function IDELayout({ profile, onProfileChange }) {
       <div className={styles.rightColumn}>
         <div className={`${styles.titlebar} titlebar-drag`}>
           <div className={`${styles.titlebarLeft} titlebar-no-drag`}>
-            <img
-              src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
-              alt="Foundry"
-              className={styles.titlebarLogo}
-              draggable={false}
-            />
+            {!isFullScreen && (
+              <img
+                src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
+                alt="Foundry"
+                className={styles.titlebarLogo}
+                draggable={false}
+              />
+            )}
           </div>
           <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
@@ -266,6 +299,7 @@ export default function IDELayout({ profile, onProfileChange }) {
                   tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
                   onCloseTab={handleCloseTab} onContentChange={handleContentChange}
                   onSaveFile={handleSaveFile} onOpenFolder={handleOpenFolder} project={project}
+                  onReorderTabs={setOpenTabs}
                 />
               )}
             </div>

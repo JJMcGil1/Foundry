@@ -41,6 +41,12 @@ contextBridge.exposeInMainWorld('foundry', {
   gitPull: (dirPath) => ipcRenderer.invoke('git:pull', dirPath),
   gitCommitAndSync: (dirPath, message) => ipcRenderer.invoke('git:commitAndSync', dirPath, message),
   gitClone: (url, destPath) => ipcRenderer.invoke('git:clone', url, destPath),
+  gitListBranches: (dirPath) => ipcRenderer.invoke('git:listBranches', dirPath),
+  gitCheckout: (dirPath, branchName) => ipcRenderer.invoke('git:checkout', dirPath, branchName),
+  gitCreateBranch: (dirPath, branchName, checkout) => ipcRenderer.invoke('git:createBranch', dirPath, branchName, checkout),
+  gitDeleteBranch: (dirPath, branchName, force) => ipcRenderer.invoke('git:deleteBranch', dirPath, branchName, force),
+  gitCheckoutRemoteBranch: (dirPath, remoteBranch) => ipcRenderer.invoke('git:checkoutRemoteBranch', dirPath, remoteBranch),
+  gitGenerateCommitMsg: (dirPath) => ipcRenderer.invoke('git:generateCommitMsg', dirPath),
 
   // Search
   searchFiles: (dirPath, query) => ipcRenderer.invoke('search:files', dirPath, query),
@@ -64,5 +70,20 @@ contextBridge.exposeInMainWorld('foundry', {
     const handler = (_event, id, exitCode) => callback(id, exitCode);
     ipcRenderer.on('terminal:exit', handler);
     return () => ipcRenderer.removeListener('terminal:exit', handler);
+  },
+
+  // Window
+  getWindowState: () => ipcRenderer.invoke('window:isFullScreen'),
+  onWindowStateChange: (callback) => {
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on('window:state-changed', handler);
+    return () => ipcRenderer.removeListener('window:state-changed', handler);
+  },
+  // Keep legacy for backward compat
+  isFullScreen: () => ipcRenderer.invoke('window:isFullScreen').then(s => s.isFullScreen || s.isMaximized),
+  onFullscreenChange: (callback) => {
+    const handler = (_event, state) => callback(state.isFullScreen || state.isMaximized);
+    ipcRenderer.on('window:state-changed', handler);
+    return () => ipcRenderer.removeListener('window:state-changed', handler);
   },
 });

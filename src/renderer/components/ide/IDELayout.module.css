@@ -18,17 +18,11 @@
 .trafficLightSpacer {
   height: 52px;
   flex-shrink: 0;
-  position: relative;
-}
-
-.trafficLightSpacer::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 2px;
-  height: 4px;
-  background: var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-left: 20px;
+  background: var(--surface-0);
 }
 
 /* Right column: titlebar + content */
@@ -58,13 +52,13 @@
   display: flex;
   align-items: center;
   padding-left: 40px;
+  min-width: 40px;
 }
 
 .titlebarLogo {
   height: 34px;
   width: auto;
   opacity: 0.85;
-  filter: var(--welcome-logo-glow);
 }
 
 /* Right-side titlebar controls */
