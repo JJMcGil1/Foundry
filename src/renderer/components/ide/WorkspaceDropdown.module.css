@@ -1,0 +1,309 @@
+/* ── Workspace Dropdown (titlebar pill) ── */
+.wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 30px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--zinc-300);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  outline: none;
+  white-space: nowrap;
+  max-width: 200px;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+.trigger:hover {
+  background: var(--surface-2);
+  color: var(--zinc-100);
+  border-color: var(--zinc-700);
+}
+
+.triggerOpen {
+  background: var(--surface-2);
+  color: var(--zinc-100);
+  border-color: var(--zinc-700);
+}
+
+.triggerIcon {
+  display: flex;
+  align-items: center;
+  color: var(--zinc-500);
+  flex-shrink: 0;
+}
+
+.triggerName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.triggerChevron {
+  display: flex;
+  align-items: center;
+  color: var(--zinc-500);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.triggerChevronOpen {
+  transform: rotate(180deg);
+}
+
+/* ── Overlay ── */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 199;
+}
+
+/* ── Dropdown Panel ── */
+.dropdown {
+  position: fixed;
+  width: 300px;
+  max-height: 400px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 200;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transform-origin: top left;
+}
+
+/* ── Search ── */
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.searchIcon {
+  color: var(--zinc-500);
+  flex-shrink: 0;
+}
+
+.searchInput {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--zinc-200);
+  font-size: 12px;
+  font-family: var(--font-sans);
+}
+
+.searchInput::placeholder {
+  color: var(--zinc-600);
+}
+
+/* ── Actions bar ── */
+.actions {
+  display: flex;
+  align-items: center;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  gap: 4px;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  color: var(--zinc-400);
+  font-size: 11px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  outline: none;
+  transition: background 0.1s ease, color 0.1s ease;
+}
+
+.actionBtn:hover {
+  background: var(--tree-hover);
+  color: var(--zinc-200);
+}
+
+/* ── Workspace List ── */
+.list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+
+.list::-webkit-scrollbar { width: 4px; }
+.list::-webkit-scrollbar-thumb { background: var(--zinc-700); border-radius: 2px; }
+
+.sectionLabel {
+  padding: 8px 12px 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--zinc-600);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: var(--zinc-300);
+  font-size: 12px;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  outline: none;
+  text-align: left;
+  transition: background 0.1s ease;
+}
+
+.item:hover {
+  background: var(--tree-hover);
+}
+
+.itemActive {
+  color: var(--zinc-100);
+  background: var(--tree-active);
+}
+
+.itemActive:hover {
+  background: var(--tree-active-hover);
+}
+
+.itemIcon {
+  flex-shrink: 0;
+  color: var(--zinc-500);
+  display: flex;
+  align-items: center;
+}
+
+.itemActive .itemIcon {
+  color: var(--accent);
+}
+
+.itemContent {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.itemName {
+  font-weight: 500;
+  color: var(--zinc-200);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemActive .itemName {
+  color: var(--zinc-100);
+}
+
+.itemPath {
+  font-size: 10px;
+  color: var(--zinc-600);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.itemCheck {
+  flex-shrink: 0;
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+}
+
+.itemRemove {
+  width: 20px;
+  height: 20px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 6px;
+  outline: none;
+  flex-shrink: 0;
+  transition: color 0.1s ease, background 0.1s ease;
+}
+
+.itemNewWindow {
+  width: 20px;
+  height: 20px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 6px;
+  outline: none;
+  flex-shrink: 0;
+  transition: color 0.1s ease, background 0.1s ease;
+}
+
+.item:hover .itemNewWindow {
+  display: flex;
+}
+
+.itemNewWindow:hover {
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.item:hover .itemRemove {
+  display: flex;
+}
+
+.itemRemove:hover {
+  color: #E06C75;
+  background: rgba(224, 108, 117, 0.1);
+}
+
+/* ── Empty state ── */
+.empty {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--zinc-600);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.emptyIcon {
+  color: var(--zinc-600);
+  opacity: 0.5;
+}

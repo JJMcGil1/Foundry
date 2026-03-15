@@ -1,10 +1,10 @@
-const { app, BrowserWindow, nativeImage, ipcMain, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execSync, exec } = require('child_process');
 const pty = require('node-pty');
-const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, closeDatabase } = require('./database');
+const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase } = require('./database');
 
 const isDev = !app.isPackaged;
 
@@ -12,16 +12,17 @@ const iconPath = isDev
   ? path.join(__dirname, '..', 'renderer', 'assets', 'icon.png')
   : path.join(process.resourcesPath, 'build', 'icon.png');
 
-let mainWindow = null;
+// ---- Multi-window Management ---- //
+const allWindows = new Set();
 
 // ---- PTY Terminal Management ---- //
 const ptyProcesses = new Map();
 let ptyIdCounter = 0;
 
-function createWindow() {
+function createWindow(projectPath) {
   const icon = nativeImage.createFromPath(iconPath);
 
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1400,
     height: 900,
     minWidth: 1000,
@@ -39,28 +40,135 @@ function createWindow() {
     },
   });
 
-  mainWindow.once('ready-to-show', () => {
-    mainWindow.show();
+  allWindows.add(win);
+
+  win.once('ready-to-show', () => {
+    win.show();
   });
 
-  // Forward window state changes to renderer
+  win.on('closed', () => {
+    allWindows.delete(win);
+  });
+
+  // Forward window state changes to renderer (per-window closure)
   const sendWindowState = () => {
-    mainWindow.webContents.send('window:state-changed', {
-      isFullScreen: mainWindow.isFullScreen(),
-      isMaximized: mainWindow.isMaximized(),
+    if (win.isDestroyed()) return;
+    win.webContents.send('window:state-changed', {
+      isFullScreen: win.isFullScreen(),
+      isMaximized: win.isMaximized(),
     });
   };
-  mainWindow.on('enter-full-screen', sendWindowState);
-  mainWindow.on('leave-full-screen', sendWindowState);
-  mainWindow.on('maximize', sendWindowState);
-  mainWindow.on('unmaximize', sendWindowState);
-  mainWindow.on('resize', sendWindowState);
+  win.on('enter-full-screen', sendWindowState);
+  win.on('leave-full-screen', sendWindowState);
+  win.on('maximize', sendWindowState);
+  win.on('unmaximize', sendWindowState);
+  win.on('resize', sendWindowState);
 
   if (isDev) {
-    mainWindow.loadURL('http://localhost:5173');
+    const url = new URL('http://localhost:5173');
+    if (projectPath) url.searchParams.set('projectPath', projectPath);
+    win.loadURL(url.toString());
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
+    const indexPath = path.join(__dirname, '..', '..', 'dist', 'index.html');
+    if (projectPath) {
+      win.loadFile(indexPath, { query: { projectPath } });
+    } else {
+      win.loadFile(indexPath);
+    }
   }
+
+  return win;
+}
+
+// ---- Application Menu (macOS + cross-platform) ---- //
+function buildAppMenu() {
+  const isMac = process.platform === 'darwin';
+
+  const template = [
+    // App menu (macOS only)
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    }] : []),
+    // File menu
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'New Window',
+          accelerator: 'CmdOrCtrl+Shift+N',
+          click: () => createWindow(),
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' },
+      ],
+    },
+    // Edit menu
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac ? [
+          { role: 'pasteAndMatchStyle' },
+          { role: 'delete' },
+          { role: 'selectAll' },
+        ] : [
+          { role: 'delete' },
+          { type: 'separator' },
+          { role: 'selectAll' },
+        ]),
+      ],
+    },
+    // View menu
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+    // Window menu
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { role: 'front' },
+          { type: 'separator' },
+          { role: 'window' },
+        ] : [
+          { role: 'close' },
+        ]),
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
 }
 
 // ---- File System Helpers ---- //
@@ -926,6 +1034,18 @@ function registerIPC() {
     return { success: true, totalReplacements, filesModified };
   });
 
+  // Workspaces
+  ipcMain.handle('workspaces:list', async () => getWorkspaces());
+  ipcMain.handle('workspaces:add', async (_event, name, wsPath) => addWorkspace(name, wsPath));
+  ipcMain.handle('workspaces:remove', async (_event, wsPath) => removeWorkspace(wsPath));
+  ipcMain.handle('workspaces:touch', async (_event, wsPath) => { touchWorkspace(wsPath); return true; });
+
+  // Window management
+  ipcMain.handle('window:new', async (_event, projectPath) => {
+    createWindow(projectPath || undefined);
+    return true;
+  });
+
   // Shell open
   ipcMain.handle('shell:openExternal', async (_event, url) => {
     shell.openExternal(url);
@@ -999,7 +1119,24 @@ function registerIPC() {
 app.on('ready', async () => {
   await initDatabase();
   registerIPC();
+  buildAppMenu();
   createWindow();
+
+  // macOS dock menu with "New Window"
+  if (process.platform === 'darwin') {
+    const dockMenu = Menu.buildFromTemplate([
+      {
+        label: 'New Window',
+        click: () => createWindow(),
+      },
+    ]);
+    app.dock.setMenu(dockMenu);
+
+    const dockIcon = nativeImage.createFromPath(iconPath);
+    if (dockIcon && !dockIcon.isEmpty()) {
+      app.dock.setIcon(dockIcon);
+    }
+  }
 });
 
 app.on('window-all-closed', () => {
@@ -1021,12 +1158,3 @@ app.on('before-quit', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
-
-if (process.platform === 'darwin') {
-  app.whenReady().then(() => {
-    const dockIcon = nativeImage.createFromPath(iconPath);
-    if (dockIcon && !dockIcon.isEmpty()) {
-      app.dock.setIcon(dockIcon);
-    }
-  });
-}

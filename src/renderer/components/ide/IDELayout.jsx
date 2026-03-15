@@ -9,12 +9,12 @@ import ChatPanel from './ChatPanel';
 import TerminalPanel from './TerminalPanel';
 import SettingsPage from './SettingsPage';
 import SearchBar from './SearchBar';
-import GitControls from './GitControls';
+import ProjectControls from './ProjectControls';
 import styles from './IDELayout.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
 import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
-export default function IDELayout({ profile, onProfileChange }) {
+export default function IDELayout({ profile, onProfileChange, initialProjectPath }) {
   const [activePanel, setActivePanel] = useState('files');
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [chatWidth, setChatWidth] = useState(340);
@@ -56,23 +56,28 @@ export default function IDELayout({ profile, onProfileChange }) {
   const [activeTab, setActiveTab] = useState(null);
   const [gitStatus, setGitStatus] = useState({ branch: '', files: [], isRepo: false });
 
-  // Restore last opened project on mount
+  // Restore project on mount: prefer initialProjectPath (new window), fall back to last opened
   useEffect(() => {
     async function restoreProject() {
-      const lastPath = await window.foundry?.getSetting('last_project_path');
-      if (!lastPath) return;
+      const targetPath = initialProjectPath || await window.foundry?.getSetting('last_project_path');
+      if (!targetPath) return;
       try {
-        const tree = await window.foundry?.readDir(lastPath);
+        const tree = await window.foundry?.readDir(targetPath);
         if (tree) {
-          const name = lastPath.split('/').pop() || lastPath.split('\\').pop() || lastPath;
-          setProject({ path: lastPath, name });
+          const name = targetPath.split('/').pop() || targetPath.split('\\').pop() || targetPath;
+          setProject({ path: targetPath, name });
           setFileTree(tree);
-          const status = await window.foundry?.gitStatus(lastPath);
+          const status = await window.foundry?.gitStatus(targetPath);
           if (status) setGitStatus(status);
+          // Only update last_project_path if no explicit initial path (avoid overwriting other windows)
+          if (!initialProjectPath) return;
+          await window.foundry?.setSetting('last_project_path', targetPath);
         }
       } catch {
-        // Folder no longer exists, clear it
-        await window.foundry?.setSetting('last_project_path', '');
+        // Folder no longer exists
+        if (!initialProjectPath) {
+          await window.foundry?.setSetting('last_project_path', '');
+        }
       }
     }
     restoreProject();
@@ -136,6 +141,23 @@ export default function IDELayout({ profile, onProfileChange }) {
       ));
     }
   }, [openTabs]);
+
+  const handleSwitchWorkspace = useCallback(async (workspace) => {
+    try {
+      const tree = await window.foundry?.readDir(workspace.path);
+      if (tree) {
+        setProject({ path: workspace.path, name: workspace.name });
+        setFileTree(tree);
+        setOpenTabs([]);
+        setActiveTab(null);
+        const status = await window.foundry?.gitStatus(workspace.path);
+        if (status) setGitStatus(status);
+        await window.foundry?.setSetting('last_project_path', workspace.path);
+      }
+    } catch {
+      // Folder may no longer exist
+    }
+  }, []);
 
   const refreshTree = useCallback(async () => {
     if (!project) return;
@@ -206,11 +228,17 @@ export default function IDELayout({ profile, onProfileChange }) {
                 draggable={false}
               />
             )}
+            <ProjectControls
+              currentProject={project}
+              onSwitchWorkspace={handleSwitchWorkspace}
+              onOpenFolder={handleOpenFolder}
+              gitStatus={gitStatus}
+              projectPath={project?.path}
+              onRefresh={refreshTree}
+            />
           </div>
           <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
-            <GitControls gitStatus={gitStatus} projectPath={project?.path} onRefresh={refreshTree} />
-            <div className={styles.titlebarDivider} />
             <button
               className={`${styles.titlebarBtn} ${sidebarVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setSidebarVisible(v => !v)}

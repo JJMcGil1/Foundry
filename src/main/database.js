@@ -73,6 +73,16 @@ async function initDatabase() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS workspaces (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      path TEXT NOT NULL UNIQUE,
+      last_opened TEXT NOT NULL DEFAULT (datetime('now')),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+
   persistDb();
 
   // Auto-save every 30 seconds as a safety net against hard kills
@@ -176,6 +186,41 @@ function setSetting(key, value) {
   persistDb();
 }
 
+function getWorkspaces() {
+  if (!db) return [];
+  const results = db.exec('SELECT id, name, path, last_opened, created_at FROM workspaces ORDER BY last_opened DESC');
+  if (!results.length) return [];
+  return results[0].values.map(row => ({
+    id: row[0], name: row[1], path: row[2], last_opened: row[3], created_at: row[4],
+  }));
+}
+
+function addWorkspace(name, wsPath) {
+  if (!db) return null;
+  // Upsert: if path exists, just update last_opened and name
+  const existing = db.exec('SELECT id FROM workspaces WHERE path = ?', [wsPath]);
+  if (existing.length && existing[0].values.length) {
+    db.run("UPDATE workspaces SET name = ?, last_opened = datetime('now') WHERE path = ?", [name, wsPath]);
+  } else {
+    db.run('INSERT INTO workspaces (name, path) VALUES (?, ?)', [name, wsPath]);
+  }
+  persistDb();
+  return getWorkspaces();
+}
+
+function removeWorkspace(wsPath) {
+  if (!db) return [];
+  db.run('DELETE FROM workspaces WHERE path = ?', [wsPath]);
+  persistDb();
+  return getWorkspaces();
+}
+
+function touchWorkspace(wsPath) {
+  if (!db) return;
+  db.run("UPDATE workspaces SET last_opened = datetime('now') WHERE path = ?", [wsPath]);
+  persistDb();
+}
+
 function closeDatabase() {
   if (db) {
     persistDb();
@@ -193,5 +238,9 @@ module.exports = {
   loadProfilePhoto,
   getSetting,
   setSetting,
+  getWorkspaces,
+  addWorkspace,
+  removeWorkspace,
+  touchWorkspace,
   closeDatabase,
 };

@@ -47,10 +47,11 @@
   justify-content: space-between;
 }
 
-/* Left-side titlebar logo */
+/* Left-side titlebar logo + workspace switcher */
 .titlebarLeft {
   display: flex;
   align-items: center;
+  gap: 10px;
   padding-left: 40px;
   min-width: 40px;
 }

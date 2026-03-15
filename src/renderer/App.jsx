@@ -68,5 +68,9 @@ export default function App() {
     );
   }
 
-  return <IDELayout profile={profile} onProfileChange={refreshProfile} />;
+  // Check for projectPath query param (new window opened with specific workspace)
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialProjectPath = urlParams.get('projectPath') || undefined;
+
+  return <IDELayout profile={profile} onProfileChange={refreshProfile} initialProjectPath={initialProjectPath} />;
 }

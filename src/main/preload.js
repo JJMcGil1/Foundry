@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('foundry', {
   searchInFiles: (dirPath, query, options) => ipcRenderer.invoke('search:inFiles', dirPath, query, options),
   replaceInFiles: (dirPath, searchQuery, replaceText, options) => ipcRenderer.invoke('search:replaceInFiles', dirPath, searchQuery, replaceText, options),
 
+  // Workspaces
+  getWorkspaces: () => ipcRenderer.invoke('workspaces:list'),
+  addWorkspace: (name, path) => ipcRenderer.invoke('workspaces:add', name, path),
+  removeWorkspace: (path) => ipcRenderer.invoke('workspaces:remove', path),
+  touchWorkspace: (path) => ipcRenderer.invoke('workspaces:touch', path),
+
   // Shell
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
 
@@ -73,6 +79,7 @@ contextBridge.exposeInMainWorld('foundry', {
   },
 
   // Window
+  newWindow: (projectPath) => ipcRenderer.invoke('window:new', projectPath),
   getWindowState: () => ipcRenderer.invoke('window:isFullScreen'),
   onWindowStateChange: (callback) => {
     const handler = (_event, state) => callback(state);
