@@ -25,6 +25,7 @@
   height: 100%;
   cursor: col-resize;
   z-index: 20;
+  transition: background 0.2s ease;
 }
 
 .resizeHandle:hover,
@@ -649,6 +650,7 @@
   height: 6px;
   cursor: row-resize;
   z-index: 20;
+  transition: background 0.2s ease;
 }
 
 .graphResizeHandle:hover,

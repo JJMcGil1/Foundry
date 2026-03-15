@@ -3,6 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const { execSync, exec, spawn } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 const pty = require('node-pty');
 const https = require('https');
 const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase } = require('./database');
@@ -432,6 +434,15 @@ function getGitLog(dirPath, count = 20, skip = 0) {
   }
 }
 
+function getGitCommitCount(dirPath) {
+  try {
+    const result = execSync('git rev-list --count --all', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    return parseInt(result.trim(), 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
 function getGitDiff(dirPath, filePath) {
   try {
     const result = execSync(`git diff -- "${filePath}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
@@ -693,6 +704,7 @@ function registerIPC() {
   // Git
   ipcMain.handle('git:status', async (_event, dirPath) => getGitStatus(dirPath));
   ipcMain.handle('git:log', async (_event, dirPath, count, skip) => getGitLog(dirPath, count, skip));
+  ipcMain.handle('git:commitCount', async (_event, dirPath) => getGitCommitCount(dirPath));
   ipcMain.handle('git:resolveAvatars', async (_event, authors) => resolveAvatarsBatch(authors));
   ipcMain.handle('git:diff', async (_event, dirPath, filePath) => getGitDiff(dirPath, filePath));
 
@@ -1243,16 +1255,17 @@ function registerIPC() {
    *   account: <os-username>
    * The value is JSON: { claudeAiOauth: { accessToken, refreshToken, expiresAt, subscriptionType, ... } }
    */
-  function readClaudeKeychainCredentials() {
+  async function readClaudeKeychainCredentials() {
     if (process.platform !== 'darwin') {
       // TODO: Windows uses credential manager, Linux uses libsecret
       return null;
     }
     try {
-      const raw = execSync(
+      const { stdout } = await execAsync(
         'security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null',
-        { encoding: 'utf8', timeout: 5000 }
-      ).trim();
+        { timeout: 5000 }
+      );
+      const raw = stdout.trim();
       if (!raw) return null;
       const data = JSON.parse(raw);
       if (data.claudeAiOauth?.accessToken) {
@@ -1277,9 +1290,9 @@ function registerIPC() {
    * - source 'api_key': Direct Anthropic API key from settings
    * authHeader is the correct header object to use for the Anthropic API.
    */
-  function resolveClaudeCredential() {
+  async function resolveClaudeCredential() {
     // Priority 1: Claude Code subscription (OAuth from keychain)
-    const oauthCreds = readClaudeKeychainCredentials();
+    const oauthCreds = await readClaudeKeychainCredentials();
     if (oauthCreds?.accessToken) {
       // Check if token is expired (with 60s buffer)
       const isExpired = oauthCreds.expiresAt && (Date.now() > oauthCreds.expiresAt - 60000);
@@ -1320,19 +1333,20 @@ function registerIPC() {
     };
 
     try {
-      // Check if Claude Code CLI binary exists
+      // Check if Claude Code CLI binary exists — use async exec to avoid blocking main thread
       try {
-        execSync('which claude 2>/dev/null || where claude 2>/dev/null', { timeout: 3000, encoding: 'utf8' });
+        await execAsync('which claude 2>/dev/null || where claude 2>/dev/null', { timeout: 3000 });
         result.installed = true;
       } catch {
         // Also check ~/.claude directory existence as a signal
-        if (fs.existsSync(path.join(os.homedir(), '.claude'))) {
+        try {
+          await fs.promises.access(path.join(os.homedir(), '.claude'));
           result.installed = true;
-        }
+        } catch { /* not found */ }
       }
 
       // Check keychain for OAuth credentials
-      const oauthCreds = readClaudeKeychainCredentials();
+      const oauthCreds = await readClaudeKeychainCredentials();
       if (oauthCreds?.accessToken) {
         result.installed = true;
         result.authenticated = true;
@@ -1351,7 +1365,7 @@ function registerIPC() {
 
   // Get the resolved credential info (for chat panel to know if connected)
   ipcMain.handle('claude:getToken', async () => {
-    const cred = resolveClaudeCredential();
+    const cred = await resolveClaudeCredential();
     if (cred) {
       return { token: cred.token, source: cred.source, subscriptionType: cred.subscriptionType };
     }
@@ -1426,7 +1440,7 @@ function registerIPC() {
    * Find the claude CLI binary on disk.
    * Checks common install paths first (fast), then falls back to `which`.
    */
-  function resolveClaudeBinary() {
+  async function resolveClaudeBinary() {
     const candidates = process.platform === 'win32'
       ? [path.join(process.env.APPDATA || '', 'npm', 'claude.cmd')]
       : [
@@ -1437,15 +1451,19 @@ function registerIPC() {
         ];
 
     for (const p of candidates) {
-      try { if (fs.statSync(p).isFile()) return p; } catch { /* continue */ }
+      try {
+        const stat = await fs.promises.stat(p);
+        if (stat.isFile()) return p;
+      } catch { /* continue */ }
     }
 
-    // Fallback: which/where
+    // Fallback: which/where — async to avoid blocking main thread
     try {
-      return execSync(
+      const { stdout } = await execAsync(
         process.platform === 'win32' ? 'where claude 2>NUL' : 'which claude 2>/dev/null',
-        { encoding: 'utf8', timeout: 5000 }
-      ).trim().split('\n')[0];
+        { timeout: 5000 }
+      );
+      return stdout.trim().split('\n')[0];
     } catch { return null; }
   }
 
@@ -1454,10 +1472,10 @@ function registerIPC() {
    * Uses `claude -p` with `--output-format stream-json --verbose --include-partial-messages`.
    * The CLI handles OAuth auth, token refresh, and API routing internally.
    */
-  function streamViaCLI(event, messages, model, streamId) {
-    const claudeBin = resolveClaudeBinary();
+  async function streamViaCLI(event, messages, model, streamId) {
+    const claudeBin = await resolveClaudeBinary();
     if (!claudeBin) {
-      return Promise.resolve({ error: 'Claude CLI not found. Install Claude Code or add an API key in Settings → Providers.' });
+      return { error: 'Claude CLI not found. Install Claude Code or add an API key in Settings → Providers.' };
     }
 
     // Build the prompt: format conversation history + current message
@@ -1687,7 +1705,7 @@ function registerIPC() {
 
   // Main chat handler — routes to CLI (subscription) or API (key) based on auth source
   ipcMain.handle('claude:chat', async (event, { messages, model, streamId }) => {
-    const cred = resolveClaudeCredential();
+    const cred = await resolveClaudeCredential();
     if (!cred) {
       return { error: 'No Claude credentials found. Connect your Claude Code subscription or add an API key in Settings → Providers.' };
     }
@@ -1729,27 +1747,27 @@ function registerIPC() {
 
   // Fetch real model IDs by querying the CLI — returns resolved model names
   ipcMain.handle('claude:fetchModels', async () => {
-    const claudeBin = resolveClaudeBinary();
+    const claudeBin = await resolveClaudeBinary();
     if (!claudeBin) return { models: null, error: 'CLI not found' };
 
-    // Query each alias to get the real model ID
+    // Query each alias in parallel using async exec — never block the main thread
     const aliases = ['sonnet', 'opus', 'haiku'];
-    const results = [];
+    const settled = await Promise.allSettled(aliases.map(async (alias) => {
+      const { stdout } = await execAsync(
+        `"${claudeBin}" -p "hi" --output-format stream-json --verbose --model ${alias} --max-turns 1 --no-session-persistence 2>/dev/null | head -1`,
+        { encoding: 'utf8', timeout: 30000, shell: true }
+      );
+      const trimmed = stdout.trim();
+      if (trimmed) {
+        const data = JSON.parse(trimmed);
+        if (data.model) return { alias, resolvedId: data.model };
+      }
+      return null;
+    }));
 
-    for (const alias of aliases) {
-      try {
-        const output = execSync(
-          `"${claudeBin}" -p "hi" --output-format stream-json --verbose --model ${alias} --max-turns 1 --no-session-persistence 2>/dev/null | head -1`,
-          { encoding: 'utf8', timeout: 30000, shell: true }
-        ).trim();
-        if (output) {
-          const data = JSON.parse(output);
-          if (data.model) {
-            results.push({ alias, resolvedId: data.model });
-          }
-        }
-      } catch { /* skip */ }
-    }
+    const results = settled
+      .filter(s => s.status === 'fulfilled' && s.value)
+      .map(s => s.value);
 
     return { models: results };
   });

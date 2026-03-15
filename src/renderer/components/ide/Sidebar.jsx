@@ -104,7 +104,7 @@ function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusCo
 }
 
 /* ── Commit Graph ── */
-const COMMITS_PAGE_SIZE = 30;
+const COMMITS_PAGE_SIZE = 15;
 const GRAPH_COLORS = ['#61AFEF', '#C678DD', '#98C379', '#E5C07B', '#E06C75', '#56B6C2'];
 
 function buildGraph(commits) {
@@ -281,7 +281,7 @@ function CommitHoverCard({ row, avatarUrl, style }) {
   );
 }
 
-function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore }) {
+function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, totalCommits }) {
   const [graphOpen, setGraphOpen] = useState(true);
   const [graphHeight, setGraphHeight] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
@@ -397,7 +397,7 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore })
         </motion.span>
         <span>Graph</span>
         <div className={styles.sectionActions}>
-          <span className={styles.badge}>{commits.length}</span>
+          <span className={styles.badge}>{totalCommits || commits.length}</span>
         </div>
       </button>
       <AnimatePresence initial={false}>
@@ -577,6 +577,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   const [stagedOpen, setStagedOpen] = useState(true);
   const [changesOpen, setChangesOpen] = useState(true);
   const [commits, setCommits] = useState([]);
+  const [totalCommits, setTotalCommits] = useState(0);
   const [hasMoreCommits, setHasMoreCommits] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const commitInputRef = useRef(null);
@@ -586,10 +587,16 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
     if (!projectPath || !gitStatus.isRepo) return;
     let cancelled = false;
     (async () => {
-      const log = await window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE);
-      if (!cancelled && log) {
-        setCommits(log);
-        setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
+      const [log, count] = await Promise.all([
+        window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE),
+        window.foundry?.gitCommitCount(projectPath),
+      ]);
+      if (!cancelled) {
+        if (log) {
+          setCommits(log);
+          setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
+        }
+        if (count != null) setTotalCommits(count);
       }
     })();
     return () => { cancelled = true; };
@@ -597,11 +604,15 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
 
   const refreshGit = async () => {
     onRefreshGit?.();
-    const log = await window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE);
+    const [log, count] = await Promise.all([
+      window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE),
+      window.foundry?.gitCommitCount(projectPath),
+    ]);
     if (log) {
       setCommits(log);
       setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
     }
+    if (count != null) setTotalCommits(count);
   };
 
   const loadMoreCommits = useCallback(async () => {
@@ -916,7 +927,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
         )}
       </AnimatePresence>
 
-      <CommitGraph commits={commits} projectPath={projectPath} onLoadMore={loadMoreCommits} hasMore={hasMoreCommits} loadingMore={loadingMore} />
+      <CommitGraph commits={commits} projectPath={projectPath} onLoadMore={loadMoreCommits} hasMore={hasMoreCommits} loadingMore={loadingMore} totalCommits={totalCommits} />
     </div>
   );
 }

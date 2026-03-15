@@ -251,94 +251,74 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
 
   const tokenDirty = githubToken !== initialToken;
 
-  const validateToken = useCallback(async (token) => {
-    if (!token) { setGithubUser(null); return; }
-    setGithubLoading(true);
-    setGithubError('');
-    try {
-      const result = await window.foundry?.validateGithubToken(token);
-      if (result?.valid) {
-        setGithubUser(result);
-        setGithubError('');
-      } else {
-        setGithubUser(null);
-        // Only show error if token looks intentional (not empty)
-        if (token.length > 5) setGithubError('Invalid token. Check scopes and try again.');
-      }
-    } catch {
-      setGithubUser(null);
-    } finally {
-      setGithubLoading(false);
-    }
-  }, []);
-
-  // ── Lazy-load: only fetch GitHub token when navigating to GitHub tab ──
-  const githubLoadedRef = useRef(false);
+  // ── Pre-load ALL local settings at component mount ──
+  // SettingsPage is ALWAYS mounted (display:none/contents toggle in IDELayout),
+  // so this fires once at app startup. By the time the user clicks ANY tab,
+  // all local DB data is already in React state — zero async delay on navigation.
+  // Only fast local DB reads here. No network calls, no CLI spawns.
   useEffect(() => {
-    if (activeSection !== 'github' || githubLoadedRef.current) return;
-    githubLoadedRef.current = true;
-    async function loadGithubSettings() {
-      const token = await window.foundry?.getSetting('github_token');
+    async function preloadSettings() {
+      const [token, cachedUserJson, apiKey, model] = await Promise.all([
+        window.foundry?.getSetting('github_token'),
+        window.foundry?.getSetting('github_user_cache'),
+        window.foundry?.claudeGetApiKey(),
+        window.foundry?.claudeGetModel(),
+      ]);
+      // GitHub
       if (token) {
         setGithubToken(token);
         setInitialToken(token);
-        validateToken(token);
+        if (cachedUserJson) {
+          try {
+            const cachedUser = JSON.parse(cachedUserJson);
+            if (cachedUser?.login) setGithubUser(cachedUser);
+          } catch { /* corrupted cache — user can re-connect */ }
+        }
+      }
+      // Providers — fast local values only
+      if (apiKey) {
+        setClaudeApiKey(apiKey);
+        setClaudeApiKeyInitial(apiKey);
+        setClaudeKeyValid(true);
+      }
+      if (model) {
+        setSelectedModel(model);
       }
     }
-    loadGithubSettings();
-  }, [activeSection, validateToken]);
+    preloadSettings();
+  }, []);
 
-  // ── Lazy-load: only fetch provider settings when navigating to Providers tab ──
+  // ── Providers: heavy detection runs AFTER the tab is already visible ──
+  // claudeDetectAuth spawns processes (which claude, reads keychain) — slow.
+  // claudeFetchModels runs CLI 3x with 30s timeouts — very slow.
+  // These fire AFTER the providers page is rendered, updating in-place.
   const providersLoadedRef = useRef(false);
   useEffect(() => {
     if (activeSection !== 'providers' || providersLoadedRef.current) return;
     providersLoadedRef.current = true;
-    async function loadProviderSettings() {
-      // Fire all independent fetches in parallel — don't block each other
-      setClaudeDetecting(true);
 
-      const [cliResult, keyResult, modelResult] = await Promise.allSettled([
-        window.foundry?.claudeDetectAuth(),
-        window.foundry?.claudeGetApiKey(),
-        window.foundry?.claudeGetModel(),
-      ]);
+    // Detect CLI in background — page is already visible with API key + model
+    setClaudeDetecting(true);
+    window.foundry?.claudeDetectAuth().then(result => {
+      if (result) setClaudeCliStatus(result);
+    }).catch(() => {}).finally(() => setClaudeDetecting(false));
 
-      // Apply results from parallel fetches
-      if (cliResult.status === 'fulfilled' && cliResult.value) {
-        setClaudeCliStatus(cliResult.value);
+    // Fetch real model IDs in background — page already shows default labels
+    setModelsLoading(true);
+    window.foundry?.claudeFetchModels().then(result => {
+      if (result?.models?.length) {
+        setClaudeModels(prev => prev.map(m => {
+          const match = result.models.find(r => r.alias === m.id);
+          if (match) {
+            const parts = match.resolvedId.replace('claude-', '').split('-');
+            const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+            const version = parts.slice(1).filter(p => !p.match(/^\d{8}$/)).join('.');
+            return { ...m, resolvedId: match.resolvedId, label: `Claude ${name} ${version}`.trim() };
+          }
+          return m;
+        }));
       }
-      setClaudeDetecting(false);
-
-      if (keyResult.status === 'fulfilled' && keyResult.value) {
-        setClaudeApiKey(keyResult.value);
-        setClaudeApiKeyInitial(keyResult.value);
-        setClaudeKeyValid(true);
-      }
-
-      if (modelResult.status === 'fulfilled' && modelResult.value) {
-        setSelectedModel(modelResult.value);
-      }
-
-      // Fetch real model IDs in background (non-blocking, after UI is already rendered)
-      try {
-        setModelsLoading(true);
-        const result = await window.foundry?.claudeFetchModels();
-        if (result?.models?.length) {
-          setClaudeModels(prev => prev.map(m => {
-            const match = result.models.find(r => r.alias === m.id);
-            if (match) {
-              const parts = match.resolvedId.replace('claude-', '').split('-');
-              const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-              const version = parts.slice(1).filter(p => !p.match(/^\d{8}$/)).join('.');
-              return { ...m, resolvedId: match.resolvedId, label: `Claude ${name} ${version}`.trim() };
-            }
-            return m;
-          }));
-        }
-      } catch { /* ignore — fallback to default labels */ }
-      setModelsLoading(false);
-    }
-    loadProviderSettings();
+    }).catch(() => {}).finally(() => setModelsLoading(false));
   }, [activeSection]);
 
   const handleSaveToken = async () => {
@@ -346,7 +326,17 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
     setGithubError('');
     const result = await window.foundry?.validateGithubToken(githubToken);
     if (result?.valid) {
-      await window.foundry?.setSetting('github_token', githubToken);
+      // Save token and cache user info locally so next page load is instant (no network)
+      await Promise.all([
+        window.foundry?.setSetting('github_token', githubToken),
+        window.foundry?.setSetting('github_user_cache', JSON.stringify({
+          login: result.login,
+          name: result.name,
+          avatar_url: result.avatar_url,
+          html_url: result.html_url,
+          bio: result.bio,
+        })),
+      ]);
       setInitialToken(githubToken);
       setGithubUser(result);
       setTokenSaved(true);
@@ -360,7 +350,10 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
   };
 
   const handleDisconnectGithub = async () => {
-    await window.foundry?.setSetting('github_token', '');
+    await Promise.all([
+      window.foundry?.setSetting('github_token', ''),
+      window.foundry?.setSetting('github_user_cache', ''),
+    ]);
     setGithubToken('');
     setInitialToken('');
     setGithubUser(null);
@@ -1058,7 +1051,7 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
                 </>
               )}
 
-              {/* Loading state */}
+              {/* Loading state — only show when user explicitly clicks Connect/Save */}
               {githubLoading && (
                 <div className={styles.card}>
                   <div className={styles.ghLoadingState}>
@@ -1068,7 +1061,7 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
                 </div>
               )}
 
-              {/* Disconnected / input state */}
+              {/* Disconnected / input state — show immediately, even during background validation */}
               {!githubUser && !githubLoading && (
                 <div className={styles.card}>
                   <div className={styles.tokenSection}>

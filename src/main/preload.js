@@ -61,6 +61,7 @@ contextBridge.exposeInMainWorld('foundry', {
   // Git
   gitStatus: (dirPath) => ipcRenderer.invoke('git:status', dirPath),
   gitLog: (dirPath, count, skip) => ipcRenderer.invoke('git:log', dirPath, count, skip),
+  gitCommitCount: (dirPath) => ipcRenderer.invoke('git:commitCount', dirPath),
   gitResolveAvatars: (authors) => ipcRenderer.invoke('git:resolveAvatars', authors),
   gitDiff: (dirPath, filePath) => ipcRenderer.invoke('git:diff', dirPath, filePath),
   gitStage: (dirPath, filePath) => ipcRenderer.invoke('git:stage', dirPath, filePath),

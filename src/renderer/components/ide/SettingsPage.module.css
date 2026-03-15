@@ -49,21 +49,21 @@
 
 .navItem:hover {
   color: var(--zinc-300);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--settings-nav-hover);
 }
 
 .navItem:active {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--settings-nav-active);
 }
 
 .navItemActive {
   color: var(--zinc-100);
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--settings-nav-selected);
   font-weight: 600;
 }
 
 .navItemActive:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: var(--settings-nav-selected);
   color: var(--zinc-100);
 }
 
@@ -397,7 +397,7 @@
 
 .input:focus {
   border-color: var(--zinc-500);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.05);
+  box-shadow: 0 0 0 3px var(--settings-nav-hover);
 }
 
 .input::placeholder {
@@ -688,7 +688,7 @@
 
 .reposSearchInput:focus {
   border-color: var(--zinc-500);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 0 3px var(--settings-nav-hover);
 }
 
 .reposSearchInput::placeholder {

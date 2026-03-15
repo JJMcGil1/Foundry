@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSend, FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiTool, FiCopy, FiCheck } from 'react-icons/fi';
+import { FiSend, FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiChevronDown, FiTool, FiCopy, FiCheck } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
 
 let streamIdCounter = 0;
@@ -269,7 +269,10 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
   const [currentStreamId, setCurrentStreamId] = useState(null);
   const [hasProvider, setHasProvider] = useState(null);
   const [modelLabel, setModelLabel] = useState('Claude');
+  const [modelKey, setModelKey] = useState('sonnet');
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [error, setError] = useState(null);
+  const modelSwitcherRef = useRef(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const cleanupRef = useRef([]);
@@ -290,6 +293,7 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
         if (modelResult) {
           const labels = { 'sonnet': 'Sonnet', 'opus': 'Opus', 'haiku': 'Haiku' };
           setModelLabel(labels[modelResult] || modelResult);
+          setModelKey(modelResult);
         }
       } catch {
         setHasProvider(false);
@@ -300,6 +304,34 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
     window.addEventListener('focus', handleFocus);
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
+
+  // Close model dropdown on outside click
+  useEffect(() => {
+    if (!showModelDropdown) return;
+    const handleClickOutside = (e) => {
+      if (modelSwitcherRef.current && !modelSwitcherRef.current.contains(e.target)) {
+        setShowModelDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showModelDropdown]);
+
+  const handleModelSwitch = async (key) => {
+    const labels = { 'sonnet': 'Sonnet', 'opus': 'Opus', 'haiku': 'Haiku' };
+    setModelKey(key);
+    setModelLabel(labels[key] || key);
+    setShowModelDropdown(false);
+    try {
+      await window.foundry?.claudeSetModel(key);
+    } catch { /* silent */ }
+  };
+
+  const MODEL_OPTIONS = [
+    { key: 'opus', label: 'Opus', desc: 'Most capable' },
+    { key: 'sonnet', label: 'Sonnet', desc: 'Balanced' },
+    { key: 'haiku', label: 'Haiku', desc: 'Fastest' },
+  ];
 
   // Helper: update the last assistant message's blocks
   const updateAssistantBlocks = useCallback((blocks) => {
@@ -656,11 +688,44 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
     >
       <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
       <div className={styles.header}>
-        <FiMessageSquare size={14} />
+        <FiMessageSquare size={13} />
         <span className={styles.headerTitle}>Chat</span>
-        <div className={styles.modelBadge}>
-          <FiCpu size={11} />
-          <span>{modelLabel}</span>
+        <div className={styles.modelSwitcher} ref={modelSwitcherRef}>
+          <button
+            className={styles.modelBadge}
+            onClick={() => setShowModelDropdown(v => !v)}
+          >
+            <span>{modelLabel}</span>
+            <FiChevronDown
+              size={10}
+              className={`${styles.modelBadgeChevron} ${showModelDropdown ? styles.modelBadgeChevronOpen : ''}`}
+            />
+          </button>
+          <AnimatePresence>
+            {showModelDropdown && (
+              <motion.div
+                className={styles.modelDropdown}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+              >
+                {MODEL_OPTIONS.map(opt => (
+                  <button
+                    key={opt.key}
+                    className={`${styles.modelOption} ${modelKey === opt.key ? styles.modelOptionActive : ''}`}
+                    onClick={() => handleModelSwitch(opt.key)}
+                  >
+                    <span className={styles.modelOptionCheck}>
+                      {modelKey === opt.key ? <FiCheck size={12} /> : null}
+                    </span>
+                    <span className={styles.modelOptionLabel}>{opt.label}</span>
+                    <span className={styles.modelOptionDesc}>{opt.desc}</span>
+                  </button>
+                ))}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
