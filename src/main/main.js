@@ -8,6 +8,92 @@ const https = require('https');
 const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase } = require('./database');
 const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 
+// ---- GitHub Avatar Resolution ---- //
+const avatarCache = new Map(); // key: "email||author" → url string | null
+const avatarPending = new Map(); // key → Promise
+
+function probeGitHubAvatar(username) {
+  return new Promise((resolve) => {
+    const url = `https://github.com/${encodeURIComponent(username)}.png?size=64`;
+    const req = https.request(url, { method: 'HEAD', timeout: 4000 }, (res) => {
+      // GitHub returns 302 → avatars.githubusercontent.com for valid users
+      // or 404 for non-existent ones
+      if (res.statusCode >= 200 && res.statusCode < 400) {
+        // Return the final avatar URL (follow the redirect location)
+        const avatarUrl = res.headers.location || `https://github.com/${encodeURIComponent(username)}.png?size=64`;
+        resolve(avatarUrl);
+      } else {
+        resolve(null);
+      }
+      res.resume(); // drain response
+    });
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+    req.end();
+  });
+}
+
+async function resolveAvatar(author, email) {
+  const key = `${email || ''}||${author || ''}`;
+  if (avatarCache.has(key)) return avatarCache.get(key);
+  if (avatarPending.has(key)) return avatarPending.get(key);
+
+  const work = (async () => {
+    // Step 1: Extract username from GitHub noreply email
+    const noreplyMatch = (email || '').match(/^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i);
+    if (noreplyMatch) {
+      const url = await probeGitHubAvatar(noreplyMatch[1]);
+      if (url) { avatarCache.set(key, url); avatarPending.delete(key); return url; }
+    }
+
+    // Step 2: Try author name as GitHub username (strip spaces, lowercase)
+    if (author) {
+      const guess = author.replace(/\s+/g, '').toLowerCase();
+      const url = await probeGitHubAvatar(guess);
+      if (url) { avatarCache.set(key, url); avatarPending.delete(key); return url; }
+    }
+
+    // Step 3: Try email local part as username
+    if (email && !email.includes('noreply')) {
+      const localPart = email.split('@')[0];
+      if (localPart && localPart !== author?.replace(/\s+/g, '').toLowerCase()) {
+        const url = await probeGitHubAvatar(localPart);
+        if (url) { avatarCache.set(key, url); avatarPending.delete(key); return url; }
+      }
+    }
+
+    // All steps failed
+    avatarCache.set(key, null);
+    avatarPending.delete(key);
+    return null;
+  })();
+
+  avatarPending.set(key, work);
+  return work;
+}
+
+async function resolveAvatarsBatch(authors) {
+  // authors = [{ author, email }, ...]
+  // Dedupe by key
+  const unique = new Map();
+  for (const a of authors) {
+    const key = `${a.email || ''}||${a.author || ''}`;
+    if (!unique.has(key)) unique.set(key, a);
+  }
+
+  const results = {};
+  const promises = [];
+  for (const [key, a] of unique) {
+    promises.push(
+      resolveAvatar(a.author, a.email).then(url => {
+        results[key] = url;
+      })
+    );
+  }
+  await Promise.all(promises);
+  return results;
+}
+
 // ---- Claude API Streaming ---- //
 const activeStreams = new Map(); // streamId → AbortController
 
@@ -304,15 +390,42 @@ function getGitStatus(dirPath) {
   }
 }
 
-function getGitLog(dirPath, count = 20) {
+function getGitLog(dirPath, count = 20, skip = 0) {
   try {
+    // Single git log call with numstat — uses @@@ as commit delimiter
+    const SEP = '@@@COMMIT@@@';
+    const skipArg = skip > 0 ? ` --skip=${skip}` : '';
     const result = execSync(
-      `git log --all --pretty=format:"%H|||%h|||%s|||%an|||%ar|||%P|||%D" -${count}`,
-      { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
+      `git log --all --pretty=format:"${SEP}%H|||%h|||%s|||%an|||%ae|||%ar|||%aI|||%P|||%D" --numstat -${count}${skipArg}`,
+      { cwd: dirPath, encoding: 'utf8', timeout: 10000 }
     );
-    return result.split('\n').filter(Boolean).map(line => {
-      const [hash, short, message, author, date, parents, refs] = line.split('|||');
-      return { hash, short, message, author, date, parents: parents ? parents.split(' ') : [], refs: refs || '' };
+
+    const blocks = result.split(SEP).filter(Boolean);
+    return blocks.map(block => {
+      const lines = block.split('\n');
+      const headerLine = lines[0];
+      const [hash, short, message, author, email, date, isoDate, parents, refs] = headerLine.split('|||');
+
+      // Parse numstat lines (format: insertions\tdeletions\tfilename)
+      let filesChanged = 0, insertions = 0, deletions = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const l = lines[i].trim();
+        if (!l) continue;
+        const parts = l.split('\t');
+        if (parts.length >= 3) {
+          filesChanged++;
+          insertions += parseInt(parts[0]) || 0;
+          deletions += parseInt(parts[1]) || 0;
+        }
+      }
+
+      return {
+        hash, short, message, author, email: email || '',
+        date, isoDate: isoDate || '',
+        parents: parents ? parents.split(' ') : [],
+        refs: refs || '',
+        filesChanged, insertions, deletions,
+      };
     });
   } catch {
     return [];
@@ -579,7 +692,8 @@ function registerIPC() {
 
   // Git
   ipcMain.handle('git:status', async (_event, dirPath) => getGitStatus(dirPath));
-  ipcMain.handle('git:log', async (_event, dirPath, count) => getGitLog(dirPath, count));
+  ipcMain.handle('git:log', async (_event, dirPath, count, skip) => getGitLog(dirPath, count, skip));
+  ipcMain.handle('git:resolveAvatars', async (_event, authors) => resolveAvatarsBatch(authors));
   ipcMain.handle('git:diff', async (_event, dirPath, filePath) => getGitDiff(dirPath, filePath));
 
   ipcMain.handle('git:stage', async (_event, dirPath, filePath) => {

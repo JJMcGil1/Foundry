@@ -292,7 +292,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           </AnimatePresence>
           <div className={styles.editorContainer} ref={editorContainerRef}>
             <div className={`${styles.editorArea} ${terminalMaximized ? styles.editorAreaHidden : ''}`}>
-              {showSettings ? (
+              {/* Keep both mounted; toggle visibility so SettingsPage retains state across open/close */}
+              <div style={{ display: showSettings ? 'contents' : 'none' }}>
                 <SettingsPage
                   profile={profile}
                   onClose={() => setShowSettings(false)}
@@ -309,14 +310,15 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                     });
                   }}
                 />
-              ) : (
+              </div>
+              <div style={{ display: showSettings ? 'none' : 'contents' }}>
                 <EditorArea
                   tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
                   onCloseTab={handleCloseTab} onContentChange={handleContentChange}
                   onSaveFile={handleSaveFile} onOpenFolder={handleOpenFolder} project={project}
                   onReorderTabs={setOpenTabs}
                 />
-              )}
+              </div>
             </div>
             <AnimatePresence initial={false}>
               {terminalVisible && !showSettings && (

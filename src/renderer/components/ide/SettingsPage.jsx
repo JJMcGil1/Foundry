@@ -272,8 +272,12 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
     }
   }, []);
 
+  // ── Lazy-load: only fetch GitHub token when navigating to GitHub tab ──
+  const githubLoadedRef = useRef(false);
   useEffect(() => {
-    async function loadSettings() {
+    if (activeSection !== 'github' || githubLoadedRef.current) return;
+    githubLoadedRef.current = true;
+    async function loadGithubSettings() {
       const token = await window.foundry?.getSetting('github_token');
       if (token) {
         setGithubToken(token);
@@ -281,37 +285,41 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
         validateToken(token);
       }
     }
-    loadSettings();
-  }, [validateToken]);
+    loadGithubSettings();
+  }, [activeSection, validateToken]);
 
-  // Load provider settings
+  // ── Lazy-load: only fetch provider settings when navigating to Providers tab ──
+  const providersLoadedRef = useRef(false);
   useEffect(() => {
+    if (activeSection !== 'providers' || providersLoadedRef.current) return;
+    providersLoadedRef.current = true;
     async function loadProviderSettings() {
-      // Detect Claude CLI
+      // Fire all independent fetches in parallel — don't block each other
       setClaudeDetecting(true);
-      try {
-        const cliStatus = await window.foundry?.claudeDetectAuth();
-        if (cliStatus) setClaudeCliStatus(cliStatus);
-      } catch { /* ignore */ }
+
+      const [cliResult, keyResult, modelResult] = await Promise.allSettled([
+        window.foundry?.claudeDetectAuth(),
+        window.foundry?.claudeGetApiKey(),
+        window.foundry?.claudeGetModel(),
+      ]);
+
+      // Apply results from parallel fetches
+      if (cliResult.status === 'fulfilled' && cliResult.value) {
+        setClaudeCliStatus(cliResult.value);
+      }
       setClaudeDetecting(false);
 
-      // Load saved API key
-      try {
-        const key = await window.foundry?.claudeGetApiKey();
-        if (key) {
-          setClaudeApiKey(key);
-          setClaudeApiKeyInitial(key);
-          setClaudeKeyValid(true); // Assume valid if saved
-        }
-      } catch { /* ignore */ }
+      if (keyResult.status === 'fulfilled' && keyResult.value) {
+        setClaudeApiKey(keyResult.value);
+        setClaudeApiKeyInitial(keyResult.value);
+        setClaudeKeyValid(true);
+      }
 
-      // Load selected model
-      try {
-        const model = await window.foundry?.claudeGetModel();
-        if (model) setSelectedModel(model);
-      } catch { /* ignore */ }
+      if (modelResult.status === 'fulfilled' && modelResult.value) {
+        setSelectedModel(modelResult.value);
+      }
 
-      // Fetch real model IDs from CLI (background, non-blocking)
+      // Fetch real model IDs in background (non-blocking, after UI is already rendered)
       try {
         setModelsLoading(true);
         const result = await window.foundry?.claudeFetchModels();
@@ -319,7 +327,6 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
           setClaudeModels(prev => prev.map(m => {
             const match = result.models.find(r => r.alias === m.id);
             if (match) {
-              // Format resolved ID into a nice label: "claude-sonnet-4-6" → "Claude Sonnet 4.6"
               const parts = match.resolvedId.replace('claude-', '').split('-');
               const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
               const version = parts.slice(1).filter(p => !p.match(/^\d{8}$/)).join('.');
@@ -332,7 +339,7 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
       setModelsLoading(false);
     }
     loadProviderSettings();
-  }, []);
+  }, [activeSection]);
 
   const handleSaveToken = async () => {
     setGithubLoading(true);

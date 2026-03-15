@@ -104,25 +104,18 @@ function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusCo
 }
 
 /* ── Commit Graph ── */
+const COMMITS_PAGE_SIZE = 30;
 const GRAPH_COLORS = ['#61AFEF', '#C678DD', '#98C379', '#E5C07B', '#E06C75', '#56B6C2'];
 
 function buildGraph(commits) {
-  // Assign each commit a lane (column) for the graph visualization
-  const lanes = []; // array of active branch hashes occupying each lane
+  const lanes = [];
   const rows = [];
 
   for (const commit of commits) {
     let lane = -1;
-
-    // Find if this commit is already expected in a lane
     for (let i = 0; i < lanes.length; i++) {
-      if (lanes[i] === commit.hash) {
-        lane = i;
-        break;
-      }
+      if (lanes[i] === commit.hash) { lane = i; break; }
     }
-
-    // If not found, take the first empty lane or append
     if (lane === -1) {
       const empty = lanes.indexOf(null);
       lane = empty !== -1 ? empty : lanes.length;
@@ -130,16 +123,13 @@ function buildGraph(commits) {
       else lanes.push(commit.hash);
     }
 
-    // Build merge lines: for each parent, find or assign a lane
     const parentLanes = [];
     for (let pi = 0; pi < commit.parents.length; pi++) {
       const parentHash = commit.parents[pi];
       if (pi === 0) {
-        // First parent continues in the same lane
         lanes[lane] = parentHash;
         parentLanes.push(lane);
       } else {
-        // Merge parent — find existing lane or open a new one
         let pLane = lanes.indexOf(parentHash);
         if (pLane === -1) {
           const empty = lanes.indexOf(null);
@@ -152,12 +142,7 @@ function buildGraph(commits) {
       }
     }
 
-    // If commit has no parents (root), free the lane
-    if (commit.parents.length === 0) {
-      lanes[lane] = null;
-    }
-
-    // Trim trailing nulls
+    if (commit.parents.length === 0) lanes[lane] = null;
     while (lanes.length > 0 && lanes[lanes.length - 1] === null) lanes.pop();
 
     rows.push({
@@ -172,11 +157,160 @@ function buildGraph(commits) {
   return rows;
 }
 
-function CommitGraph({ commits }) {
+function parseRefs(refsStr) {
+  if (!refsStr) return { branches: [], tags: [], isHead: false };
+  const parts = refsStr.split(',').map(s => s.trim()).filter(Boolean);
+  const branches = [];
+  const tags = [];
+  let isHead = false;
+
+  for (const part of parts) {
+    if (part === 'HEAD') {
+      isHead = true;
+    } else if (part.startsWith('HEAD -> ')) {
+      isHead = true;
+      branches.push(part.replace('HEAD -> ', ''));
+    } else if (part.startsWith('tag: ')) {
+      tags.push(part.replace('tag: ', ''));
+    } else if (part.startsWith('origin/')) {
+      // skip remote-only refs if local already shown
+      if (!branches.includes(part.replace('origin/', ''))) {
+        branches.push(part);
+      }
+    } else {
+      branches.push(part);
+    }
+  }
+  return { branches, tags, isHead };
+}
+
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getAvatarColor(name) {
+  let hash = 0;
+  for (let i = 0; i < (name || '').length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = ['#61AFEF', '#C678DD', '#98C379', '#E5C07B', '#E06C75', '#56B6C2', '#D19A66', '#BE5046'];
+  return colors[Math.abs(hash) % colors.length];
+}
+
+function formatFullDate(isoDate) {
+  if (!isoDate) return '';
+  try {
+    const d = new Date(isoDate);
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) + ' at ' +
+      d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+  } catch { return isoDate; }
+}
+
+function GitAvatar({ author, avatarUrl, size = 16, className }) {
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={author}
+        title={author}
+        className={className}
+        style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }}
+      />
+    );
+  }
+  return (
+    <div
+      className={className}
+      title={author}
+      style={{ width: size, height: size, borderRadius: '50%', background: getAvatarColor(author), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: Math.max(7, size * 0.4), fontWeight: 700, color: '#fff', flexShrink: 0, letterSpacing: '0.02em' }}
+    >
+      {getInitials(author)}
+    </div>
+  );
+}
+
+function CommitHoverCard({ row, avatarUrl, style }) {
+  const { branches, tags } = parseRefs(row.refs);
+  const filesChanged = row.filesChanged || 0;
+  const insertions = row.insertions || 0;
+  const deletions = row.deletions || 0;
+  return (
+    <motion.div
+      className={styles.commitCard}
+      style={style}
+      initial={{ opacity: 0, x: -8 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -8 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
+    >
+      <div className={styles.commitCardHeader}>
+        <span className={styles.commitCardHash}>{row.short}</span>
+        <span className={styles.commitCardDate}>{row.date}</span>
+        {row.isoDate && <span className={styles.commitCardFullDate}>({formatFullDate(row.isoDate)})</span>}
+      </div>
+      <div className={styles.commitCardMessage}>{row.message}</div>
+      {(branches.length > 0 || tags.length > 0) && (
+        <div className={styles.commitCardRefs}>
+          {branches.map(b => (
+            <span key={b} className={`${styles.refBadge} ${styles.refBranch}`}>
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M9.5 3.25a2.25 2.25 0 1 1 3 2.122V6A2.5 2.5 0 0 1 10 8.5H6a1 1 0 0 0-1 1v1.128a2.251 2.251 0 1 1-1.5 0V5.372a2.25 2.25 0 1 1 1.5 0v1.836A2.492 2.492 0 0 1 6 7h4a1 1 0 0 0 1-1v-.628A2.25 2.25 0 0 1 9.5 3.25Z"/></svg>
+              {b}
+            </span>
+          ))}
+          {tags.map(t => (
+            <span key={t} className={`${styles.refBadge} ${styles.refTag}`}>
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M1 7.775V2.75C1 1.784 1.784 1 2.75 1h5.025c.464 0 .91.184 1.238.513l6.25 6.25a1.75 1.75 0 0 1 0 2.474l-5.026 5.026a1.75 1.75 0 0 1-2.474 0l-6.25-6.25A1.752 1.752 0 0 1 1 7.775ZM6 5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg>
+              {t}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className={styles.commitCardAuthor}>
+        <GitAvatar author={row.author} avatarUrl={avatarUrl} size={22} />
+        <span className={styles.commitCardAuthorName}>{row.author}</span>
+      </div>
+      <div className={styles.commitCardStats}>
+        <span className={styles.commitCardFiles}>{filesChanged} file{filesChanged !== 1 ? 's' : ''}</span>
+        <span className={styles.commitCardIns}>+{insertions}</span>
+        <span className={styles.commitCardDel}>-{deletions}</span>
+      </div>
+    </motion.div>
+  );
+}
+
+function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore }) {
   const [graphOpen, setGraphOpen] = useState(true);
-  const [graphHeight, setGraphHeight] = useState(240);
+  const [graphHeight, setGraphHeight] = useState(280);
   const [isResizing, setIsResizing] = useState(false);
+  const [hoveredHash, setHoveredHash] = useState(null);
+  const [cardHash, setCardHash] = useState(null);
+  const [cardPos, setCardPos] = useState(null);
+  const [avatarMap, setAvatarMap] = useState({});
+  const graphRef = useRef(null);
+  const cardTimerRef = useRef(null);
   const rows = useMemo(() => buildGraph(commits), [commits]);
+
+  // Resolve GitHub avatars for all unique authors
+  useEffect(() => {
+    if (!commits.length) return;
+    const uniqueAuthors = [];
+    const seen = new Set();
+    for (const c of commits) {
+      const key = `${c.email || ''}||${c.author || ''}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueAuthors.push({ author: c.author, email: c.email });
+      }
+    }
+    let cancelled = false;
+    window.foundry?.gitResolveAvatars?.(uniqueAuthors).then(result => {
+      if (!cancelled && result) setAvatarMap(prev => ({ ...prev, ...result }));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [commits]);
 
   const handleResizeStart = useCallback((e) => {
     e.preventDefault();
@@ -201,13 +335,54 @@ function CommitGraph({ commits }) {
     document.addEventListener('mouseup', onUp);
   }, [graphHeight]);
 
+  // Instant hover for dot magnification + row highlight
+  const handleRowMouseEnter = useCallback((e, hash) => {
+    setHoveredHash(hash);
+    // Delayed flyout card
+    clearTimeout(cardTimerRef.current);
+    const target = e.currentTarget;
+    if (!target) return;
+    const rect = target.getBoundingClientRect();
+    cardTimerRef.current = setTimeout(() => {
+      const viewportH = window.innerHeight;
+      const viewportW = window.innerWidth;
+      const cardW = 340;
+      const cardEstimatedH = 180;
+      let left = rect.right + 8;
+      if (left + cardW > viewportW - 10) left = viewportW - cardW - 10;
+      let top = rect.top - 8;
+      if (top + cardEstimatedH > viewportH - 10) top = viewportH - cardEstimatedH - 10;
+      if (top < 10) top = 10;
+      setCardPos({ top, left });
+      setCardHash(hash);
+    }, 400);
+  }, []);
+
+  const handleRowMouseLeave = useCallback(() => {
+    setHoveredHash(null);
+    clearTimeout(cardTimerRef.current);
+    setCardHash(null);
+  }, []);
+
+  // Infinite scroll — load more when near bottom
+  const handleScroll = useCallback((e) => {
+    const el = e.target;
+    const threshold = 80;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < threshold) {
+      onLoadMore?.();
+    }
+  }, [onLoadMore]);
+
   if (commits.length === 0) return null;
 
   const LANE_W = 14;
-  const ROW_H = 24;
-  const DOT_R = 3;
+  const ROW_H = 44;
+  const DOT_R = 3.5;
   const maxLanes = Math.max(rows.reduce((m, r) => Math.max(m, r.totalLanes), 1), 1);
   const graphW = maxLanes * LANE_W + 6;
+
+  const getAvatarUrl = (row) => avatarMap[`${row.email || ''}||${row.author || ''}`] || null;
+  const cardRow = cardHash ? rows.find(r => r.hash === cardHash) : null;
 
   return (
     <div className={styles.graphSection} style={graphOpen ? { flexShrink: 0 } : undefined}>
@@ -220,7 +395,7 @@ function CommitGraph({ commits }) {
         >
           <FiChevronRight size={14} />
         </motion.span>
-        <span>Commit Graph</span>
+        <span>Graph</span>
         <div className={styles.sectionActions}>
           <span className={styles.badge}>{commits.length}</span>
         </div>
@@ -228,20 +403,28 @@ function CommitGraph({ commits }) {
       <AnimatePresence initial={false}>
         {graphOpen && (
           <motion.div
+            ref={graphRef}
             className={styles.commitGraph}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: graphHeight, opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={isResizing ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
-            style={{ overflow: 'auto' }}
+            style={{ overflow: 'auto', position: 'relative' }}
+            onScroll={handleScroll}
           >
             {rows.map((row, ri) => {
               const color = GRAPH_COLORS[row.lane % GRAPH_COLORS.length];
-              const isHead = row.refs && row.refs.includes('HEAD');
+              const { branches, tags, isHead } = parseRefs(row.refs);
+              const hasRefs = branches.length > 0 || tags.length > 0;
               const isLast = ri === rows.length - 1;
 
               return (
-                <div key={row.hash} className={styles.graphRow} title={`${row.short} — ${row.message}\n${row.author}, ${row.date}`}>
+                <div
+                  key={row.hash}
+                  className={`${styles.graphRow} ${hoveredHash === row.hash ? styles.graphRowHovered : ''}`}
+                  onMouseEnter={(e) => handleRowMouseEnter(e, row.hash)}
+                  onMouseLeave={handleRowMouseLeave}
+                >
                   <svg className={styles.graphSvg} width={graphW} height={ROW_H}>
                     {/* Vertical lane lines for all active lanes */}
                     {row.activeLanes.map((laneHash, li) => {
@@ -255,11 +438,10 @@ function CommitGraph({ commits }) {
                           y2={isLast && li === row.lane ? ROW_H / 2 : ROW_H}
                           stroke={GRAPH_COLORS[li % GRAPH_COLORS.length]}
                           strokeWidth={1.5}
-                          opacity={0.4}
+                          opacity={0.35}
                         />
                       );
                     })}
-                    {/* Top half of this commit's lane (connect from above) */}
                     {ri > 0 && (
                       <line
                         x1={row.lane * LANE_W + LANE_W / 2}
@@ -271,7 +453,6 @@ function CommitGraph({ commits }) {
                         opacity={0.6}
                       />
                     )}
-                    {/* Bottom half — connect to first parent */}
                     {row.parents.length > 0 && (
                       <line
                         x1={row.lane * LANE_W + LANE_W / 2}
@@ -283,7 +464,6 @@ function CommitGraph({ commits }) {
                         opacity={0.6}
                       />
                     )}
-                    {/* Merge lines to additional parents */}
                     {row.parentLanes.slice(1).map((pLane, pi) => {
                       const x1 = row.lane * LANE_W + LANE_W / 2;
                       const x2 = pLane * LANE_W + LANE_W / 2;
@@ -298,22 +478,87 @@ function CommitGraph({ commits }) {
                         />
                       );
                     })}
-                    {/* Commit dot */}
-                    <circle
-                      cx={row.lane * LANE_W + LANE_W / 2}
-                      cy={ROW_H / 2}
-                      r={isHead ? DOT_R + 1 : DOT_R}
-                      fill={isHead ? color : 'var(--surface-1)'}
-                      stroke={color}
-                      strokeWidth={isHead ? 2 : 1.5}
-                    />
+                    {/* Commit dot — magnifies on row hover */}
+                    {(() => {
+                      const isHovered = hoveredHash === row.hash;
+                      const cx = row.lane * LANE_W + LANE_W / 2;
+                      const cy = ROW_H / 2;
+                      const baseR = isHead ? DOT_R + 1.5 : DOT_R;
+                      const hoverR = baseR + 3;
+                      const glowR = hoverR + 4;
+                      return (
+                        <>
+                          {/* Glow ring */}
+                          <circle
+                            className={styles.graphDotGlow}
+                            cx={cx} cy={cy}
+                            r={isHovered ? glowR : baseR}
+                            fill="none"
+                            stroke={color}
+                            strokeWidth={1.5}
+                            opacity={isHovered ? 0.3 : 0}
+                          />
+                          {/* Main dot */}
+                          <circle
+                            className={styles.graphDot}
+                            cx={cx} cy={cy}
+                            r={isHovered ? hoverR : baseR}
+                            fill={isHovered || isHead ? color : 'var(--surface-1)'}
+                            stroke={color}
+                            strokeWidth={isHovered ? 2 : (isHead ? 2.5 : 1.5)}
+                          />
+                        </>
+                      );
+                    })()}
                   </svg>
-                  <span className={styles.graphMsg}>{row.message}</span>
-                  <span className={styles.graphDate}>{row.date}</span>
+                  <div className={styles.graphContent}>
+                    <div className={styles.graphLine1}>
+                      {hasRefs && (
+                        <div className={styles.graphRefs}>
+                          {branches.map(b => (
+                            <span key={b} className={`${styles.refBadgeInline} ${styles.refBranchInline}`} style={{ borderColor: color + '60', color }}>
+                              {b}
+                            </span>
+                          ))}
+                          {tags.map(t => (
+                            <span key={t} className={`${styles.refBadgeInline} ${styles.refTagInline}`}>
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      <span className={styles.graphMsg}>{row.message}</span>
+                    </div>
+                    <div className={styles.graphLine2}>
+                      <GitAvatar author={row.author} avatarUrl={getAvatarUrl(row)} size={14} />
+                      <span className={styles.graphDate}>{row.date}</span>
+                    </div>
+                  </div>
                 </div>
               );
             })}
+
+            {/* Infinite scroll loading indicator */}
+            {loadingMore && (
+              <div className={styles.graphLoadMore}>
+                <FiRefreshCw size={12} className={styles.spinning} />
+                <span>Loading…</span>
+              </div>
+            )}
+            {!hasMore && commits.length > COMMITS_PAGE_SIZE && (
+              <div className={styles.graphLoadMore}>
+                <span>All commits loaded</span>
+              </div>
+            )}
+
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Hover card — flies out to the right of the sidebar */}
+      <AnimatePresence>
+        {cardRow && cardPos && (
+          <CommitHoverCard row={cardRow} avatarUrl={getAvatarUrl(cardRow)} style={{ position: 'fixed', top: cardPos.top, left: cardPos.left, width: 340 }} />
         )}
       </AnimatePresence>
     </div>
@@ -332,6 +577,8 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   const [stagedOpen, setStagedOpen] = useState(true);
   const [changesOpen, setChangesOpen] = useState(true);
   const [commits, setCommits] = useState([]);
+  const [hasMoreCommits, setHasMoreCommits] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const commitInputRef = useRef(null);
 
   // Fetch commit log on mount and after refreshes
@@ -339,18 +586,38 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
     if (!projectPath || !gitStatus.isRepo) return;
     let cancelled = false;
     (async () => {
-      const log = await window.foundry?.gitLog(projectPath, 30);
-      if (!cancelled && log) setCommits(log);
+      const log = await window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE);
+      if (!cancelled && log) {
+        setCommits(log);
+        setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
+      }
     })();
     return () => { cancelled = true; };
   }, [projectPath, gitStatus]);
 
   const refreshGit = async () => {
     onRefreshGit?.();
-    // Also refresh commits
-    const log = await window.foundry?.gitLog(projectPath, 30);
-    if (log) setCommits(log);
+    const log = await window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE);
+    if (log) {
+      setCommits(log);
+      setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
+    }
   };
+
+  const loadMoreCommits = useCallback(async () => {
+    if (loadingMore || !hasMoreCommits || !projectPath) return;
+    setLoadingMore(true);
+    try {
+      const more = await window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE, commits.length);
+      if (more && more.length > 0) {
+        setCommits(prev => [...prev, ...more]);
+        setHasMoreCommits(more.length >= COMMITS_PAGE_SIZE);
+      } else {
+        setHasMoreCommits(false);
+      }
+    } catch { setHasMoreCommits(false); }
+    setLoadingMore(false);
+  }, [loadingMore, hasMoreCommits, projectPath, commits.length]);
 
   const handleStageFile = async (filePath) => {
     await window.foundry?.gitStage(projectPath, filePath);
@@ -569,7 +836,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
 
       {staged.length > 0 && (
         <>
-          <button className={styles.sectionLabel} onClick={() => setStagedOpen(!stagedOpen)}>
+          <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setStagedOpen(!stagedOpen)}>
             <motion.span
               className={styles.sectionChevron}
               animate={{ rotate: stagedOpen ? 90 : 0 }}
@@ -584,7 +851,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
               </button>
               <span className={styles.badge}>{staged.length}</span>
             </div>
-          </button>
+          </div>
           <AnimatePresence initial={false}>
             {stagedOpen && (
               <motion.div
@@ -604,7 +871,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
         </>
       )}
 
-      <button className={styles.sectionLabel} onClick={() => setChangesOpen(!changesOpen)}>
+      <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setChangesOpen(!changesOpen)}>
         <motion.span
           className={styles.sectionChevron}
           animate={{ rotate: changesOpen ? 90 : 0 }}
@@ -626,7 +893,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
           )}
           {unstaged.length > 0 && <span className={styles.badge}>{unstaged.length}</span>}
         </div>
-      </button>
+      </div>
       <AnimatePresence initial={false}>
         {changesOpen && (
           <motion.div
@@ -649,7 +916,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
         )}
       </AnimatePresence>
 
-      <CommitGraph commits={commits} projectPath={projectPath} />
+      <CommitGraph commits={commits} projectPath={projectPath} onLoadMore={loadMoreCommits} hasMore={hasMoreCommits} loadingMore={loadingMore} />
     </div>
   );
 }
