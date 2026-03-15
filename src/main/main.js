@@ -1645,10 +1645,11 @@ app.on('ready', async () => {
   await initDatabase();
   registerIPC();
   buildAppMenu();
-  const firstWindow = createWindow();
+  createWindow();
 
-  // Initialize auto-updater with the first window
-  initAutoUpdater(firstWindow);
+  // Initialize auto-updater — IPC handlers register for both dev and prod,
+  // auto-polling only starts in production (app.isPackaged)
+  initAutoUpdater();
 
   // macOS dock menu with "New Window"
   if (process.platform === 'darwin') {

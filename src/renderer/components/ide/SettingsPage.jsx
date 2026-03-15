@@ -138,9 +138,17 @@ function AboutSection() {
     setUpdateStatus('checking');
     try {
       if (window.foundry?.updater?.checkForUpdates) {
-        const result = await window.foundry.updater.checkForUpdates();
+        // Race against a 15s timeout so the UI never gets stuck
+        const result = await Promise.race([
+          window.foundry.updater.checkForUpdates(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 15000)),
+        ]);
         if (result?.update) {
           setUpdateStatus('updateAvailable');
+        } else if (result?.error) {
+          console.warn('[updater] Check error:', result.error);
+          setUpdateStatus('upToDate');
+          setTimeout(() => setUpdateStatus('idle'), 3000);
         } else {
           setUpdateStatus('upToDate');
           setTimeout(() => setUpdateStatus('idle'), 3000);
@@ -149,7 +157,8 @@ function AboutSection() {
         setUpdateStatus('upToDate');
         setTimeout(() => setUpdateStatus('idle'), 3000);
       }
-    } catch {
+    } catch (err) {
+      console.warn('[updater] Check failed:', err);
       setUpdateStatus('idle');
     }
   };

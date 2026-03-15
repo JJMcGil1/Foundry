@@ -3,6 +3,9 @@
  *
  * Polls GitHub Releases API, downloads updates, verifies SHA256 hashes,
  * and installs per-platform. No electron-updater or code-signing required.
+ *
+ * IPC handlers are ALWAYS registered (dev + prod) so the Settings UI works.
+ * Auto-polling only runs in production (app.isPackaged).
  */
 
 const { app, ipcMain, BrowserWindow } = require('electron');
@@ -26,24 +29,26 @@ const UPDATE_CONFIG = {
 };
 
 // ── State ───────────────────────────────────────────────────
-let mainWin = null;
 let checkTimer = null;
 let currentUpdateInfo = null;
 let downloadedFilePath = null;
 let isDownloading = false;
+let ipcRegistered = false;
 
 // ── Public API ──────────────────────────────────────────────
 
-function initAutoUpdater(win) {
-  mainWin = win;
-
-  // Only run in production
-  if (!app.isPackaged) {
-    console.log('[updater] Skipping — dev mode');
-    return;
+function initAutoUpdater() {
+  // ALWAYS register IPC so Settings → About → "Check for updates" works in dev too
+  if (!ipcRegistered) {
+    registerIPC();
+    ipcRegistered = true;
   }
 
-  registerIPC();
+  // Only auto-poll in production
+  if (!app.isPackaged) {
+    console.log('[updater] Dev mode — IPC registered, auto-poll disabled');
+    return;
+  }
 
   if (UPDATE_CONFIG.autoCheck) {
     setTimeout(() => checkForUpdates(), UPDATE_CONFIG.startupDelay);
@@ -91,8 +96,12 @@ function registerIPC() {
 
 async function checkForUpdates() {
   try {
+    console.log('[updater] Checking for updates...');
     const release = await fetchGitHubRelease();
-    if (!release) return { update: false };
+    if (!release) {
+      console.log('[updater] No releases found');
+      return { update: false };
+    }
 
     const asset = getPlatformAsset(release.assets);
     if (!asset) {
@@ -104,8 +113,10 @@ async function checkForUpdates() {
     const remoteVersion = release.tag_name.replace(/^v/, '');
     const localVersion = app.getVersion();
 
+    console.log('[updater] Local:', localVersion, '| Remote:', remoteVersion);
+
     if (!isNewerVersion(remoteVersion, localVersion)) {
-      console.log('[updater] Up to date:', localVersion, '>=', remoteVersion);
+      console.log('[updater] Up to date');
       return { update: false, version: localVersion };
     }
 
@@ -121,7 +132,8 @@ async function checkForUpdates() {
       sha256: latestJson?.platforms?.[getPlatformKey()]?.sha256 || null,
     };
 
-    sendToRenderer('update:available', currentUpdateInfo);
+    // Send to ALL open windows
+    broadcastToRenderers('update:available', currentUpdateInfo);
     return { update: true, ...currentUpdateInfo };
   } catch (err) {
     console.error('[updater] Check failed:', err.message);
@@ -142,10 +154,12 @@ async function downloadUpdate(updateInfo) {
     const destPath = path.join(tmpDir, updateInfo.fileName);
 
     // Clean up previous download
-    if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+    if (fs.existsSync(destPath)) {
+      try { fs.unlinkSync(destPath); } catch {}
+    }
 
     await downloadFile(updateInfo.downloadUrl, destPath, (progress) => {
-      sendToRenderer('update:download-progress', progress);
+      broadcastToRenderers('update:download-progress', progress);
     });
 
     // Hash verification
@@ -154,7 +168,7 @@ async function downloadUpdate(updateInfo) {
       if (fileHash !== updateInfo.sha256) {
         fs.unlinkSync(destPath);
         const err = 'Hash mismatch — download may be corrupted';
-        sendToRenderer('update:error', { message: err });
+        broadcastToRenderers('update:error', { message: err });
         isDownloading = false;
         return { error: err };
       }
@@ -165,12 +179,12 @@ async function downloadUpdate(updateInfo) {
 
     downloadedFilePath = destPath;
     isDownloading = false;
-    sendToRenderer('update:downloaded', { filePath: destPath });
+    broadcastToRenderers('update:downloaded', { filePath: destPath });
     return { success: true, filePath: destPath };
   } catch (err) {
     isDownloading = false;
     console.error('[updater] Download failed:', err.message);
-    sendToRenderer('update:error', { message: err.message });
+    broadcastToRenderers('update:error', { message: err.message });
     return { error: err.message };
   }
 }
@@ -196,7 +210,7 @@ async function installUpdate(filePath) {
     }
   } catch (err) {
     console.error('[updater] Install failed:', err.message);
-    sendToRenderer('update:error', { message: err.message });
+    broadcastToRenderers('update:error', { message: err.message });
     return { error: err.message };
   }
 }
@@ -310,7 +324,7 @@ function fetchGitHubRelease() {
       res.on('data', (chunk) => body += chunk);
       res.on('end', () => {
         if (res.statusCode === 404) return resolve(null);
-        if (res.statusCode !== 200) return reject(new Error(`GitHub API: ${res.statusCode}`));
+        if (res.statusCode !== 200) return reject(new Error(`GitHub API: ${res.statusCode} — ${body.substring(0, 200)}`));
         try { resolve(JSON.parse(body)); }
         catch (e) { reject(e); }
       });
@@ -344,6 +358,9 @@ function downloadJSON(url, callback) {
     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
       return downloadJSON(res.headers.location, callback);
     }
+    if (res.statusCode !== 200) {
+      return callback(new Error(`HTTP ${res.statusCode}`));
+    }
     let body = '';
     res.on('data', (chunk) => body += chunk);
     res.on('end', () => {
@@ -359,6 +376,18 @@ function downloadJSON(url, callback) {
 
 function downloadFile(url, destPath, onProgress) {
   return new Promise((resolve, reject) => {
+    let settled = false;
+    const timeout = setTimeout(() => {
+      if (!settled) { settled = true; reject(new Error('Download timeout')); }
+    }, UPDATE_CONFIG.downloadTimeout);
+
+    const done = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (err) reject(err); else resolve();
+    };
+
     const doRequest = (reqUrl) => {
       const mod = reqUrl.startsWith('https') ? https : http;
       mod.get(reqUrl, { headers: { 'User-Agent': `Foundry/${app.getVersion()}` } }, (res) => {
@@ -368,7 +397,7 @@ function downloadFile(url, destPath, onProgress) {
         }
 
         if (res.statusCode !== 200) {
-          return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+          return done(new Error(`Download failed: HTTP ${res.statusCode}`));
         }
 
         const total = parseInt(res.headers['content-length'], 10) || 0;
@@ -387,16 +416,15 @@ function downloadFile(url, destPath, onProgress) {
         });
 
         res.pipe(file);
-        file.on('finish', () => { file.close(); resolve(); });
-        file.on('error', (err) => { fs.unlinkSync(destPath); reject(err); });
-      }).on('error', reject);
+        file.on('finish', () => { file.close(); done(); });
+        file.on('error', (err) => {
+          try { fs.unlinkSync(destPath); } catch {}
+          done(err);
+        });
+      }).on('error', done);
     };
 
-    const timeout = setTimeout(() => reject(new Error('Download timeout')), UPDATE_CONFIG.downloadTimeout);
     doRequest(url);
-    // Clear timeout on resolve — we wrap it
-    const origResolve = resolve;
-    resolve = (...args) => { clearTimeout(timeout); origResolve(...args); };
   });
 }
 
@@ -444,9 +472,17 @@ function isNewerVersion(remote, local) {
   return false;
 }
 
-function sendToRenderer(channel, data) {
-  if (mainWin && !mainWin.isDestroyed()) {
-    mainWin.webContents.send(channel, data);
+/**
+ * Send an IPC event to ALL open BrowserWindows.
+ * This ensures update notifications reach every window,
+ * not just the first one created at startup.
+ */
+function broadcastToRenderers(channel, data) {
+  const windows = BrowserWindow.getAllWindows();
+  for (const win of windows) {
+    if (!win.isDestroyed()) {
+      win.webContents.send(channel, data);
+    }
   }
 }
 
