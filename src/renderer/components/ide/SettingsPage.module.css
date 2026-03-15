@@ -1280,3 +1280,13 @@
   color: var(--accent);
   flex-shrink: 0;
 }
+
+/* ── Spin animation ── */
+.spin {
+  animation: settingsSpin 1s linear infinite;
+}
+
+@keyframes settingsSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

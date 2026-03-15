@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import AccountSetup from './components/AccountSetup';
 import IDELayout from './components/ide/IDELayout';
+import UpdateToast from './components/ide/UpdateToast';
 
 function applyTheme(theme) {
   if (theme === 'system') {
@@ -72,5 +73,10 @@ export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const initialProjectPath = urlParams.get('projectPath') || undefined;
 
-  return <IDELayout profile={profile} onProfileChange={refreshProfile} initialProjectPath={initialProjectPath} />;
+  return (
+    <>
+      <IDELayout profile={profile} onProfileChange={refreshProfile} initialProjectPath={initialProjectPath} />
+      <UpdateToast />
+    </>
+  );
 }

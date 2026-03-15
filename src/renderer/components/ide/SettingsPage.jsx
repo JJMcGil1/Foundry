@@ -7,6 +7,7 @@ const SECTIONS = [
   { id: 'providers', label: 'Providers', icon: FiCpu },
   { id: 'github', label: 'GitHub', icon: FiGithub },
   { id: 'appearance', label: 'Appearance', icon: FiMoon },
+  { id: 'about', label: 'About', icon: FiGlobe },
 ];
 
 // Model aliases — the CLI always resolves these to the latest version
@@ -126,6 +127,62 @@ const LANG_COLORS = {
   HTML: '#e34c26', CSS: '#563d7c', Shell: '#89e051', Vue: '#41b883', Svelte: '#ff3e00',
   Lua: '#000080', Zig: '#ec915c', Elixir: '#6e4a7e', Haskell: '#5e5086', Scala: '#c22d40',
 };
+
+/* ── About Section with Update Check ── */
+function AboutSection() {
+  const [updateStatus, setUpdateStatus] = useState('idle');
+  // idle | checking | upToDate | updateAvailable
+  const appVersion = window.foundry?.version || '1.0.0';
+
+  const handleCheckUpdate = async () => {
+    setUpdateStatus('checking');
+    try {
+      if (window.foundry?.updater?.checkForUpdates) {
+        const result = await window.foundry.updater.checkForUpdates();
+        if (result?.update) {
+          setUpdateStatus('updateAvailable');
+        } else {
+          setUpdateStatus('upToDate');
+          setTimeout(() => setUpdateStatus('idle'), 3000);
+        }
+      } else {
+        setUpdateStatus('upToDate');
+        setTimeout(() => setUpdateStatus('idle'), 3000);
+      }
+    } catch {
+      setUpdateStatus('idle');
+    }
+  };
+
+  return (
+    <div className={styles.section}>
+      <h3 className={styles.sectionTitle}>About Foundry</h3>
+      <p className={styles.sectionDesc}>Version and update information</p>
+
+      <div className={styles.card}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <label className={styles.fieldLabel}>Version</label>
+            <p style={{ color: 'var(--zinc-400)', fontSize: 13, marginTop: 4 }}>
+              Foundry v{appVersion}
+            </p>
+          </div>
+          <button
+            className={styles.saveBtn}
+            onClick={handleCheckUpdate}
+            disabled={updateStatus === 'checking'}
+            style={{ minWidth: 140, display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            {updateStatus === 'checking' && <><FiLoader className={styles.spin} size={14} /> Checking...</>}
+            {updateStatus === 'upToDate' && <><FiCheck size={14} /> Up to date</>}
+            {updateStatus === 'updateAvailable' && <><FiDownload size={14} /> Update found!</>}
+            {updateStatus === 'idle' && <><FiRefreshCw size={14} /> Check for updates</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /* ── Settings Page ── */
 export default function SettingsPage({ profile, onClose, onProfileChange, onCloneRepo }) {
@@ -1098,6 +1155,10 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
 
               </div>
             </div>
+          )}
+
+          {activeSection === 'about' && (
+            <AboutSection />
           )}
         </div>
       </div>

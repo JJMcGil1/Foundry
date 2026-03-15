@@ -2,7 +2,36 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('foundry', {
   platform: process.platform,
-  version: '1.0.0',
+  version: require('../../package.json').version,
+
+  // Auto-Updater
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+    installUpdate: () => ipcRenderer.invoke('updater:install'),
+    getVersion: () => ipcRenderer.invoke('updater:getVersion'),
+    dismissUpdate: () => ipcRenderer.invoke('updater:dismiss'),
+    onUpdateAvailable: (cb) => {
+      const handler = (_event, info) => cb(info);
+      ipcRenderer.on('update:available', handler);
+      return () => ipcRenderer.removeListener('update:available', handler);
+    },
+    onDownloadProgress: (cb) => {
+      const handler = (_event, progress) => cb(progress);
+      ipcRenderer.on('update:download-progress', handler);
+      return () => ipcRenderer.removeListener('update:download-progress', handler);
+    },
+    onUpdateDownloaded: (cb) => {
+      const handler = (_event, info) => cb(info);
+      ipcRenderer.on('update:downloaded', handler);
+      return () => ipcRenderer.removeListener('update:downloaded', handler);
+    },
+    onUpdateError: (cb) => {
+      const handler = (_event, info) => cb(info);
+      ipcRenderer.on('update:error', handler);
+      return () => ipcRenderer.removeListener('update:error', handler);
+    },
+  },
 
   // Profile
   getProfile: () => ipcRenderer.invoke('profile:get'),

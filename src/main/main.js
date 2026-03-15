@@ -6,6 +6,7 @@ const { execSync, exec, spawn } = require('child_process');
 const pty = require('node-pty');
 const https = require('https');
 const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase } = require('./database');
+const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 
 // ---- Claude API Streaming ---- //
 const activeStreams = new Map(); // streamId → AbortController
@@ -1634,7 +1635,10 @@ app.on('ready', async () => {
   await initDatabase();
   registerIPC();
   buildAppMenu();
-  createWindow();
+  const firstWindow = createWindow();
+
+  // Initialize auto-updater with the first window
+  initAutoUpdater(firstWindow);
 
   // macOS dock menu with "New Window"
   if (process.platform === 'darwin') {
@@ -1661,6 +1665,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  destroyAutoUpdater();
   // Kill all PTY processes
   for (const [id, p] of ptyProcesses) {
     try { p.kill(); } catch {}

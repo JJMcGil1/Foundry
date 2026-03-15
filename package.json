@@ -1,6 +1,6 @@
 {
   "name": "foundry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Foundry — The modern forge for building software",
   "main": "src/main/main.js",
   "scripts": {
@@ -9,7 +9,9 @@
     "dev": "concurrently -n vite,electron -c blue,green \"npm run dev:vite\" \"npm run dev:electron\"",
     "build": "vite build",
     "dist": "npm run build && electron-builder",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "release:hash": "node scripts/generate-release-hash.js",
+    "release": "npm run dist && npm run release:hash"
   },
   "repository": {
     "type": "git",
@@ -38,13 +40,23 @@
         "zip"
       ]
     },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Development"
+    },
     "directories": {
       "output": "release"
     },
     "files": [
       "dist/**/*",
       "src/main/**/*",
-      "src/renderer/assets/**/*"
+      "src/renderer/assets/**/*",
+      "package.json"
     ]
   },
   "dependencies": {
