@@ -1023,3 +1023,260 @@
   align-items: center;
   justify-content: center;
 }
+
+/* ── Providers ── */
+.providerCard {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  margin-top: 16px;
+}
+
+.providerHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.providerLogo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #D97706, #F59E0B);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  flex-shrink: 0;
+}
+
+.providerInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+}
+
+.providerName {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--zinc-100);
+}
+
+.providerDesc {
+  font-size: 11px;
+  color: var(--zinc-500);
+}
+
+.providerSection {
+  margin-top: 12px;
+}
+
+.providerSectionHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--zinc-400);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+}
+
+.providerRefreshBtn {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 4px;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.providerRefreshBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.providerStatusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.statusDotGreen {
+  background: #34d399;
+  box-shadow: 0 0 6px rgba(52, 211, 153, 0.4);
+}
+
+.statusDotYellow {
+  background: #fbbf24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+}
+
+.statusDotGray {
+  background: var(--zinc-600);
+}
+
+.providerStatusText {
+  font-size: 12px;
+  color: var(--zinc-400);
+}
+
+.providerHint {
+  font-size: 11px;
+  color: var(--zinc-600);
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+
+.providerDivider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.providerDivider::before,
+.providerDivider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.providerDivider span {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--zinc-600);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.providerConnectedRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.providerKeyPreview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--zinc-400);
+  flex: 1;
+}
+
+/* ── Model Selector ── */
+.modelSelector {
+  position: relative;
+}
+
+.modelSelectorBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+.modelSelectorBtn:hover {
+  border-color: var(--zinc-600);
+}
+
+.modelSelectorLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--zinc-200);
+}
+
+.modelSelectorDesc {
+  font-size: 11px;
+  color: var(--zinc-500);
+  flex: 1;
+}
+
+.modelSelectorChevron {
+  color: var(--zinc-500);
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+}
+
+.modelDropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 50;
+  overflow: hidden;
+}
+
+.modelDropdownItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s ease;
+  font-family: var(--font-sans);
+}
+
+.modelDropdownItem:hover {
+  background: var(--surface-3);
+}
+
+.modelDropdownItemActive {
+  background: rgba(167, 139, 250, 0.08);
+}
+
+.modelDropdownLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--zinc-200);
+}
+
+.modelDropdownDesc {
+  font-size: 11px;
+  color: var(--zinc-500);
+  flex: 1;
+}
+
+.modelDropdownCheck {
+  color: var(--accent);
+  flex-shrink: 0;
+}

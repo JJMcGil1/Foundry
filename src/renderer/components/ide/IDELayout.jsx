@@ -345,7 +345,15 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           </div>
           <AnimatePresence initial={false}>
             {chatVisible && !showSettings && (
-              <ChatPanel key="chat" width={chatWidth} onWidthChange={setChatWidth} />
+              <ChatPanel
+                key="chat"
+                width={chatWidth}
+                onWidthChange={setChatWidth}
+                onOpenSettings={(section) => {
+                  setShowSettings(true);
+                  // The settings page will default to this section
+                }}
+              />
             )}
           </AnimatePresence>
         </div>

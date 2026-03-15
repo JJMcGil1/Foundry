@@ -1,28 +1,118 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { FiSend, FiMessageSquare, FiUser, FiCpu } from 'react-icons/fi';
+import { FiSend, FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
 
-export default function ChatPanel({ width, onWidthChange }) {
+let streamIdCounter = 0;
+
+export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
   const [isResizing, setIsResizing] = useState(false);
-  const [messages, setMessages] = useState([
-    {
-      role: 'assistant',
-      content: "Hi! I'm Foundry AI, your coding assistant. Ask me anything about your code, and I'll help you out.",
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [currentStreamId, setCurrentStreamId] = useState(null);
+  const [hasProvider, setHasProvider] = useState(null); // null = loading, true/false
+  const [modelLabel, setModelLabel] = useState('Claude');
+  const [error, setError] = useState(null);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const streamingContentRef = useRef('');
+  const cleanupRef = useRef([]);
+
+  // Check if a provider is connected
+  useEffect(() => {
+    async function checkProvider() {
+      try {
+        const [tokenResult, modelResult] = await Promise.all([
+          window.foundry?.claudeGetToken(),
+          window.foundry?.claudeGetModel(),
+        ]);
+        setHasProvider(!!tokenResult?.token);
+
+        // Resolve model label from alias
+        if (modelResult) {
+          const labels = {
+            'sonnet': 'Sonnet',
+            'opus': 'Opus',
+            'haiku': 'Haiku',
+          };
+          setModelLabel(labels[modelResult] || modelResult);
+        }
+      } catch {
+        setHasProvider(false);
+      }
+    }
+    checkProvider();
+
+    // Re-check when window regains focus (user may have added key in settings)
+    const handleFocus = () => checkProvider();
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
+
+  // Set up stream listeners
+  useEffect(() => {
+    const cleanupStream = window.foundry?.onClaudeStream((streamId, data) => {
+      if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') {
+        const text = data.delta.text;
+        streamingContentRef.current += text;
+        const accumulated = streamingContentRef.current;
+        setMessages(prev => {
+          const updated = [...prev];
+          const lastIdx = updated.length - 1;
+          if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+            updated[lastIdx] = { ...updated[lastIdx], content: accumulated };
+          }
+          return updated;
+        });
+      }
+    });
+
+    const cleanupEnd = window.foundry?.onClaudeStreamEnd((streamId) => {
+      setIsStreaming(false);
+      setCurrentStreamId(null);
+      // Update final message with timestamp
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+          updated[lastIdx] = {
+            ...updated[lastIdx],
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          };
+        }
+        return updated;
+      });
+    });
+
+    const cleanupError = window.foundry?.onClaudeStreamError((streamId, error) => {
+      setIsStreaming(false);
+      setCurrentStreamId(null);
+      setError(error);
+      // Remove the empty assistant message
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant' && !updated[lastIdx].content) {
+          updated.pop();
+        }
+        return updated;
+      });
+    });
+
+    cleanupRef.current = [cleanupStream, cleanupEnd, cleanupError];
+    return () => {
+      cleanupRef.current.forEach(fn => fn?.());
+    };
+  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
+  const handleSend = async () => {
+    if (!input.trim() || isStreaming) return;
+    setError(null);
 
     const userMsg = {
       role: 'user',
@@ -30,26 +120,78 @@ export default function ChatPanel({ width, onWidthChange }) {
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
-    setIsTyping(true);
+    // Build message history for API (exclude timestamps)
+    const apiMessages = [...messages, userMsg]
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .map(m => ({ role: m.role, content: m.content }));
 
-    setTimeout(() => {
-      const responses = [
-        "I can see you're working on that. Let me analyze the code structure and suggest some improvements.",
-        "That's a great approach! You might also want to consider adding error handling for edge cases.",
-        "I'd recommend breaking this into smaller functions for better readability and testability.",
-        "Looking at the pattern here, you could use a more declarative approach. Want me to show you an example?",
-        "Good question! The key thing to understand is how the data flows through these components.",
-      ];
-      const aiMsg = {
-        role: 'assistant',
-        content: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => [...prev, aiMsg]);
-      setIsTyping(false);
-    }, 1200);
+    // Add placeholder assistant message
+    const assistantPlaceholder = {
+      role: 'assistant',
+      content: '',
+      timestamp: '',
+    };
+
+    setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
+    setInput('');
+    setIsStreaming(true);
+    streamingContentRef.current = '';
+
+    const streamId = `stream-${++streamIdCounter}-${Date.now()}`;
+    setCurrentStreamId(streamId);
+
+    // Get model
+    let model;
+    try {
+      model = await window.foundry?.claudeGetModel();
+    } catch { /* use default */ }
+
+    // Send to Claude
+    const result = await window.foundry?.claudeChat({
+      messages: apiMessages,
+      model: model || 'sonnet',
+      streamId,
+    });
+
+    if (result?.error) {
+      setIsStreaming(false);
+      setCurrentStreamId(null);
+      setError(result.error);
+      // Remove the empty placeholder
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant' && !updated[lastIdx].content) {
+          updated.pop();
+        }
+        return updated;
+      });
+    }
+  };
+
+  const handleStop = async () => {
+    if (currentStreamId) {
+      await window.foundry?.claudeStopStream(currentStreamId);
+      setIsStreaming(false);
+      setCurrentStreamId(null);
+      // Finalize the current message
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+          if (!updated[lastIdx].content) {
+            updated.pop(); // Remove empty placeholder
+          } else {
+            updated[lastIdx] = {
+              ...updated[lastIdx],
+              content: updated[lastIdx].content + '\n\n*[stopped]*',
+              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            };
+          }
+        }
+        return updated;
+      });
+    }
   };
 
   const handleKeyDown = (e) => {
@@ -82,6 +224,44 @@ export default function ChatPanel({ width, onWidthChange }) {
     document.addEventListener('mouseup', handleMouseUp);
   }, [width, onWidthChange]);
 
+  // Empty state when no provider is connected
+  const renderEmptyState = () => {
+    if (hasProvider === null) return null; // loading
+    if (hasProvider === false) {
+      return (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyIcon}>
+            <FiCpu size={24} />
+          </div>
+          <h4 className={styles.emptyTitle}>Connect a Provider</h4>
+          <p className={styles.emptyDesc}>
+            Add your Claude API key or connect your Claude Code subscription to start chatting.
+          </p>
+          {onOpenSettings && (
+            <button className={styles.emptyBtn} onClick={() => onOpenSettings('providers')}>
+              <FiSettings size={13} />
+              Open Providers Settings
+            </button>
+          )}
+        </div>
+      );
+    }
+    if (messages.length === 0) {
+      return (
+        <div className={styles.emptyState}>
+          <div className={styles.emptyIcon}>
+            <FiMessageSquare size={24} />
+          </div>
+          <h4 className={styles.emptyTitle}>Start a Conversation</h4>
+          <p className={styles.emptyDesc}>
+            Ask anything about your code. Claude will help you build, debug, and understand your project.
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
     <motion.div
       className={styles.panel}
@@ -97,11 +277,12 @@ export default function ChatPanel({ width, onWidthChange }) {
         <span className={styles.headerTitle}>Chat</span>
         <div className={styles.modelBadge}>
           <FiCpu size={11} />
-          <span>Foundry AI</span>
+          <span>{modelLabel}</span>
         </div>
       </div>
 
       <div className={styles.messages}>
+        {renderEmptyState()}
         {messages.map((msg, i) => (
           <div
             key={i}
@@ -112,28 +293,27 @@ export default function ChatPanel({ width, onWidthChange }) {
                 {msg.role === 'user' ? <FiUser size={12} /> : <FiCpu size={12} />}
               </div>
               <span className={styles.messageRole}>
-                {msg.role === 'user' ? 'You' : 'Foundry AI'}
+                {msg.role === 'user' ? 'You' : 'Claude'}
               </span>
-              <span className={styles.messageTime}>{msg.timestamp}</span>
+              {msg.timestamp && (
+                <span className={styles.messageTime}>{msg.timestamp}</span>
+              )}
             </div>
             <div className={styles.messageContent}>
-              {msg.content}
+              {msg.content || (isStreaming && i === messages.length - 1 ? (
+                <div className={styles.typing}>
+                  <span className={styles.typingDot} />
+                  <span className={styles.typingDot} />
+                  <span className={styles.typingDot} />
+                </div>
+              ) : null)}
             </div>
           </div>
         ))}
-        {isTyping && (
-          <div className={`${styles.message} ${styles.messageAssistant}`}>
-            <div className={styles.messageHeader}>
-              <div className={`${styles.messageAvatar} ${styles.avatarAi}`}>
-                <FiCpu size={12} />
-              </div>
-              <span className={styles.messageRole}>Foundry AI</span>
-            </div>
-            <div className={styles.typing}>
-              <span className={styles.typingDot} />
-              <span className={styles.typingDot} />
-              <span className={styles.typingDot} />
-            </div>
+        {error && (
+          <div className={styles.errorBanner}>
+            <FiAlertCircle size={13} />
+            <span>{error}</span>
           </div>
         )}
         <div ref={messagesEndRef} />
@@ -144,19 +324,30 @@ export default function ChatPanel({ width, onWidthChange }) {
           <textarea
             ref={inputRef}
             className={styles.input}
-            placeholder="Ask Foundry AI..."
+            placeholder={hasProvider === false ? 'Connect a provider to start...' : 'Ask Claude...'}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
+            disabled={hasProvider === false}
           />
-          <button
-            className={styles.sendBtn}
-            onClick={handleSend}
-            disabled={!input.trim()}
-          >
-            <FiSend size={14} />
-          </button>
+          {isStreaming ? (
+            <button
+              className={styles.stopBtn}
+              onClick={handleStop}
+              title="Stop generating"
+            >
+              <FiSquare size={12} />
+            </button>
+          ) : (
+            <button
+              className={styles.sendBtn}
+              onClick={handleSend}
+              disabled={!input.trim() || hasProvider === false}
+            >
+              <FiSend size={14} />
+            </button>
+          )}
         </div>
         <div className={styles.inputHint}>
           <kbd className={styles.kbd}>Enter</kbd>

@@ -93,4 +93,31 @@ contextBridge.exposeInMainWorld('foundry', {
     ipcRenderer.on('window:state-changed', handler);
     return () => ipcRenderer.removeListener('window:state-changed', handler);
   },
+
+  // Claude Provider
+  claudeDetectAuth: () => ipcRenderer.invoke('claude:detectAuth'),
+  claudeGetToken: () => ipcRenderer.invoke('claude:getToken'),
+  claudeSaveApiKey: (apiKey) => ipcRenderer.invoke('claude:saveApiKey', apiKey),
+  claudeGetApiKey: () => ipcRenderer.invoke('claude:getApiKey'),
+  claudeValidateKey: (apiKey) => ipcRenderer.invoke('claude:validateKey', apiKey),
+  claudeChat: (params) => ipcRenderer.invoke('claude:chat', params),
+  claudeStopStream: (streamId) => ipcRenderer.invoke('claude:stopStream', streamId),
+  claudeGetModel: () => ipcRenderer.invoke('claude:getModel'),
+  claudeSetModel: (model) => ipcRenderer.invoke('claude:setModel', model),
+  claudeFetchModels: () => ipcRenderer.invoke('claude:fetchModels'),
+  onClaudeStream: (callback) => {
+    const handler = (_event, streamId, data) => callback(streamId, data);
+    ipcRenderer.on('claude:stream', handler);
+    return () => ipcRenderer.removeListener('claude:stream', handler);
+  },
+  onClaudeStreamEnd: (callback) => {
+    const handler = (_event, streamId) => callback(streamId);
+    ipcRenderer.on('claude:streamEnd', handler);
+    return () => ipcRenderer.removeListener('claude:streamEnd', handler);
+  },
+  onClaudeStreamError: (callback) => {
+    const handler = (_event, streamId, error) => callback(streamId, error);
+    ipcRenderer.on('claude:streamError', handler);
+    return () => ipcRenderer.removeListener('claude:streamError', handler);
+  },
 });
