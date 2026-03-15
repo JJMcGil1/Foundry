@@ -169,7 +169,7 @@ function getGitStatus(dirPath) {
       }
       // Unstaged changes (working tree column has a letter, or untracked)
       if (y !== ' ' || x === '?') {
-        unstaged.push({ status: x === '?' ? '??' : y, path: filePath });
+        unstaged.push({ status: x === '?' ? 'U' : y, path: filePath });
       }
     }
     // Keep flat files list for backward compat (commit uses it)
@@ -177,9 +177,17 @@ function getGitStatus(dirPath) {
       status: line.substring(0, 2).trim(),
       path: line.substring(3),
     }));
-    return { branch, files, staged, unstaged, isRepo: true };
+    // Get behind/ahead counts
+    let behind = 0, ahead = 0;
+    try {
+      const tracking = execSync('git rev-list --left-right --count @{u}...HEAD', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
+      const parts = tracking.split(/\s+/);
+      behind = parseInt(parts[0], 10) || 0;
+      ahead = parseInt(parts[1], 10) || 0;
+    } catch { /* no upstream or no remote */ }
+    return { branch, files, staged, unstaged, isRepo: true, behind, ahead };
   } catch {
-    return { branch: '', files: [], staged: [], unstaged: [], isRepo: false };
+    return { branch: '', files: [], staged: [], unstaged: [], isRepo: false, behind: 0, ahead: 0 };
   }
 }
 

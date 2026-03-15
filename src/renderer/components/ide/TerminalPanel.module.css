@@ -6,10 +6,11 @@
   flex-direction: column;
   overflow: hidden;
   position: relative;
+  transition: border-color 0.35s ease;
 }
 
 .panelMaximized {
-  border-top: none;
+  border-top-color: transparent;
 }
 
 /* Top resize handle */

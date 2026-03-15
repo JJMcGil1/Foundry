@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { FiSun, FiMoon } from 'react-icons/fi';
 import { PiTerminalWindow, PiTerminalWindowFill } from 'react-icons/pi';
 import { TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled } from 'react-icons/tb';
 import ActivityBar from './ActivityBar';
@@ -10,6 +9,7 @@ import ChatPanel from './ChatPanel';
 import TerminalPanel from './TerminalPanel';
 import SettingsPage from './SettingsPage';
 import SearchBar from './SearchBar';
+import GitControls from './GitControls';
 import styles from './IDELayout.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
 import foundryIconLight from '../../assets/foundry-icon-light.svg';
@@ -84,13 +84,6 @@ export default function IDELayout({ profile, onProfileChange }) {
   const handleSidebarWidthChange = useCallback((newWidth) => {
     setSidebarWidth(newWidth);
   }, []);
-
-  const handleToggleTheme = useCallback(async () => {
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    document.documentElement.setAttribute('data-theme', newTheme);
-    await window.foundry?.updateProfile({ theme: newTheme });
-    if (onProfileChange) onProfileChange();
-  }, [currentTheme, onProfileChange]);
 
   const handleOpenFolder = useCallback(async () => {
     const result = await window.foundry?.openFolder();
@@ -216,6 +209,8 @@ export default function IDELayout({ profile, onProfileChange }) {
           </div>
           <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
+            <GitControls gitStatus={gitStatus} projectPath={project?.path} onRefresh={refreshTree} />
+            <div className={styles.titlebarDivider} />
             <button
               className={`${styles.titlebarBtn} ${sidebarVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setSidebarVisible(v => !v)}
@@ -245,14 +240,6 @@ export default function IDELayout({ profile, onProfileChange }) {
                 <TbLayoutSidebarRight size={20} className={`${styles.iconBase} ${chatVisible ? styles.iconHidden : ''}`} />
                 <TbLayoutSidebarRightFilled size={20} className={`${styles.iconFill} ${chatVisible ? '' : styles.iconHidden}`} />
               </span>
-            </button>
-            <div className={styles.titlebarDivider} />
-            <button
-              className={styles.titlebarBtn}
-              onClick={handleToggleTheme}
-              title={`Switch to ${currentTheme === 'dark' ? 'light' : 'dark'} mode`}
-            >
-              {currentTheme === 'dark' ? <FiSun size={20} /> : <FiMoon size={20} />}
             </button>
           </div>
         </div>
