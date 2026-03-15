@@ -226,17 +226,20 @@ function installMacOS(dmgPath) {
   // Unmount any stale mount
   try { execSync(`hdiutil detach "${mountPoint}" -force 2>/dev/null`); } catch {}
 
-  // Use the specific Electron PID to wait — avoids matching the script itself
+  const binaryPath = `${appPath}/Contents/MacOS/Foundry`;
+
   const script = `#!/bin/bash
-exec > "${logFile}" 2>&1
+LOG="${logFile}"
+exec > "$LOG" 2>&1
 echo "=== Foundry Update Script ==="
 echo "Date: $(date)"
 echo "DMG: ${dmgPath}"
 echo "App: ${appPath}"
+echo "Binary: ${binaryPath}"
 echo "Waiting for PID ${electronPid} to exit..."
 
-# Wait for the specific Foundry process to exit (not pgrep which matches ourselves)
-for i in $(seq 1 60); do
+# Wait for the specific Electron PID to exit
+for i in $(seq 1 30); do
   if ! kill -0 ${electronPid} 2>/dev/null; then
     echo "PID ${electronPid} exited after attempt $i"
     break
@@ -248,18 +251,20 @@ sleep 1
 # Mount DMG
 echo "Mounting DMG..."
 hdiutil attach "${dmgPath}" -mountpoint "${mountPoint}" -nobrowse -noautoopen -quiet
-if [ $? -ne 0 ]; then
+RC=$?
+echo "hdiutil exit code: $RC"
+if [ $RC -ne 0 ]; then
   echo "FAILED: hdiutil attach failed"
   exit 1
 fi
-echo "Mounted at ${mountPoint}"
+echo "Mounted. Contents:"
+ls -la "${mountPoint}/"
 
 # Find .app in mounted volume
 APP_SRC=$(find "${mountPoint}" -maxdepth 1 -name "*.app" -type d | head -1)
 echo "Found app: $APP_SRC"
 if [ -z "$APP_SRC" ]; then
   echo "FAILED: No .app found in DMG"
-  ls -la "${mountPoint}/"
   hdiutil detach "${mountPoint}" -force 2>/dev/null || true
   exit 1
 fi
@@ -269,21 +274,46 @@ echo "Removing old app at ${appPath}..."
 rm -rf "${appPath}"
 echo "Copying new app..."
 cp -R "$APP_SRC" "${appPath}"
-echo "Copy complete"
+echo "Copy result: $?"
 
-# Remove quarantine flag so macOS doesn't block it
-xattr -rd com.apple.quarantine "${appPath}" 2>/dev/null || true
+# Remove quarantine so macOS doesn't block it
+xattr -cr "${appPath}" 2>/dev/null || true
+echo "Quarantine cleared"
 
 # Cleanup
 echo "Cleaning up..."
 hdiutil detach "${mountPoint}" -force 2>/dev/null || true
 rm -f "${dmgPath}"
 
-# Relaunch
-echo "Relaunching ${appPath}..."
-sleep 0.5
-open "${appPath}"
-echo "Done"
+# Relaunch — try multiple methods
+echo "Relaunching..."
+sleep 1
+
+# Method 1: open command
+open -a "${appPath}" 2>/dev/null
+sleep 2
+
+# Check if it actually started
+if pgrep -x "Foundry" > /dev/null 2>&1; then
+  echo "Relaunch succeeded via open"
+  exit 0
+fi
+
+echo "open command didn't launch, trying direct binary..."
+
+# Method 2: direct binary execution
+nohup "${binaryPath}" > /dev/null 2>&1 &
+sleep 2
+
+if pgrep -x "Foundry" > /dev/null 2>&1; then
+  echo "Relaunch succeeded via direct binary"
+  exit 0
+fi
+
+echo "WARNING: Both relaunch methods may have failed"
+# Last resort — open by bundle ID
+open -b com.foundry.ide 2>/dev/null || true
+echo "Tried bundle ID launch as last resort"
 `;
 
   const scriptPath = path.join(os.tmpdir(), 'foundry-update.sh');
