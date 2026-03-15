@@ -16,6 +16,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { execSync, spawn } = require('child_process');
+const { getSetting } = require('./database');
 
 // ── Config ──────────────────────────────────────────────────
 const UPDATE_CONFIG = {
@@ -306,16 +307,33 @@ function installLinux(appImagePath) {
 
 // ── Helpers ─────────────────────────────────────────────────
 
+/**
+ * Get GitHub auth headers. The repo is private, so we need a token.
+ * Uses the GitHub token saved in Settings (same one used for clone/push).
+ */
+function getGitHubAuthHeaders() {
+  const headers = {
+    'User-Agent': `Foundry/${app.getVersion()}`,
+    'Accept': 'application/vnd.github.v3+json',
+  };
+  try {
+    const token = getSetting('github_token');
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+  } catch {
+    // Database might not be ready yet on first check
+  }
+  return headers;
+}
+
 function fetchGitHubRelease() {
   return new Promise((resolve, reject) => {
     const options = {
       hostname: 'api.github.com',
       path: `/repos/${UPDATE_CONFIG.owner}/${UPDATE_CONFIG.repo}/releases/latest`,
       method: 'GET',
-      headers: {
-        'User-Agent': `Foundry/${app.getVersion()}`,
-        'Accept': 'application/vnd.github.v3+json',
-      },
+      headers: getGitHubAuthHeaders(),
       timeout: UPDATE_CONFIG.apiTimeout,
     };
 
@@ -323,7 +341,10 @@ function fetchGitHubRelease() {
       let body = '';
       res.on('data', (chunk) => body += chunk);
       res.on('end', () => {
-        if (res.statusCode === 404) return resolve(null);
+        if (res.statusCode === 404) {
+          console.log('[updater] GitHub API 404 — no releases found or repo is private (missing/invalid token)');
+          return resolve(null);
+        }
         if (res.statusCode !== 200) return reject(new Error(`GitHub API: ${res.statusCode} — ${body.substring(0, 200)}`));
         try { resolve(JSON.parse(body)); }
         catch (e) { reject(e); }
@@ -354,7 +375,7 @@ function fetchLatestJson(assets) {
 
 function downloadJSON(url, callback) {
   const handler = (res) => {
-    // Follow redirects
+    // Follow redirects — but strip auth header on redirect (GitHub redirects to S3)
     if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
       return downloadJSON(res.headers.location, callback);
     }
@@ -369,8 +390,10 @@ function downloadJSON(url, callback) {
     });
   };
 
+  // Use auth headers for GitHub API URLs, plain headers for redirected S3 URLs
+  const headers = url.includes('github.com') ? getGitHubAuthHeaders() : { 'User-Agent': `Foundry/${app.getVersion()}` };
   const mod = url.startsWith('https') ? https : http;
-  mod.get(url, { headers: { 'User-Agent': `Foundry/${app.getVersion()}` } }, handler)
+  mod.get(url, { headers }, handler)
     .on('error', (err) => callback(err));
 }
 
@@ -390,7 +413,13 @@ function downloadFile(url, destPath, onProgress) {
 
     const doRequest = (reqUrl) => {
       const mod = reqUrl.startsWith('https') ? https : http;
-      mod.get(reqUrl, { headers: { 'User-Agent': `Foundry/${app.getVersion()}` } }, (res) => {
+      // Use auth headers for GitHub URLs, plain for S3 redirects
+      const headers = reqUrl.includes('github.com') ? getGitHubAuthHeaders() : { 'User-Agent': `Foundry/${app.getVersion()}` };
+      // For private repo asset downloads, we need to accept octet-stream
+      if (reqUrl.includes('github.com') && reqUrl.includes('/releases/')) {
+        headers['Accept'] = 'application/octet-stream';
+      }
+      mod.get(reqUrl, { headers }, (res) => {
         // Follow redirects
         if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
           return doRequest(res.headers.location);
