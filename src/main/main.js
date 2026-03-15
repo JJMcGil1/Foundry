@@ -1401,16 +1401,20 @@ function registerIPC() {
           try {
             const parsed = JSON.parse(line);
 
-            // Token-by-token streaming deltas
-            if (parsed.type === 'stream_event' && parsed.event?.type === 'content_block_delta') {
-              const delta = parsed.event.delta;
-              if (delta?.type === 'text_delta' && delta.text) {
+            // Forward all stream events the renderer needs for rich UI
+            if (parsed.type === 'stream_event' && parsed.event) {
+              const evt = parsed.event;
+              const passTypes = [
+                'content_block_start',
+                'content_block_delta',
+                'content_block_stop',
+                'message_start',
+                'message_delta',
+                'message_stop',
+              ];
+              if (passTypes.includes(evt.type)) {
                 if (win && !win.isDestroyed()) {
-                  // Emit in the same format the renderer expects (Anthropic SSE format)
-                  win.webContents.send('claude:stream', streamId, {
-                    type: 'content_block_delta',
-                    delta: { type: 'text_delta', text: delta.text },
-                  });
+                  win.webContents.send('claude:stream', streamId, evt);
                 }
               }
             }
@@ -1464,12 +1468,18 @@ function registerIPC() {
     // Resolve aliases for the Anthropic API (it doesn't accept short aliases)
     const resolvedModel = ALIAS_TO_MODEL[model] || model || 'claude-sonnet-4-6';
 
-    const postData = JSON.stringify({
+    // Enable extended thinking for supported models
+    const supportsThinking = /claude-(sonnet|opus)-4/.test(resolvedModel) || /claude-3-7/.test(resolvedModel);
+    const requestBody = {
       model: resolvedModel,
-      max_tokens: 8192,
+      max_tokens: supportsThinking ? 16384 : 8192,
       stream: true,
       messages: messages.map(m => ({ role: m.role, content: m.content })),
-    });
+    };
+    if (supportsThinking) {
+      requestBody.thinking = { type: 'enabled', budget_tokens: 10000 };
+    }
+    const postData = JSON.stringify(requestBody);
 
     return new Promise((resolve) => {
       const req = https.request({
