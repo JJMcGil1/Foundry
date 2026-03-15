@@ -220,16 +220,25 @@ async function installUpdate(filePath) {
 function installMacOS(dmgPath) {
   const mountPoint = '/Volumes/Foundry-Update';
   const appPath = app.getPath('exe').replace(/\/Contents\/MacOS\/.*$/, '');
+  const electronPid = process.pid;
+  const logFile = path.join(os.tmpdir(), 'foundry-update.log');
 
   // Unmount any stale mount
   try { execSync(`hdiutil detach "${mountPoint}" -force 2>/dev/null`); } catch {}
 
+  // Use the specific Electron PID to wait — avoids matching the script itself
   const script = `#!/bin/bash
-set -e
+exec > "${logFile}" 2>&1
+echo "=== Foundry Update Script ==="
+echo "Date: $(date)"
+echo "DMG: ${dmgPath}"
+echo "App: ${appPath}"
+echo "Waiting for PID ${electronPid} to exit..."
 
-# Wait for Foundry to quit
+# Wait for the specific Foundry process to exit (not pgrep which matches ourselves)
 for i in $(seq 1 60); do
-  if ! pgrep -f "Foundry" > /dev/null 2>&1; then
+  if ! kill -0 ${electronPid} 2>/dev/null; then
+    echo "PID ${electronPid} exited after attempt $i"
     break
   fi
   sleep 0.5
@@ -237,26 +246,44 @@ done
 sleep 1
 
 # Mount DMG
+echo "Mounting DMG..."
 hdiutil attach "${dmgPath}" -mountpoint "${mountPoint}" -nobrowse -noautoopen -quiet
+if [ $? -ne 0 ]; then
+  echo "FAILED: hdiutil attach failed"
+  exit 1
+fi
+echo "Mounted at ${mountPoint}"
 
 # Find .app in mounted volume
 APP_SRC=$(find "${mountPoint}" -maxdepth 1 -name "*.app" -type d | head -1)
+echo "Found app: $APP_SRC"
 if [ -z "$APP_SRC" ]; then
-  echo "No .app found in DMG"
+  echo "FAILED: No .app found in DMG"
+  ls -la "${mountPoint}/"
   hdiutil detach "${mountPoint}" -force 2>/dev/null || true
   exit 1
 fi
 
 # Replace the app
+echo "Removing old app at ${appPath}..."
 rm -rf "${appPath}"
+echo "Copying new app..."
 cp -R "$APP_SRC" "${appPath}"
+echo "Copy complete"
+
+# Remove quarantine flag so macOS doesn't block it
+xattr -rd com.apple.quarantine "${appPath}" 2>/dev/null || true
 
 # Cleanup
+echo "Cleaning up..."
 hdiutil detach "${mountPoint}" -force 2>/dev/null || true
 rm -f "${dmgPath}"
 
 # Relaunch
+echo "Relaunching ${appPath}..."
+sleep 0.5
 open "${appPath}"
+echo "Done"
 `;
 
   const scriptPath = path.join(os.tmpdir(), 'foundry-update.sh');
