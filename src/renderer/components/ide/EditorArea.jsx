@@ -78,7 +78,6 @@ function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReorderTabs }) {
     setDragIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', index.toString());
-    // Make the drag image slightly transparent
     if (e.currentTarget) {
       e.currentTarget.style.opacity = '0.5';
     }
@@ -141,24 +140,91 @@ function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReorderTabs }) {
   );
 }
 
-function CodeEditor({ tab, onContentChange, onSave }) {
+/* ── Helper: fade the wrapper in via direct DOM ── */
+function fadeInWrapper(el) {
+  if (!el) return;
+  // Start invisible
+  el.style.transition = 'none';
+  el.style.opacity = '0';
+  // Force the browser to commit opacity:0
+  void el.offsetHeight;
+  // Now transition to visible
+  el.style.transition = 'opacity 200ms ease-out';
+  el.style.opacity = '1';
+}
+
+function CodeEditor({ tab, tabs, onContentChange, onSave }) {
   const editorRef = useRef(null);
   const monacoRef = useRef(null);
+  const wrapperRef = useRef(null);
+  const modelsRef = useRef(new Map());
+  const currentPathRef = useRef(null);
+  const viewStatesRef = useRef(new Map());
+  const suppressChangeRef = useRef(false);
+  const mountedRef = useRef(false);
   const appTheme = useAppTheme();
-  const language = useMemo(() => getLanguageFromFilename(tab?.name), [tab?.name]);
   const monacoTheme = appTheme === 'light' ? 'foundry-light' : 'foundry-dark';
+  const onSaveRef = useRef(onSave);
+  const onContentChangeRef = useRef(onContentChange);
 
-  const handleEditorDidMount = useCallback((editor, monaco) => {
-    editorRef.current = editor;
-    monacoRef.current = monaco;
+  useEffect(() => { onSaveRef.current = onSave; }, [onSave]);
+  useEffect(() => { onContentChangeRef.current = onContentChange; }, [onContentChange]);
 
-    // Cmd/Ctrl+S to save
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
-      onSave(tab.path);
-    });
-  }, [tab?.path, onSave]);
+  /* ── Swap model when active tab changes (only runs after Monaco is mounted) ── */
+  useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco || !tab) return;
 
-  // Reactively switch Monaco theme when app theme changes
+    const prevPath = currentPathRef.current;
+
+    // Save view state of previous file
+    if (prevPath && prevPath !== tab.path) {
+      viewStatesRef.current.set(prevPath, editor.saveViewState());
+    }
+
+    // Get or create model
+    let model = modelsRef.current.get(tab.path);
+    if (!model || model.isDisposed()) {
+      const language = getLanguageFromFilename(tab.name);
+      const uri = monaco.Uri.parse(`file://${tab.path}`);
+      model = monaco.editor.getModel(uri);
+      if (!model) {
+        model = monaco.editor.createModel(tab.content || '', language, uri);
+      }
+      modelsRef.current.set(tab.path, model);
+    }
+
+    // Swap model
+    suppressChangeRef.current = true;
+    if (editor.getModel() !== model) {
+      editor.setModel(model);
+    }
+    const savedState = viewStatesRef.current.get(tab.path);
+    if (savedState) {
+      editor.restoreViewState(savedState);
+    }
+    suppressChangeRef.current = false;
+    currentPathRef.current = tab.path;
+    editor.focus();
+
+    // Fade in — works for both first open and tab switches
+    fadeInWrapper(wrapperRef.current);
+  }, [tab?.path]);
+
+  /* ── Sync external content changes ── */
+  useEffect(() => {
+    const model = modelsRef.current.get(tab?.path);
+    if (model && !model.isDisposed() && tab) {
+      const currentValue = model.getValue();
+      if (currentValue !== tab.content) {
+        suppressChangeRef.current = true;
+        model.setValue(tab.content || '');
+        suppressChangeRef.current = false;
+      }
+    }
+  }, [tab?.content, tab?.path]);
+
   useEffect(() => {
     if (monacoRef.current) {
       monacoRef.current.editor.setTheme(monacoTheme);
@@ -166,11 +232,41 @@ function CodeEditor({ tab, onContentChange, onSave }) {
   }, [monacoTheme]);
 
   const handleEditorChange = useCallback((value) => {
-    onContentChange(tab.path, value || '');
-  }, [tab?.path, onContentChange]);
+    if (suppressChangeRef.current) return;
+    if (currentPathRef.current) {
+      onContentChangeRef.current(currentPathRef.current, value || '');
+    }
+  }, []);
+
+  const handleEditorDidMount = useCallback((editor, monaco) => {
+    editorRef.current = editor;
+    monacoRef.current = monaco;
+    mountedRef.current = true;
+
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      if (currentPathRef.current) {
+        onSaveRef.current(currentPathRef.current);
+      }
+    });
+
+    // First file: Monaco just mounted, useEffect already ran and early-returned.
+    // We need to set the model here AND trigger the fade.
+    if (tab && !currentPathRef.current) {
+      const language = getLanguageFromFilename(tab.name);
+      const uri = monaco.Uri.parse(`file://${tab.path}`);
+      let model = monaco.editor.getModel(uri);
+      if (!model) {
+        model = monaco.editor.createModel(tab.content || '', language, uri);
+      }
+      modelsRef.current.set(tab.path, model);
+      editor.setModel(model);
+      currentPathRef.current = tab.path;
+      editor.focus();
+      fadeInWrapper(wrapperRef.current);
+    }
+  }, []);
 
   const handleBeforeMount = useCallback((monaco) => {
-    // Dark theme
     monaco.editor.defineTheme('foundry-dark', {
       base: 'vs-dark',
       inherit: true,
@@ -212,7 +308,6 @@ function CodeEditor({ tab, onContentChange, onSave }) {
       },
     });
 
-    // Light theme
     monaco.editor.defineTheme('foundry-light', {
       base: 'vs',
       inherit: true,
@@ -255,13 +350,33 @@ function CodeEditor({ tab, onContentChange, onSave }) {
     });
   }, []);
 
+  /* ── Cleanup models for closed tabs ── */
+  useEffect(() => {
+    const openPaths = new Set(tabs.map(t => t.path));
+    for (const [path, model] of modelsRef.current) {
+      if (!openPaths.has(path)) {
+        if (!model.isDisposed()) model.dispose();
+        modelsRef.current.delete(path);
+        viewStatesRef.current.delete(path);
+      }
+    }
+  }, [tabs]);
+
+  /* ── Full cleanup on unmount ── */
+  useEffect(() => {
+    return () => {
+      modelsRef.current.forEach((model) => {
+        if (!model.isDisposed()) model.dispose();
+      });
+      modelsRef.current.clear();
+      viewStatesRef.current.clear();
+    };
+  }, []);
+
   return (
-    <div className={styles.editorWrapper}>
+    <div className={styles.editorWrapper} ref={wrapperRef} style={{ opacity: 0 }}>
       <Editor
-        key={tab?.path}
         height="100%"
-        language={language}
-        value={tab?.content || ''}
         theme={monacoTheme}
         beforeMount={handleBeforeMount}
         onMount={handleEditorDidMount}
@@ -363,6 +478,7 @@ export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, o
         {currentTab ? (
           <CodeEditor
             tab={currentTab}
+            tabs={tabs}
             onContentChange={onContentChange}
             onSave={onSaveFile}
           />

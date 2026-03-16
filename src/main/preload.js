@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld('foundry', {
   gitCommitCount: (dirPath) => ipcRenderer.invoke('git:commitCount', dirPath),
   gitResolveAvatars: (authors) => ipcRenderer.invoke('git:resolveAvatars', authors),
   gitDiff: (dirPath, filePath) => ipcRenderer.invoke('git:diff', dirPath, filePath),
+  gitRemoteUrl: (dirPath) => ipcRenderer.invoke('git:remoteUrl', dirPath),
   gitStage: (dirPath, filePath) => ipcRenderer.invoke('git:stage', dirPath, filePath),
   gitUnstage: (dirPath, filePath) => ipcRenderer.invoke('git:unstage', dirPath, filePath),
   gitDiscard: (dirPath, filePath) => ipcRenderer.invoke('git:discard', dirPath, filePath),
@@ -78,6 +79,8 @@ contextBridge.exposeInMainWorld('foundry', {
   gitDeleteBranch: (dirPath, branchName, force) => ipcRenderer.invoke('git:deleteBranch', dirPath, branchName, force),
   gitCheckoutRemoteBranch: (dirPath, remoteBranch) => ipcRenderer.invoke('git:checkoutRemoteBranch', dirPath, remoteBranch),
   gitGenerateCommitMsg: (dirPath) => ipcRenderer.invoke('git:generateCommitMsg', dirPath),
+  gitListSubmodules: (dirPath) => ipcRenderer.invoke('git:submodules', dirPath),
+  gitListRemotes: (dirPath) => ipcRenderer.invoke('git:remotes', dirPath),
 
   // Search
   searchFiles: (dirPath, query) => ipcRenderer.invoke('search:files', dirPath, query),

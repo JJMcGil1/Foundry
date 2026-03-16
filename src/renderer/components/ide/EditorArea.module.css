@@ -10,7 +10,7 @@
 .tabBar {
   display: flex;
   align-items: center;
-  height: 36px;
+  height: 42px;
   background: var(--surface-2);
   border-bottom: 1px solid var(--border);
   overflow-x: auto;
@@ -33,7 +33,7 @@
   cursor: pointer;
   border-right: 1px solid var(--border);
   white-space: nowrap;
-  transition: all 0.1s ease;
+  transition: color 150ms ease, background 150ms ease, border-color 150ms ease;
   min-width: 80px;
   flex-shrink: 0;
   user-select: none;
@@ -47,7 +47,7 @@
 .tabActive {
   color: var(--zinc-100);
   background: var(--surface-3);
-  border-bottom: 2px solid var(--zinc-300);
+  border-bottom: 2px solid var(--accent, var(--zinc-300));
 }
 
 .tabDot {
@@ -109,6 +109,7 @@
 .editorContent {
   flex: 1;
   overflow: hidden;
+  position: relative;
 }
 
 /* Code editor */
@@ -123,7 +124,7 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  color: var(--zinc-500);
+  color: var(--zinc-600);
   font-size: 13px;
   font-family: var(--font-sans);
 }
@@ -257,4 +258,3 @@
   font-size: 12.5px;
   color: var(--zinc-500);
 }
-

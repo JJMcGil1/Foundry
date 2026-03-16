@@ -82,7 +82,8 @@
   cursor: pointer;
   outline: none;
   border-radius: 8px;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+              background 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .titlebarBtn:hover {
@@ -116,14 +117,30 @@
 .iconBase,
 .iconFill {
   position: absolute;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: scale(1);
 }
 
 .iconBase { opacity: 1; }
-.iconFill { opacity: 0; }
+.iconFill { opacity: 0; transform: scale(0.92); }
 
-.iconHidden { opacity: 0; }
-.iconFill:not(.iconHidden) { opacity: 1; }
+.iconHidden { opacity: 0; transform: scale(0.92); }
+.iconFill:not(.iconHidden) { opacity: 1; transform: scale(1); }
+
+/* Theme toggle: rotational crossfade for sun ↔ moon */
+.themeIcon {
+  position: absolute;
+  transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: rotate(0deg) scale(1);
+  opacity: 1;
+}
+
+.themeIconHidden {
+  opacity: 0;
+  transform: rotate(90deg) scale(0.5);
+}
 
 .titlebarDivider {
   width: 1px;

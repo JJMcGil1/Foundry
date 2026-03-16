@@ -9,24 +9,44 @@ import FileIcon from './FileIcon';
 import styles from './Sidebar.module.css';
 
 /* ── File Tree ── */
+const INDENT_SIZE = 14;
+const TREE_BASE_PAD = 10;
+
+function IndentGuides({ depth }) {
+  if (depth <= 0) return null;
+  const guides = [];
+  for (let i = 0; i < depth; i++) {
+    guides.push(
+      <span
+        key={i}
+        className={styles.indentGuide}
+        style={{ left: TREE_BASE_PAD + i * INDENT_SIZE + 7 }}
+      />
+    );
+  }
+  return guides;
+}
+
 function FileTreeItem({ item, depth = 0, onOpenFile, activeFile, parentDimmed = false, expandedPaths, onToggleExpand }) {
   const expanded = expandedPaths.has(item.path);
   const dimmed = parentDimmed || item.ignored;
+  const indent = TREE_BASE_PAD + depth * INDENT_SIZE;
 
   if (item.type === 'directory') {
     return (
       <div>
         <button
           className={`${styles.treeItem} ${dimmed ? styles.treeItemDimmed : ''}`}
-          style={{ paddingLeft: 12 + depth * 8 }}
+          style={{ paddingLeft: indent }}
           onClick={() => onToggleExpand(item.path)}
         >
+          <IndentGuides depth={depth} />
           <motion.span
             className={styles.chevron}
             animate={{ rotate: expanded ? 90 : 0 }}
             transition={{ duration: 0.12, ease: 'easeOut' }}
           >
-            <FiChevronRight size={15} />
+            <FiChevronRight size={14} />
           </motion.span>
           <span className={styles.treeName}>{item.name}</span>
         </button>
@@ -63,10 +83,10 @@ function FileTreeItem({ item, depth = 0, onOpenFile, activeFile, parentDimmed = 
   return (
     <button
       className={`${styles.treeItem} ${styles.treeFile} ${isActive ? styles.treeItemActive : ''} ${dimmed ? styles.treeItemDimmed : ''}`}
-      style={{ paddingLeft: 12 + depth * 8 }}
+      style={{ paddingLeft: indent + 10 }}
       onClick={() => onOpenFile(item.path)}
     >
-      <span className={styles.chevronSpacer} />
+      <IndentGuides depth={depth} />
       <FileIcon name={item.name} type="file" size={16} />
       <span className={styles.treeName}>{item.name}</span>
     </button>
@@ -105,7 +125,7 @@ function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusCo
 
 /* ── Commit Graph ── */
 const COMMITS_PAGE_SIZE = 15;
-const GRAPH_COLORS = ['#61AFEF', '#C678DD', '#98C379', '#E5C07B', '#E06C75', '#56B6C2'];
+const GRAPH_COLORS = ['#F97316', '#FB923C', '#FDBA74', '#D97706', '#EA580C', '#C2410C'];
 
 function buildGraph(commits) {
   const lanes = [];
@@ -232,26 +252,62 @@ function GitAvatar({ author, avatarUrl, size = 16, className }) {
   );
 }
 
-function CommitHoverCard({ row, avatarUrl, style }) {
+function CommitHoverCard({ row, avatarUrl, style, onMouseEnter, onMouseLeave, laneColor, remoteUrl }) {
   const { branches, tags } = parseRefs(row.refs);
   const filesChanged = row.filesChanged || 0;
   const insertions = row.insertions || 0;
   const deletions = row.deletions || 0;
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyHash = useCallback((e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(row.hash).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {});
+  }, [row.hash]);
+
+  const handleViewOnGitHub = useCallback((e) => {
+    e.stopPropagation();
+    if (remoteUrl) {
+      window.foundry?.openExternal(`${remoteUrl}/commit/${row.hash}`);
+    }
+  }, [remoteUrl, row.hash]);
+
   return (
     <motion.div
       className={styles.commitCard}
       style={style}
-      initial={{ opacity: 0, x: -8 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: -8 }}
-      transition={{ duration: 0.15, ease: 'easeOut' }}
+      initial={{ opacity: 0, x: -8, scale: 0.98 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -8, scale: 0.98 }}
+      transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       <div className={styles.commitCardHeader}>
-        <span className={styles.commitCardHash}>{row.short}</span>
+        <span className={`${styles.commitCardHash} ${copied ? styles.commitCardHashCopied : ''}`} onClick={handleCopyHash} title="Click to copy full hash">
+          {copied ? (
+            <>
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>
+              Copied!
+            </>
+          ) : (
+            <>
+              {row.short}
+              <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor" className={styles.commitCardCopyIcon}><path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25ZM5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>
+            </>
+          )}
+        </span>
         <span className={styles.commitCardDate}>{row.date}</span>
         {row.isoDate && <span className={styles.commitCardFullDate}>({formatFullDate(row.isoDate)})</span>}
       </div>
-      <div className={styles.commitCardMessage}>{row.message}</div>
+      {remoteUrl && (
+        <button className={styles.commitCardGitHubLink} onClick={handleViewOnGitHub} title="View on GitHub">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+          View on GitHub
+        </button>
+      )}
       {(branches.length > 0 || tags.length > 0) && (
         <div className={styles.commitCardRefs}>
           {branches.map(b => (
@@ -268,14 +324,17 @@ function CommitHoverCard({ row, avatarUrl, style }) {
           ))}
         </div>
       )}
-      <div className={styles.commitCardAuthor}>
-        <GitAvatar author={row.author} avatarUrl={avatarUrl} size={22} />
-        <span className={styles.commitCardAuthorName}>{row.author}</span>
-      </div>
-      <div className={styles.commitCardStats}>
-        <span className={styles.commitCardFiles}>{filesChanged} file{filesChanged !== 1 ? 's' : ''}</span>
-        <span className={styles.commitCardIns}>+{insertions}</span>
-        <span className={styles.commitCardDel}>-{deletions}</span>
+      <div className={styles.commitCardMessage}>{row.message}</div>
+      <div className={styles.commitCardFooter}>
+        <div className={styles.commitCardAuthor}>
+          <GitAvatar author={row.author} avatarUrl={avatarUrl} size={20} />
+          <span className={styles.commitCardAuthorName}>{row.author}</span>
+        </div>
+        <div className={styles.commitCardStats}>
+          <span className={styles.commitCardFiles}>{filesChanged} file{filesChanged !== 1 ? 's' : ''}</span>
+          <span className={styles.commitCardIns}>+{insertions}</span>
+          <span className={styles.commitCardDel}>-{deletions}</span>
+        </div>
       </div>
     </motion.div>
   );
@@ -289,9 +348,20 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
   const [cardHash, setCardHash] = useState(null);
   const [cardPos, setCardPos] = useState(null);
   const [avatarMap, setAvatarMap] = useState({});
+  const [remoteUrl, setRemoteUrl] = useState(null);
   const graphRef = useRef(null);
   const cardTimerRef = useRef(null);
   const rows = useMemo(() => buildGraph(commits), [commits]);
+
+  // Resolve remote URL for "View on GitHub" link
+  useEffect(() => {
+    if (!projectPath) return;
+    let cancelled = false;
+    window.foundry?.gitRemoteUrl?.(projectPath).then(url => {
+      if (!cancelled) setRemoteUrl(url || null);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectPath]);
 
   // Resolve GitHub avatars for all unique authors
   useEffect(() => {
@@ -335,9 +405,13 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
     document.addEventListener('mouseup', onUp);
   }, [graphHeight]);
 
+  const cardLeaveTimerRef = useRef(null);
+
   // Instant hover for dot magnification + row highlight
   const handleRowMouseEnter = useCallback((e, hash) => {
     setHoveredHash(hash);
+    // Cancel any pending card dismissal
+    clearTimeout(cardLeaveTimerRef.current);
     // Delayed flyout card
     clearTimeout(cardTimerRef.current);
     const target = e.currentTarget;
@@ -346,7 +420,7 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
     cardTimerRef.current = setTimeout(() => {
       const viewportH = window.innerHeight;
       const viewportW = window.innerWidth;
-      const cardW = 340;
+      const cardW = 400;
       const cardEstimatedH = 180;
       let left = rect.right + 8;
       if (left + cardW > viewportW - 10) left = viewportW - cardW - 10;
@@ -358,11 +432,34 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
     }, 400);
   }, []);
 
-  const handleRowMouseLeave = useCallback(() => {
+  const dismissCard = useCallback(() => {
     setHoveredHash(null);
     clearTimeout(cardTimerRef.current);
     setCardHash(null);
+    setCardPos(null);
   }, []);
+
+  const handleRowMouseLeave = useCallback(() => {
+    clearTimeout(cardTimerRef.current);
+    // Delay dismissal so user can move mouse to the card
+    clearTimeout(cardLeaveTimerRef.current);
+    cardLeaveTimerRef.current = setTimeout(() => {
+      dismissCard();
+    }, 200);
+  }, [dismissCard]);
+
+  const handleCardMouseEnter = useCallback(() => {
+    // Cancel dismissal when mouse enters the card
+    clearTimeout(cardLeaveTimerRef.current);
+  }, []);
+
+  const handleCardMouseLeave = useCallback(() => {
+    // Dismiss when mouse leaves the card
+    clearTimeout(cardLeaveTimerRef.current);
+    cardLeaveTimerRef.current = setTimeout(() => {
+      dismissCard();
+    }, 150);
+  }, [dismissCard]);
 
   // Infinite scroll — load more when near bottom
   const handleScroll = useCallback((e) => {
@@ -383,6 +480,7 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
 
   const getAvatarUrl = (row) => avatarMap[`${row.email || ''}||${row.author || ''}`] || null;
   const cardRow = cardHash ? rows.find(r => r.hash === cardHash) : null;
+  const cardLaneColor = cardRow ? GRAPH_COLORS[cardRow.lane % GRAPH_COLORS.length] : null;
 
   return (
     <div className={styles.graphSection} style={graphOpen ? { flexShrink: 0 } : undefined}>
@@ -429,11 +527,12 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
                     {/* Vertical lane lines for all active lanes */}
                     {row.activeLanes.map((laneHash, li) => {
                       if (laneHash === null) return null;
+                      const isFirst = ri === 0 && li === row.lane;
                       return (
                         <line
                           key={`v-${li}`}
                           x1={li * LANE_W + LANE_W / 2}
-                          y1={0}
+                          y1={isFirst ? ROW_H / 2 : 0}
                           x2={li * LANE_W + LANE_W / 2}
                           y2={isLast && li === row.lane ? ROW_H / 2 : ROW_H}
                           stroke={GRAPH_COLORS[li % GRAPH_COLORS.length]}
@@ -516,7 +615,7 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
                       {hasRefs && (
                         <div className={styles.graphRefs}>
                           {branches.map(b => (
-                            <span key={b} className={`${styles.refBadgeInline} ${styles.refBranchInline}`} style={{ borderColor: color + '60', color }}>
+                            <span key={b} className={`${styles.refBadgeInline} ${styles.refBranchInline}`}>
                               {b}
                             </span>
                           ))}
@@ -558,7 +657,7 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
       {/* Hover card — flies out to the right of the sidebar */}
       <AnimatePresence>
         {cardRow && cardPos && (
-          <CommitHoverCard row={cardRow} avatarUrl={getAvatarUrl(cardRow)} style={{ position: 'fixed', top: cardPos.top, left: cardPos.left, width: 340 }} />
+          <CommitHoverCard row={cardRow} avatarUrl={getAvatarUrl(cardRow)} laneColor={cardLaneColor} remoteUrl={remoteUrl} style={{ position: 'fixed', top: cardPos.top, left: cardPos.left, width: 400 }} onMouseEnter={handleCardMouseEnter} onMouseLeave={handleCardMouseLeave} />
         )}
       </AnimatePresence>
     </div>
@@ -582,14 +681,31 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   const [loadingMore, setLoadingMore] = useState(false);
   const commitInputRef = useRef(null);
 
-  // Fetch commit log on mount and after refreshes
+  // Submodule & repo connection state
+  const [submodules, setSubmodules] = useState([]);
+  const [selectedRepo, setSelectedRepo] = useState(''); // '' = root repo
+
+  // Detect submodules
   useEffect(() => {
     if (!projectPath || !gitStatus.isRepo) return;
     let cancelled = false;
+    window.foundry?.gitListSubmodules?.(projectPath).then(subs => {
+      if (!cancelled && subs) setSubmodules(subs);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [projectPath, gitStatus]);
+
+  // The effective path for git operations (root or submodule)
+  const effectivePath = selectedRepo ? selectedRepo : projectPath;
+
+  // Fetch commit log for the selected repo on mount and after refreshes
+  useEffect(() => {
+    if (!effectivePath || !gitStatus.isRepo) return;
+    let cancelled = false;
     (async () => {
       const [log, count] = await Promise.all([
-        window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE),
-        window.foundry?.gitCommitCount(projectPath),
+        window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE),
+        window.foundry?.gitCommitCount(effectivePath),
       ]);
       if (!cancelled) {
         if (log) {
@@ -600,13 +716,13 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
       }
     })();
     return () => { cancelled = true; };
-  }, [projectPath, gitStatus]);
+  }, [effectivePath, gitStatus]);
 
   const refreshGit = async () => {
     onRefreshGit?.();
     const [log, count] = await Promise.all([
-      window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE),
-      window.foundry?.gitCommitCount(projectPath),
+      window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE),
+      window.foundry?.gitCommitCount(effectivePath),
     ]);
     if (log) {
       setCommits(log);
@@ -616,10 +732,10 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   };
 
   const loadMoreCommits = useCallback(async () => {
-    if (loadingMore || !hasMoreCommits || !projectPath) return;
+    if (loadingMore || !hasMoreCommits || !effectivePath) return;
     setLoadingMore(true);
     try {
-      const more = await window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE, commits.length);
+      const more = await window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, commits.length);
       if (more && more.length > 0) {
         setCommits(prev => [...prev, ...more]);
         setHasMoreCommits(more.length >= COMMITS_PAGE_SIZE);
@@ -628,7 +744,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
       }
     } catch { setHasMoreCommits(false); }
     setLoadingMore(false);
-  }, [loadingMore, hasMoreCommits, projectPath, commits.length]);
+  }, [loadingMore, hasMoreCommits, effectivePath, commits.length]);
 
   const handleStageFile = async (filePath) => {
     await window.foundry?.gitStage(projectPath, filePath);
@@ -845,6 +961,29 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
         </button>
       </div>
 
+      {submodules.length > 0 && (
+        <div className={styles.repoSelector}>
+          <span className={styles.repoSelectLabel}>Repo</span>
+          <select
+            className={styles.repoSelect}
+            value={selectedRepo}
+            onChange={(e) => {
+              setSelectedRepo(e.target.value);
+              setCommits([]);
+              setTotalCommits(0);
+              setHasMoreCommits(true);
+            }}
+          >
+            <option value="">{projectPath ? projectPath.split('/').pop() : 'Root'}</option>
+            {submodules.map(sub => (
+              <option key={sub.path} value={sub.fullPath}>
+                {sub.path}{sub.dirty ? ' •' : ''}{sub.uninitialized ? ' (not init)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {staged.length > 0 && (
         <>
           <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setStagedOpen(!stagedOpen)}>
@@ -927,7 +1066,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
         )}
       </AnimatePresence>
 
-      <CommitGraph commits={commits} projectPath={projectPath} onLoadMore={loadMoreCommits} hasMore={hasMoreCommits} loadingMore={loadingMore} totalCommits={totalCommits} />
+      <CommitGraph commits={commits} projectPath={effectivePath} onLoadMore={loadMoreCommits} hasMore={hasMoreCommits} loadingMore={loadingMore} totalCommits={totalCommits} />
     </div>
   );
 }

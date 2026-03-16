@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { PiTerminalWindow, PiTerminalWindowFill } from 'react-icons/pi';
-import { TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled } from 'react-icons/tb';
+import { TbLayoutBottombar, TbLayoutBottombarFilled, TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled } from 'react-icons/tb';
+import { FiSun, FiMoon } from 'react-icons/fi';
 import ActivityBar from './ActivityBar';
 import Sidebar from './Sidebar';
 import EditorArea from './EditorArea';
@@ -83,8 +83,28 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     restoreProject();
   }, []);
 
-  // Derive current effective theme
-  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  // Derive current effective theme (reactive via state)
+  const [currentTheme, setCurrentTheme] = useState(
+    () => document.documentElement.getAttribute('data-theme') || 'dark'
+  );
+
+  // Watch for theme attribute changes (from settings page, system changes, etc.)
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const t = document.documentElement.getAttribute('data-theme') || 'dark';
+      setCurrentTheme(t);
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const handleThemeToggle = useCallback(async () => {
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    setCurrentTheme(newTheme);
+    await window.foundry?.updateProfile({ theme: newTheme });
+    if (onProfileChange) await onProfileChange();
+  }, [currentTheme, onProfileChange]);
 
   const handleSidebarWidthChange = useCallback((newWidth) => {
     setSidebarWidth(newWidth);
@@ -240,6 +260,17 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
             <button
+              className={styles.titlebarBtn}
+              onClick={handleThemeToggle}
+              title={currentTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              <span className={styles.iconCrossfade}>
+                <FiSun size={18} className={`${styles.themeIcon} ${currentTheme === 'dark' ? '' : styles.themeIconHidden}`} />
+                <FiMoon size={18} className={`${styles.themeIcon} ${currentTheme === 'dark' ? styles.themeIconHidden : ''}`} />
+              </span>
+            </button>
+            <div className={styles.titlebarDivider} />
+            <button
               className={`${styles.titlebarBtn} ${sidebarVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setSidebarVisible(v => !v)}
               title="Toggle Sidebar"
@@ -255,8 +286,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               title="Toggle Terminal"
             >
               <span className={styles.iconCrossfade}>
-                <PiTerminalWindow size={20} className={`${styles.iconBase} ${terminalVisible ? styles.iconHidden : ''}`} />
-                <PiTerminalWindowFill size={20} className={`${styles.iconFill} ${terminalVisible ? '' : styles.iconHidden}`} />
+                <TbLayoutBottombar size={20} className={`${styles.iconBase} ${terminalVisible ? styles.iconHidden : ''}`} />
+                <TbLayoutBottombarFilled size={20} className={`${styles.iconFill} ${terminalVisible ? '' : styles.iconHidden}`} />
               </span>
             </button>
             <button

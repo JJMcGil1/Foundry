@@ -353,6 +353,53 @@ function getFileLanguage(filePath) {
   return map[ext] || 'plaintext';
 }
 
+function getGitSubmodules(dirPath) {
+  try {
+    const result = execSync('git submodule status --recursive', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const lines = result.split('\n').filter(Boolean);
+    return lines.map(line => {
+      // Format: " <hash> <path> (<describe>)" or "+<hash> <path> (<describe>)" or "-<hash> <path>"
+      const match = line.match(/^[\s+-]?([0-9a-f]+)\s+(\S+)(?:\s+\((.+)\))?/);
+      if (!match) return null;
+      const [, hash, subPath, describe] = match;
+      const prefix = line.trim()[0];
+      return {
+        hash: hash,
+        path: subPath,
+        describe: describe || '',
+        dirty: prefix === '+',
+        uninitialized: prefix === '-',
+        fullPath: path.join(dirPath, subPath),
+      };
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function getGitRemotes(dirPath) {
+  try {
+    const result = execSync('git remote -v', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const lines = result.split('\n').filter(Boolean);
+    const remotes = {};
+    for (const line of lines) {
+      const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)/);
+      if (match) {
+        const [, name, url, type] = match;
+        if (!remotes[name]) remotes[name] = {};
+        remotes[name][type] = url;
+      }
+    }
+    return Object.entries(remotes).map(([name, urls]) => ({
+      name,
+      fetchUrl: urls.fetch || '',
+      pushUrl: urls.push || '',
+    }));
+  } catch {
+    return [];
+  }
+}
+
 function getGitStatus(dirPath) {
   try {
     const result = execSync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
@@ -704,9 +751,24 @@ function registerIPC() {
   // Git
   ipcMain.handle('git:status', async (_event, dirPath) => getGitStatus(dirPath));
   ipcMain.handle('git:log', async (_event, dirPath, count, skip) => getGitLog(dirPath, count, skip));
+  ipcMain.handle('git:submodules', async (_event, dirPath) => getGitSubmodules(dirPath));
+  ipcMain.handle('git:remotes', async (_event, dirPath) => getGitRemotes(dirPath));
   ipcMain.handle('git:commitCount', async (_event, dirPath) => getGitCommitCount(dirPath));
   ipcMain.handle('git:resolveAvatars', async (_event, authors) => resolveAvatarsBatch(authors));
   ipcMain.handle('git:diff', async (_event, dirPath, filePath) => getGitDiff(dirPath, filePath));
+
+  ipcMain.handle('git:remoteUrl', async (_event, dirPath) => {
+    try {
+      const url = execSync('git config --get remote.origin.url', { cwd: dirPath, timeout: 5000 }).toString().trim();
+      // Convert SSH URLs to HTTPS: git@github.com:user/repo.git → https://github.com/user/repo
+      if (url.startsWith('git@')) {
+        return url.replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '');
+      }
+      return url.replace(/\.git$/, '');
+    } catch {
+      return null;
+    }
+  });
 
   ipcMain.handle('git:stage', async (_event, dirPath, filePath) => {
     try {

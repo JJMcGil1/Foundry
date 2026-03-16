@@ -1,7 +1,26 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiSend, FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiChevronDown, FiTool, FiCopy, FiCheck } from 'react-icons/fi';
+import { FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiChevronDown, FiTool, FiCopy, FiCheck } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
+
+const SendIcon = ({ size = 28, active, className }) => (
+  <svg width={size} height={size} viewBox="0 0 28 28" fill="none" className={className}>
+    <defs>
+      <linearGradient id="sendGradient" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#FB923C" />
+        <stop offset="100%" stopColor="#EA580C" />
+      </linearGradient>
+    </defs>
+    <circle cx="14" cy="14" r="14" fill={active ? 'url(#sendGradient)' : 'currentColor'} />
+    <path
+      d="M14 7.5L14 19.5M14 7.5L8.5 13M14 7.5L19.5 13"
+      stroke="white"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </svg>
+);
 
 let streamIdCounter = 0;
 
@@ -268,7 +287,7 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamId, setCurrentStreamId] = useState(null);
   const [hasProvider, setHasProvider] = useState(null);
-  const [modelLabel, setModelLabel] = useState('Claude');
+  const [modelLabel, setModelLabel] = useState('Claude 4 Sonnet');
   const [modelKey, setModelKey] = useState('sonnet');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [error, setError] = useState(null);
@@ -291,7 +310,7 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
         ]);
         setHasProvider(!!tokenResult?.token);
         if (modelResult) {
-          const labels = { 'sonnet': 'Sonnet', 'opus': 'Opus', 'haiku': 'Haiku' };
+          const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
           setModelLabel(labels[modelResult] || modelResult);
           setModelKey(modelResult);
         }
@@ -318,7 +337,7 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
   }, [showModelDropdown]);
 
   const handleModelSwitch = async (key) => {
-    const labels = { 'sonnet': 'Sonnet', 'opus': 'Opus', 'haiku': 'Haiku' };
+    const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
     setModelKey(key);
     setModelLabel(labels[key] || key);
     setShowModelDropdown(false);
@@ -328,9 +347,9 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
   };
 
   const MODEL_OPTIONS = [
-    { key: 'opus', label: 'Opus', desc: 'Most capable' },
-    { key: 'sonnet', label: 'Sonnet', desc: 'Balanced' },
-    { key: 'haiku', label: 'Haiku', desc: 'Fastest' },
+    { key: 'opus', label: 'Claude 4 Opus', desc: 'Most capable' },
+    { key: 'sonnet', label: 'Claude 4 Sonnet', desc: 'Balanced' },
+    { key: 'haiku', label: 'Claude 3.5 Haiku', desc: 'Fastest' },
   ];
 
   // Helper: update the last assistant message's blocks
@@ -495,6 +514,7 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
 
     setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
     setInput('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
     setIsStreaming(true);
 
     // Reset block tracking
@@ -644,33 +664,72 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
     );
   };
 
+  const QUICK_PROMPTS = [
+    { label: 'Explain this project', prompt: 'Give me a high-level overview of this project — its structure, key technologies, and how the pieces fit together.' },
+    { label: 'Find bugs', prompt: 'Scan the current codebase for potential bugs, edge cases, or issues and suggest fixes.' },
+    { label: 'Write tests', prompt: 'Suggest and write tests for the most critical parts of this codebase.' },
+    { label: 'Refactor code', prompt: 'Identify areas of the codebase that could benefit from refactoring and suggest improvements.' },
+  ];
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
+  };
+
   const renderEmptyState = () => {
     if (hasProvider === null) return null;
     if (hasProvider === false) {
       return (
         <div className={styles.emptyState}>
-          <div className={styles.emptyIcon}><FiCpu size={24} /></div>
-          <h4 className={styles.emptyTitle}>Connect a Provider</h4>
-          <p className={styles.emptyDesc}>
-            Add your Claude API key or connect your Claude Code subscription to start chatting.
-          </p>
-          {onOpenSettings && (
-            <button className={styles.emptyBtn} onClick={() => onOpenSettings('providers')}>
-              <FiSettings size={13} />
-              Open Providers Settings
-            </button>
-          )}
+          <div className={styles.emptyCard}>
+            <div className={styles.emptyCardHeader}>
+              <div className={styles.emptyCardIcon}>
+                <FiSettings size={18} />
+              </div>
+              <h4 className={styles.emptyCardTitle}>Connect a Provider</h4>
+              <p className={styles.emptyCardDesc}>
+                Add your API key to start chatting with Sage.
+              </p>
+            </div>
+            {onOpenSettings && (
+              <button className={styles.emptyCardBtn} onClick={() => onOpenSettings('providers')}>
+                Open Settings
+                <FiChevronRight size={14} />
+              </button>
+            )}
+          </div>
         </div>
       );
     }
     if (messages.length === 0) {
       return (
         <div className={styles.emptyState}>
-          <div className={styles.emptyIcon}><FiMessageSquare size={24} /></div>
-          <h4 className={styles.emptyTitle}>Start a Conversation</h4>
-          <p className={styles.emptyDesc}>
-            Ask anything about your code. Claude will help you build, debug, and understand your project.
-          </p>
+          <div className={styles.emptyCard}>
+            <div className={styles.emptyCardHeader}>
+              <span className={styles.emptyGreetingIcon}>✦</span>
+              <h3 className={styles.emptyCardTitle}>{getGreeting()}</h3>
+              <p className={styles.emptyCardDesc}>
+                What can I help you build today?
+              </p>
+            </div>
+            <div className={styles.quickPrompts}>
+              {QUICK_PROMPTS.map((qp, i) => (
+                <button
+                  key={i}
+                  className={styles.quickPromptBtn}
+                  onClick={() => {
+                    setInput(qp.prompt);
+                    inputRef.current?.focus();
+                  }}
+                >
+                  <span className={styles.quickPromptLabel}>{qp.label}</span>
+                  <FiChevronRight size={13} className={styles.quickPromptArrow} />
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       );
     }
@@ -690,43 +749,6 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
       <div className={styles.header}>
         <FiMessageSquare size={13} />
         <span className={styles.headerTitle}>Chat</span>
-        <div className={styles.modelSwitcher} ref={modelSwitcherRef}>
-          <button
-            className={styles.modelBadge}
-            onClick={() => setShowModelDropdown(v => !v)}
-          >
-            <span>{modelLabel}</span>
-            <FiChevronDown
-              size={10}
-              className={`${styles.modelBadgeChevron} ${showModelDropdown ? styles.modelBadgeChevronOpen : ''}`}
-            />
-          </button>
-          <AnimatePresence>
-            {showModelDropdown && (
-              <motion.div
-                className={styles.modelDropdown}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -4 }}
-                transition={{ duration: 0.15 }}
-              >
-                {MODEL_OPTIONS.map(opt => (
-                  <button
-                    key={opt.key}
-                    className={`${styles.modelOption} ${modelKey === opt.key ? styles.modelOptionActive : ''}`}
-                    onClick={() => handleModelSwitch(opt.key)}
-                  >
-                    <span className={styles.modelOptionCheck}>
-                      {modelKey === opt.key ? <FiCheck size={12} /> : null}
-                    </span>
-                    <span className={styles.modelOptionLabel}>{opt.label}</span>
-                    <span className={styles.modelOptionDesc}>{opt.desc}</span>
-                  </button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
       </div>
 
       <div className={styles.messages}>
@@ -741,7 +763,7 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
                 {msg.role === 'user' ? <FiUser size={12} /> : <FiCpu size={12} />}
               </div>
               <span className={styles.messageRole}>
-                {msg.role === 'user' ? 'You' : 'Claude'}
+                {msg.role === 'user' ? 'You' : 'Sage'}
               </span>
               {msg.timestamp && (
                 <span className={styles.messageTime}>{msg.timestamp}</span>
@@ -768,32 +790,77 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
           <textarea
             ref={inputRef}
             className={styles.input}
-            placeholder={hasProvider === false ? 'Connect a provider to start...' : 'Ask Claude...'}
+            placeholder={hasProvider === false ? 'Connect a provider to start...' : 'Message Sage...'}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              const el = e.target;
+              el.style.height = '0';
+              const newHeight = Math.min(el.scrollHeight, 200);
+              el.style.height = newHeight + 'px';
+              el.style.overflowY = el.scrollHeight > 200 ? 'auto' : 'hidden';
+            }}
             onKeyDown={handleKeyDown}
             rows={1}
             disabled={hasProvider === false}
           />
-          {isStreaming ? (
-            <button className={styles.stopBtn} onClick={handleStop} title="Stop generating">
-              <FiSquare size={12} />
-            </button>
-          ) : (
-            <button
-              className={styles.sendBtn}
-              onClick={handleSend}
-              disabled={!input.trim() || hasProvider === false}
-            >
-              <FiSend size={14} />
-            </button>
-          )}
-        </div>
-        <div className={styles.inputHint}>
-          <kbd className={styles.kbd}>Enter</kbd>
-          <span>to send</span>
-          <kbd className={styles.kbd}>Shift+Enter</kbd>
-          <span>new line</span>
+          <div className={styles.inputToolbar}>
+            <div className={styles.toolbarLeft}>
+              <div className={styles.modelSwitcher} ref={modelSwitcherRef}>
+                <button
+                  className={styles.modelBadge}
+                  onClick={() => setShowModelDropdown(v => !v)}
+                >
+                  <FiCpu size={12} className={styles.modelBadgeIcon} />
+                  <span>{modelLabel}</span>
+                  <FiChevronDown
+                    size={10}
+                    className={`${styles.modelBadgeChevron} ${showModelDropdown ? styles.modelBadgeChevronOpen : ''}`}
+                  />
+                </button>
+                <AnimatePresence>
+                  {showModelDropdown && (
+                    <motion.div
+                      className={styles.modelDropdown}
+                      initial={{ opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: 4 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {MODEL_OPTIONS.map(opt => (
+                        <button
+                          key={opt.key}
+                          className={`${styles.modelOption} ${modelKey === opt.key ? styles.modelOptionActive : ''}`}
+                          onClick={() => handleModelSwitch(opt.key)}
+                        >
+                          <span className={styles.modelOptionCheck}>
+                            {modelKey === opt.key ? <FiCheck size={12} /> : null}
+                          </span>
+                          <span className={styles.modelOptionLabel}>{opt.label}</span>
+                          <span className={styles.modelOptionDesc}>{opt.desc}</span>
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
+            <div className={styles.toolbarRight}>
+              {isStreaming ? (
+                <button className={styles.stopBtn} onClick={handleStop} title="Stop generating">
+                  <FiSquare size={12} />
+                </button>
+              ) : (
+                <button
+                  className={`${styles.sendBtn} ${input.trim() ? styles.sendBtnActive : ''}`}
+                  onClick={handleSend}
+                  disabled={!input.trim() || hasProvider === false}
+                >
+                  <SendIcon size={28} active={!!input.trim()} />
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </motion.div>
