@@ -1,0 +1,70 @@
+/* ---- Tool Use Block (generic inline) ---- */
+.toolBlock {
+  margin: 0;
+}
+
+.toolToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--zinc-600);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 400;
+  text-align: left;
+  padding: 4px 0;
+  transition: color 0.15s ease;
+}
+
+.toolToggle:hover {
+  color: var(--zinc-500);
+}
+
+.toolIcon {
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.toolName {
+  font-weight: 500;
+  color: inherit;
+  flex-shrink: 0;
+}
+
+.toolContext {
+  color: inherit;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 220px;
+}
+
+.toolContent {
+  overflow: hidden;
+}
+
+.toolInput {
+  margin: 0;
+  padding: 6px 0 4px 24px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--zinc-600);
+  background: none;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.toolInput::-webkit-scrollbar {
+  width: 4px;
+}
+
+.toolInput::-webkit-scrollbar-thumb {
+  background: var(--zinc-700);
+  border-radius: 4px;
+}

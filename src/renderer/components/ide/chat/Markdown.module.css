@@ -1,0 +1,83 @@
+/* ---- Inline Markdown ---- */
+.inlineCode {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 2px 7px;
+  background: var(--surface-3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  color: var(--zinc-200);
+  font-weight: 500;
+}
+
+.mdPara {
+  margin: 0 0 8px;
+}
+
+.mdPara:last-child {
+  margin-bottom: 0;
+}
+
+.mdH1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--zinc-100);
+  margin: 12px 0 6px;
+}
+
+.mdH2 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--zinc-100);
+  margin: 10px 0 4px;
+}
+
+.mdH3 {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--zinc-200);
+  margin: 8px 0 4px;
+}
+
+.mdH4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--zinc-200);
+  margin: 6px 0 4px;
+}
+
+.mdList {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+.mdList li {
+  margin: 2px 0;
+  color: var(--zinc-300);
+}
+
+.mdBlockquote {
+  margin: 6px 0;
+  padding: 4px 12px;
+  border-left: 2px solid var(--zinc-600);
+  color: var(--zinc-400);
+  font-style: italic;
+}
+
+.mdHr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+.mdLink {
+  color: var(--zinc-200);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--zinc-600);
+}
+
+.mdLink:hover {
+  color: var(--zinc-100);
+  text-decoration-color: var(--zinc-400);
+}
