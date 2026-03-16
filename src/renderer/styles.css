@@ -37,6 +37,8 @@
   --surface-4: #3F3F46;   /* highest: active states */
 
   --border: rgba(255, 255, 255, 0.06);
+  --border-card: rgba(255, 255, 255, 0.1);
+  --bash-header-bg: rgba(255, 255, 255, 0.05);
 
   --titlebar-btn-hover: rgba(255, 255, 255, 0.08);
 
@@ -95,6 +97,8 @@
   --surface-4: #D4D4D8;
 
   --border: rgba(0, 0, 0, 0.06);
+  --border-card: rgba(0, 0, 0, 0.12);
+  --bash-header-bg: rgba(0, 0, 0, 0.04);
 
   --titlebar-btn-hover: rgba(0, 0, 0, 0.08);
 

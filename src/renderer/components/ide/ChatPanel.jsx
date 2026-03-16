@@ -1,6 +1,10 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiChevronDown, FiTool, FiCopy, FiCheck, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiChevronDown, FiTool, FiCopy, FiCheck, FiPlus, FiTrash2, FiEdit2, FiFile, FiTerminal, FiSearch, FiEye, FiDownload, FiTrash, FiGlobe, FiExternalLink } from 'react-icons/fi';
+import { LuBrainCircuit, LuChevronsUpDown, LuFileCode } from 'react-icons/lu';
+import { FaEye } from 'react-icons/fa';
+import { RiFileEditFill } from 'react-icons/ri';
+import { HiTerminal } from 'react-icons/hi';
 import styles from './ChatPanel.module.css';
 
 const SendIcon = ({ size = 28, active, className }) => (
@@ -217,16 +221,26 @@ function processInline(text) {
 function ThinkingBlock({ content, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
 
+  // Build a truncated preview of the thinking content
+  const preview = useMemo(() => {
+    if (!content) return '...';
+    const clean = content.replace(/\n+/g, ' ').trim();
+    return clean.length > 48 ? clean.slice(0, 45) + '...' : clean;
+  }, [content]);
+
   return (
     <div className={styles.thinkingBlock}>
       <button
         className={`${styles.thinkingToggle} ${expanded ? styles.thinkingExpanded : ''}`}
         onClick={() => setExpanded(!expanded)}
       >
-        <FiChevronRight size={12} className={styles.thinkingChevron} />
-        <span className={styles.thinkingLabel}>
-          {isStreaming ? 'Thinking...' : 'Thinking'}
-        </span>
+        <LuBrainCircuit size={16} className={styles.thinkingIcon} />
+        <span className={styles.thinkingLabel}>Thought</span>
+        {!expanded && (
+          <span className={styles.thinkingPreview}>
+            &ldquo;{isStreaming && !content ? '...' : preview}&rdquo;
+          </span>
+        )}
         {isStreaming && (
           <span className={styles.thinkingPulse}>
             <span className={styles.pulseDot} />
@@ -242,7 +256,7 @@ function ThinkingBlock({ content, isStreaming }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <div className={styles.thinkingText}>
               {content || '...'}
@@ -256,21 +270,202 @@ function ThinkingBlock({ content, isStreaming }) {
 
 
 // ---- Tool Use Block Component ---- //
-function ToolUseBlock({ name, input, isStreaming }) {
+
+const TOOL_META = {
+  Edit:     { icon: FiEdit2,    label: 'Edit' },
+  Write:    { icon: FiDownload, label: 'Write' },
+  Read:     { icon: FaEye,      label: 'Read' },
+  Bash:     { icon: FiTerminal, label: 'Bash' },
+  Grep:     { icon: FiSearch,   label: 'Search' },
+  Glob:     { icon: FiSearch,   label: 'Glob' },
+  WebFetch: { icon: FiGlobe,    label: 'Fetch' },
+};
+
+function extractToolContext(name, input) {
+  if (!input) return null;
+  const data = typeof input === 'string' ? (() => { try { return JSON.parse(input); } catch { return null; } })() : input;
+  if (!data) return null;
+
+  if (data.file_path) {
+    const parts = data.file_path.split('/');
+    return parts[parts.length - 1];
+  }
+  if (data.command) {
+    const cmd = data.command.length > 50 ? data.command.slice(0, 47) + '...' : data.command;
+    return cmd;
+  }
+  if (data.pattern) {
+    return data.pattern;
+  }
+  if (data.description) {
+    const desc = data.description.length > 50 ? data.description.slice(0, 47) + '...' : data.description;
+    return desc;
+  }
+  return null;
+}
+
+function EditToolBlock({ input, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
+  const data = useMemo(() => {
+    if (!input) return {};
+    const d = typeof input === 'string' ? (() => { try { return JSON.parse(input); } catch { return null; } })() : input;
+    return d || {};
+  }, [input]);
+
+  const filePath = data.file_path || '';
+  const fileName = filePath ? filePath.split('/').pop() : 'unknown';
+  const oldStr = data.old_string || '';
+  const newStr = data.new_string || '';
+  const oldLines = oldStr ? oldStr.split('\n') : [];
+  const newLines = newStr ? newStr.split('\n') : [];
+  const totalLines = oldLines.length + newLines.length;
+  const needsCollapse = totalLines > 4;
+
+  return (
+    <div className={styles.diffBlock}>
+      <div className={styles.diffHeader}>
+        <LuFileCode size={16} className={styles.diffFileIcon} />
+        <span className={styles.diffFileName}>{fileName}</span>
+        {!isStreaming && oldStr && newStr && (
+          <div className={styles.diffBadges}>
+            {newLines.length > 0 && (
+              <span className={styles.diffBadgeAdd}>+{newLines.length}</span>
+            )}
+            {oldLines.length > 0 && (
+              <span className={styles.diffBadgeRemove}>-{oldLines.length}</span>
+            )}
+          </div>
+        )}
+        {isStreaming && (
+          <span className={styles.thinkingPulse}>
+            <span className={styles.pulseDot} />
+            <span className={styles.pulseDot} />
+            <span className={styles.pulseDot} />
+          </span>
+        )}
+        <button
+          className={styles.diffCollapseBtn}
+          onClick={() => setExpanded(e => !e)}
+          title={expanded ? 'Collapse' : 'Expand'}
+        >
+          <LuChevronsUpDown size={14} />
+        </button>
+      </div>
+      {(oldStr || newStr) && (
+        <div className={`${styles.diffBody} ${!expanded && needsCollapse ? styles.diffBodyCollapsed : ''}`}>
+          {oldLines.map((line, i) => (
+            <div key={`old-${i}`} className={styles.diffLineRemoved}>
+              <span className={styles.diffLineNum}>{i + 1}</span>
+              <span className={styles.diffLinePrefix}>−</span>
+              <span className={styles.diffLineText}>{line}</span>
+            </div>
+          ))}
+          {newLines.map((line, i) => (
+            <div key={`new-${i}`} className={styles.diffLineAdded}>
+              <span className={styles.diffLineNum}>{oldLines.length + i + 1}</span>
+              <span className={styles.diffLinePrefix}>+</span>
+              <span className={styles.diffLineText}>{line}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BashToolBlock({ input, isStreaming }) {
+  const [copied, setCopied] = useState(false);
+  const data = useMemo(() => {
+    if (!input) return {};
+    const d = typeof input === 'string' ? (() => { try { return JSON.parse(input); } catch { return null; } })() : input;
+    return d || {};
+  }, [input]);
+
+  const command = data.command || '';
+  const description = data.description || '';
+  const displayCmd = command.length > 50 ? command.slice(0, 47) + '...' : command;
+
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    navigator.clipboard.writeText(command);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className={styles.bashBlock}>
+      <div className={styles.bashHeader}>
+        <div className={styles.bashDots}>
+          <span className={styles.bashDotRed} />
+          <span className={styles.bashDotYellow} />
+          <span className={styles.bashDotGreen} />
+        </div>
+        <div className={styles.bashTitle}>
+          <HiTerminal size={12} className={styles.bashTitleIcon} />
+          <span>Terminal</span>
+          <span className={styles.bashTitleCmd}>$ {displayCmd}</span>
+        </div>
+        <div className={styles.bashActions}>
+          <button className={styles.bashActionBtn} onClick={handleCopy} title="Copy command">
+            {copied ? <FiCheck size={11} /> : <FiCopy size={11} />}
+          </button>
+        </div>
+      </div>
+      <div className={styles.bashBody}>
+        <span className={styles.bashPrompt}>$</span>
+        <span className={styles.bashCommand}>{command}</span>
+        {description && (
+          <div className={styles.bashDescription}>{description}</div>
+        )}
+        {isStreaming && (
+          <div className={styles.bashRunning}>
+            <span className={styles.bashCursor} />
+          </div>
+        )}
+        {!isStreaming && command && (
+          <div className={styles.bashSuccess}>
+            <FiCheck size={11} />
+            <span>Success</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ToolUseBlock({ name, input, isStreaming }) {
+  // Bash gets its own terminal UI
+  if (name === 'Bash') {
+    return <BashToolBlock input={input} isStreaming={isStreaming} />;
+  }
+  // Edit/Write get a diff view
+  if (name === 'Edit') {
+    return <EditToolBlock input={input} isStreaming={isStreaming} />;
+  }
+
+  const [expanded, setExpanded] = useState(false);
+  const meta = TOOL_META[name] || { icon: FiTool, label: name || 'Tool call' };
+  const IconComponent = meta.icon;
+  const context = useMemo(() => extractToolContext(name, input), [name, input]);
 
   return (
     <div className={styles.toolBlock}>
       <button
-        className={`${styles.toolToggle} ${expanded ? styles.toolExpanded : ''}`}
+        className={styles.toolToggle}
         onClick={() => setExpanded(!expanded)}
       >
-        <FiTool size={11} className={styles.toolIcon} />
-        <span className={styles.toolName}>{name || 'Tool call'}</span>
-        {isStreaming && (
-          <span className={styles.toolRunning}>running...</span>
+        <IconComponent size={14} className={styles.toolIcon} />
+        <span className={styles.toolName}>{meta.label}</span>
+        {context && (
+          <span className={styles.toolContext}>{context}</span>
         )}
-        <FiChevronRight size={12} className={styles.toolChevron} />
+        {isStreaming && (
+          <span className={styles.thinkingPulse}>
+            <span className={styles.pulseDot} />
+            <span className={styles.pulseDot} />
+            <span className={styles.pulseDot} />
+          </span>
+        )}
       </button>
       <AnimatePresence>
         {expanded && input && (
@@ -279,7 +474,7 @@ function ToolUseBlock({ name, input, isStreaming }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
           >
             <pre className={styles.toolInput}>
               {typeof input === 'string' ? input : JSON.stringify(input, null, 2)}
