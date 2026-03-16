@@ -234,6 +234,7 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
   const [claudeKeyError, setClaudeKeyError] = useState('');
   const [claudeKeySaved, setClaudeKeySaved] = useState(false);
   const [claudeDetecting, setClaudeDetecting] = useState(false);
+  const [autoApprovePermissions, setAutoApprovePermissions] = useState(true);
   const [selectedModel, setSelectedModel] = useState('sonnet');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [claudeModels, setClaudeModels] = useState(CLAUDE_MODELS_DEFAULT);
@@ -258,11 +259,12 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
   // Only fast local DB reads here. No network calls, no CLI spawns.
   useEffect(() => {
     async function preloadSettings() {
-      const [token, cachedUserJson, apiKey, model] = await Promise.all([
+      const [token, cachedUserJson, apiKey, model, autoApproveRaw] = await Promise.all([
         window.foundry?.getSetting('github_token'),
         window.foundry?.getSetting('github_user_cache'),
         window.foundry?.claudeGetApiKey(),
         window.foundry?.claudeGetModel(),
+        window.foundry?.getSetting('claude_auto_approve_permissions'),
       ]);
       // GitHub
       if (token) {
@@ -284,6 +286,8 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
       if (model) {
         setSelectedModel(model);
       }
+      // Default ON — skip permissions by default unless user explicitly disabled it
+      setAutoApprovePermissions(autoApproveRaw === null || autoApproveRaw === undefined || autoApproveRaw === 'true');
     }
     preloadSettings();
   }, []);
@@ -421,6 +425,11 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
         (r.description && r.description.toLowerCase().includes(repoSearch.toLowerCase()))
       )
     : repos;
+
+  const handleAutoApproveToggle = async (val) => {
+    setAutoApprovePermissions(val);
+    await window.foundry?.setSetting('claude_auto_approve_permissions', String(val));
+  };
 
   const handleSaveClaudeKey = async () => {
     if (!claudeApiKey.trim()) return;
@@ -756,6 +765,26 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
                         Get Claude Code <FiExternalLink size={10} />
                       </button>
                     </p>
+                  )}
+
+                  {/* Auto-approve permissions toggle — only relevant when CLI is present */}
+                  {claudeCliStatus.installed && (
+                    <div className={styles.autoApproveRow}>
+                      <div className={styles.autoApproveInfo}>
+                        <span className={styles.autoApproveLabel}>Auto-approve all permissions</span>
+                        <span className={styles.providerHint}>
+                          Never pause for tool approvals — Claude runs uninterrupted without asking for permission.
+                        </span>
+                      </div>
+                      <button
+                        className={`${styles.toggleSwitch} ${autoApprovePermissions ? styles.toggleSwitchOn : ''}`}
+                        onClick={() => handleAutoApproveToggle(!autoApprovePermissions)}
+                        aria-pressed={autoApprovePermissions}
+                        title={autoApprovePermissions ? 'Disable auto-approve' : 'Enable auto-approve'}
+                      >
+                        <span className={styles.toggleThumb} />
+                      </button>
+                    </div>
                   )}
                 </div>
 

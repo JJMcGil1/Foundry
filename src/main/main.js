@@ -1557,15 +1557,23 @@ function registerIPC() {
     // If a full model ID was passed, use it as-is — the CLI handles both.
     const modelAlias = model || 'sonnet';
 
+    // Read auto-approve setting — default ON (null means never set, treat as true)
+    const autoApproveRaw = getSetting('claude_auto_approve_permissions');
+    const autoApprove = autoApproveRaw === null || autoApproveRaw === undefined || autoApproveRaw === 'true';
+
     const args = [
       '-p', prompt,
       '--output-format', 'stream-json',
       '--verbose',
       '--include-partial-messages',
       '--model', modelAlias,
-      '--max-turns', '1',
+      '--max-turns', '50',
       '--no-session-persistence',
     ];
+
+    if (autoApprove) {
+      args.push('--dangerously-skip-permissions');
+    }
 
     return new Promise((resolve) => {
       // Build clean env — strip Claude Code nesting vars

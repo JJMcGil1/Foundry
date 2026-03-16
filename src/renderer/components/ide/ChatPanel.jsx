@@ -586,7 +586,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
           content: cb.text || cb.thinking || '',
           name: cb.name || '',
           id: cb.id || '',
-          input: cb.input || null,
+          input: (cb.input && typeof cb.input === 'object' && Object.keys(cb.input).length === 0) ? '' : (cb.input || ''),
           streaming: true,
         };
         blocksRef.current = [...blocksRef.current, block];
