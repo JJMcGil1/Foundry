@@ -83,6 +83,36 @@ async function initDatabase() {
     )
   `);
 
+  // ---- Chat Threads & Messages ---- //
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_threads (
+      id TEXT PRIMARY KEY,
+      title TEXT,
+      created_at INTEGER NOT NULL,
+      last_modified INTEGER NOT NULL,
+      workspace_path TEXT,
+      message_count INTEGER DEFAULT 0
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS chat_messages (
+      id TEXT PRIMARY KEY,
+      thread_id TEXT NOT NULL,
+      role TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      data TEXT NOT NULL
+    )
+  `);
+
+  // Composite index for paginated thread queries
+  db.run(`CREATE INDEX IF NOT EXISTS idx_messages_thread_created ON chat_messages(thread_id, created_at DESC)`);
+  // Simple thread lookup
+  db.run(`CREATE INDEX IF NOT EXISTS idx_messages_thread ON chat_messages(thread_id)`);
+  // Thread lookup by workspace
+  db.run(`CREATE INDEX IF NOT EXISTS idx_threads_workspace ON chat_threads(workspace_path, last_modified DESC)`);
+
   persistDb();
 
   // Auto-save every 30 seconds as a safety net against hard kills
@@ -221,6 +251,136 @@ function touchWorkspace(wsPath) {
   persistDb();
 }
 
+// ---- Chat Threads ---- //
+
+function createThread({ id, title, workspacePath }) {
+  if (!db) return null;
+  const now = Date.now();
+  db.run(
+    `INSERT INTO chat_threads (id, title, created_at, last_modified, workspace_path, message_count)
+     VALUES (?, ?, ?, ?, ?, 0)`,
+    [id, title || null, now, now, workspacePath || null]
+  );
+  persistDb();
+  return { id, title: title || null, created_at: now, last_modified: now, workspace_path: workspacePath || null, message_count: 0 };
+}
+
+function getThreads(workspacePath) {
+  if (!db) return [];
+  let sql, params;
+  if (workspacePath) {
+    sql = 'SELECT id, title, created_at, last_modified, workspace_path, message_count FROM chat_threads WHERE workspace_path = ? ORDER BY last_modified DESC';
+    params = [workspacePath];
+  } else {
+    sql = 'SELECT id, title, created_at, last_modified, workspace_path, message_count FROM chat_threads ORDER BY last_modified DESC';
+    params = [];
+  }
+  const results = db.exec(sql, params);
+  if (!results.length) return [];
+  return results[0].values.map(row => ({
+    id: row[0], title: row[1], created_at: row[2], last_modified: row[3],
+    workspace_path: row[4], message_count: row[5],
+  }));
+}
+
+function getThread(id) {
+  if (!db) return null;
+  const stmt = db.prepare('SELECT id, title, created_at, last_modified, workspace_path, message_count FROM chat_threads WHERE id = ?');
+  stmt.bind([id]);
+  if (stmt.step()) {
+    const row = stmt.getAsObject();
+    stmt.free();
+    return row;
+  }
+  stmt.free();
+  return null;
+}
+
+function updateThread(id, updates) {
+  if (!db) return null;
+  const current = getThread(id);
+  if (!current) return null;
+  const title = updates.title !== undefined ? updates.title : current.title;
+  const messageCount = updates.message_count !== undefined ? updates.message_count : current.message_count;
+  const lastModified = Date.now();
+  db.run(
+    `UPDATE chat_threads SET title = ?, message_count = ?, last_modified = ? WHERE id = ?`,
+    [title, messageCount, lastModified, id]
+  );
+  persistDb();
+  return { ...current, title, message_count: messageCount, last_modified: lastModified };
+}
+
+function deleteThread(id) {
+  if (!db) return false;
+  db.run('DELETE FROM chat_messages WHERE thread_id = ?', [id]);
+  db.run('DELETE FROM chat_threads WHERE id = ?', [id]);
+  persistDb();
+  return true;
+}
+
+// ---- Chat Messages ---- //
+
+function saveMessages(messages) {
+  if (!db || !messages.length) return false;
+  const stmt = db.prepare(
+    `INSERT OR REPLACE INTO chat_messages (id, thread_id, role, created_at, updated_at, data)
+     VALUES (?, ?, ?, ?, ?, ?)`
+  );
+  for (const msg of messages) {
+    stmt.run([msg.id, msg.threadId, msg.role, msg.createdAt, msg.updatedAt, msg.data]);
+  }
+  stmt.free();
+  persistDb();
+  return true;
+}
+
+function getMessages(threadId, limit = 50, beforeTimestamp = null) {
+  if (!db) return { messages: [], hasMore: false, totalCount: 0 };
+
+  // Get total count
+  const countResult = db.exec('SELECT COUNT(*) FROM chat_messages WHERE thread_id = ?', [threadId]);
+  const totalCount = countResult.length ? countResult[0].values[0][0] : 0;
+
+  let sql, params;
+  if (beforeTimestamp) {
+    sql = `SELECT id, thread_id, role, created_at, updated_at, data FROM chat_messages
+           WHERE thread_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?`;
+    params = [threadId, beforeTimestamp, limit + 1];
+  } else {
+    sql = `SELECT id, thread_id, role, created_at, updated_at, data FROM chat_messages
+           WHERE thread_id = ? ORDER BY created_at DESC LIMIT ?`;
+    params = [threadId, limit + 1];
+  }
+
+  const results = db.exec(sql, params);
+  if (!results.length) return { messages: [], hasMore: false, totalCount };
+
+  const rows = results[0].values;
+  const hasMore = rows.length > limit;
+  const trimmed = hasMore ? rows.slice(0, limit) : rows;
+
+  // Reverse to chronological order
+  const messages = trimmed.reverse().map(row => ({
+    id: row[0], threadId: row[1], role: row[2], createdAt: row[3], updatedAt: row[4], data: row[5],
+  }));
+
+  return { messages, hasMore, totalCount };
+}
+
+function getMessageCount(threadId) {
+  if (!db) return 0;
+  const result = db.exec('SELECT COUNT(*) FROM chat_messages WHERE thread_id = ?', [threadId]);
+  return result.length ? result[0].values[0][0] : 0;
+}
+
+function deleteThreadMessages(threadId) {
+  if (!db) return false;
+  db.run('DELETE FROM chat_messages WHERE thread_id = ?', [threadId]);
+  persistDb();
+  return true;
+}
+
 function closeDatabase() {
   if (db) {
     persistDb();
@@ -243,4 +403,14 @@ module.exports = {
   removeWorkspace,
   touchWorkspace,
   closeDatabase,
+  // Chat threads & messages
+  createThread,
+  getThreads,
+  getThread,
+  updateThread,
+  deleteThread,
+  saveMessages,
+  getMessages,
+  getMessageCount,
+  deleteThreadMessages,
 };

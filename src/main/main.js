@@ -7,7 +7,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 const pty = require('node-pty');
 const https = require('https');
-const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase } = require('./database');
+const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages } = require('./database');
 const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 
 // ---- GitHub Avatar Resolution ---- //
@@ -1832,6 +1832,44 @@ function registerIPC() {
       .map(s => s.value);
 
     return { models: results };
+  });
+
+  // ---- Chat Threads & Messages ---- //
+
+  ipcMain.handle('chat:createThread', async (_event, { id, title, workspacePath }) => {
+    return createThread({ id, title, workspacePath });
+  });
+
+  ipcMain.handle('chat:getThreads', async (_event, workspacePath) => {
+    return getThreads(workspacePath);
+  });
+
+  ipcMain.handle('chat:getThread', async (_event, id) => {
+    return getThread(id);
+  });
+
+  ipcMain.handle('chat:updateThread', async (_event, id, updates) => {
+    return updateThread(id, updates);
+  });
+
+  ipcMain.handle('chat:deleteThread', async (_event, id) => {
+    return deleteThread(id);
+  });
+
+  ipcMain.handle('chat:saveMessages', async (_event, messages) => {
+    return saveMessages(messages);
+  });
+
+  ipcMain.handle('chat:getMessages', async (_event, threadId, limit, beforeTimestamp) => {
+    return getMessages(threadId, limit, beforeTimestamp);
+  });
+
+  ipcMain.handle('chat:getMessageCount', async (_event, threadId) => {
+    return getMessageCount(threadId);
+  });
+
+  ipcMain.handle('chat:deleteThreadMessages', async (_event, threadId) => {
+    return deleteThreadMessages(threadId);
   });
 }
 

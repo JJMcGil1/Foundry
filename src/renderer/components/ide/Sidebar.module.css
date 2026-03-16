@@ -90,6 +90,50 @@
   color: var(--zinc-300);
 }
 
+/* ── Explorer Header ── */
+.explorerHeader {
+  height: 42px;
+  padding: 0 10px 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ── Mini Tooltip ── */
+.miniTooltipWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.miniTooltip {
+  pointer-events: none;
+  z-index: 9999;
+  animation: miniTooltipIn 0.15s cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+}
+
+.miniTooltipText {
+  display: block;
+  padding: 4px 10px;
+  background: var(--surface-3);
+  color: var(--zinc-100);
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes miniTooltipIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Panel Scroll ── */
 .panelScroll {
   flex: 1;
@@ -539,6 +583,7 @@
   cursor: pointer;
   position: relative;
   transition: color 0.15s ease-out, background 0.15s ease-out, border-color 0.15s ease-out;
+  will-change: transform, opacity;
 }
 
 .changeItem:hover {

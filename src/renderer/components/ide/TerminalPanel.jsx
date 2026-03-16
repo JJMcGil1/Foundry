@@ -57,7 +57,7 @@ function TerminalTab({ id, label, active, onSelect, onClose }) {
   );
 }
 
-export default function TerminalPanel({ height, onHeightChange, projectPath, onClose, isMaximized, onToggleMaximize }) {
+export default function TerminalPanel({ height, onHeightChange, projectPath, visible = true, onClose, isMaximized, onToggleMaximize }) {
   const [isResizing, setIsResizing] = useState(false);
   const [terminals, setTerminals] = useState([]);
   const [activeTermId, setActiveTermId] = useState(null);
@@ -203,9 +203,9 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, onC
     return () => clearTimeout(timer);
   }, [activeTermId]);
 
-  // Refit on height change
+  // Refit on height change or when becoming visible again
   useEffect(() => {
-    if (!activeTermId) return;
+    if (!visible || !activeTermId) return;
     const entry = terminalsRef.current.get(activeTermId);
     if (!entry) return;
 
@@ -214,10 +214,11 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, onC
         entry.fitAddon.fit();
         window.foundry?.terminalResize(entry.ptyId, entry.xterm.cols, entry.xterm.rows);
       } catch {}
+      entry.xterm.focus();
     }, 50);
 
     return () => clearTimeout(timer);
-  }, [height, activeTermId]);
+  }, [height, activeTermId, visible]);
 
   // ResizeObserver for width changes
   useEffect(() => {
@@ -237,13 +238,13 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, onC
     return () => resizeObserverRef.current?.disconnect();
   }, [activeTermId]);
 
-  // Auto-create first terminal on mount (once)
+  // Auto-create first terminal when panel becomes visible for the first time
   useEffect(() => {
-    if (!initializedRef.current) {
+    if (visible && !initializedRef.current) {
       initializedRef.current = true;
       createTerminal();
     }
-  }, [createTerminal]);
+  }, [visible, createTerminal]);
 
   const handleClose = useCallback((id) => {
     const entry = terminalsRef.current.get(id);
@@ -293,7 +294,7 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, onC
     document.addEventListener('mouseup', handleMouseUp);
   }, [height, onHeightChange]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount (app close / window navigation only — component stays mounted during hide/show)
   useEffect(() => {
     return () => {
       for (const [, entry] of terminalsRef.current) {
@@ -308,38 +309,39 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, onC
     <motion.div
       className={`${styles.panel} ${isMaximized ? styles.panelMaximized : ''}`}
       style={isResizing ? { height } : undefined}
-      initial={{ height: 0, opacity: 0 }}
-      animate={{ height, opacity: 1 }}
-      exit={{ height: 0, opacity: 0 }}
+      initial={false}
+      animate={visible ? { height, opacity: 1 } : { height: 0, opacity: 0 }}
       transition={isResizing ? { duration: 0 } : { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      {!isMaximized && <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />}
-      <div className={styles.header}>
-        <div className={styles.tabs}>
-          {terminals.map(t => (
-            <TerminalTab
-              key={t.id}
-              id={t.id}
-              label={t.label}
-              active={activeTermId === t.id}
-              onSelect={setActiveTermId}
-              onClose={handleClose}
-            />
-          ))}
-          <button className={styles.newBtn} onClick={createTerminal} title="New Terminal">
-            <FiPlus size={13} />
-          </button>
+      <div style={{ display: visible ? 'flex' : 'none', height: '100%', flexDirection: 'column' }}>
+        {!isMaximized && <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />}
+        <div className={styles.header}>
+          <div className={styles.tabs}>
+            {terminals.map(t => (
+              <TerminalTab
+                key={t.id}
+                id={t.id}
+                label={t.label}
+                active={activeTermId === t.id}
+                onSelect={setActiveTermId}
+                onClose={handleClose}
+              />
+            ))}
+            <button className={styles.newBtn} onClick={createTerminal} title="New Terminal">
+              <FiPlus size={13} />
+            </button>
+          </div>
+          <div className={styles.actions}>
+            <button className={styles.actionBtn} onClick={onToggleMaximize} title={isMaximized ? 'Restore' : 'Maximize'}>
+              {isMaximized ? <FiMinimize2 size={13} /> : <FiMaximize2 size={13} />}
+            </button>
+            <button className={styles.actionBtn} onClick={onClose} title="Close Terminal">
+              <FiX size={13} />
+            </button>
+          </div>
         </div>
-        <div className={styles.actions}>
-          <button className={styles.actionBtn} onClick={onToggleMaximize} title={isMaximized ? 'Restore' : 'Maximize'}>
-            {isMaximized ? <FiMinimize2 size={13} /> : <FiMaximize2 size={13} />}
-          </button>
-          <button className={styles.actionBtn} onClick={onClose} title="Close Terminal">
-            <FiX size={13} />
-          </button>
-        </div>
+        <div className={styles.terminalContainer} ref={containerRef} />
       </div>
-      <div className={styles.terminalContainer} ref={containerRef} />
     </motion.div>
   );
 }

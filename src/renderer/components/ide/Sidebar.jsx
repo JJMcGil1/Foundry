@@ -1,12 +1,46 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
-  FiFolderPlus, FiRefreshCw, FiChevronRight,
+  FiFolderPlus, FiFilePlus, FiRefreshCw, FiChevronRight,
   FiCheck, FiPlus, FiMinus, FiRotateCcw,
 } from 'react-icons/fi';
 import { IoSparkles } from 'react-icons/io5';
 import { motion, AnimatePresence } from 'framer-motion';
 import FileIcon from './FileIcon';
 import styles from './Sidebar.module.css';
+
+/* ── Mini Tooltip Button ── */
+function MiniTooltipBtn({ icon: Icon, label, onClick, size = 16 }) {
+  const [hovered, setHovered] = useState(false);
+  const [pos, setPos] = useState(null);
+  const btnRef = useRef(null);
+
+  const handleEnter = () => {
+    setHovered(true);
+    if (btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setPos({ top: rect.bottom + 6, left: rect.left + rect.width / 2 });
+    }
+  };
+
+  return (
+    <div className={styles.miniTooltipWrap}>
+      <button
+        ref={btnRef}
+        className={styles.miniBtn}
+        onClick={onClick}
+        onMouseEnter={handleEnter}
+        onMouseLeave={() => setHovered(false)}
+      >
+        <Icon size={size} />
+      </button>
+      {hovered && pos && (
+        <div className={styles.miniTooltip} style={{ position: 'fixed', top: pos.top, left: pos.left, transform: 'translateX(-50%)' }}>
+          <span className={styles.miniTooltipText}>{label}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 /* ── File Tree ── */
 const INDENT_SIZE = 14;
@@ -94,11 +128,20 @@ function FileTreeItem({ item, depth = 0, onOpenFile, activeFile, parentDimmed = 
 }
 
 /* ── Source Control Panel ── */
-function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusColor, isActive }) {
+function ChangeItem({ f, index = 0, onOpen, onStage, onUnstage, onDiscard, staged, statusColor, isActive }) {
   const fileName = f.path.split('/').pop();
   const dirPath = f.path.split('/').slice(0, -1).join('/');
+  // Stagger enter only — exits fire together so multi-file ops feel unified
+  const enterDelay = Math.min(index, 6) * 0.035;
   return (
-    <div className={`${styles.changeItem} ${isActive ? styles.changeItemActive : ''}`} onClick={() => onOpen(f.path)}>
+    <motion.div
+      key={f.path}
+      initial={{ opacity: 0, y: -7 }}
+      animate={{ opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.16, 1, 0.3, 1], delay: enterDelay } }}
+      exit={{ opacity: 0, y: 5, transition: { duration: 0.22, ease: [0.4, 0, 0.8, 1] } }}
+      className={`${styles.changeItem} ${isActive ? styles.changeItemActive : ''}`}
+      onClick={() => onOpen(f.path)}
+    >
       <FileIcon name={fileName} type="file" size={14} />
       <span className={styles.changeFileName}>{fileName}</span>
       {dirPath && <span className={styles.changeDirPath}>{dirPath}</span>}
@@ -119,7 +162,7 @@ function ChangeItem({ f, onOpen, onStage, onUnstage, onDiscard, staged, statusCo
         )}
       </div>
       <span className={styles.changeLabel} style={{ color: statusColor(f.status) }}>{f.status}</span>
-    </div>
+    </motion.div>
   );
 }
 
@@ -675,6 +718,33 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   const [completedSteps, setCompletedSteps] = useState(new Set());
   const [stagedOpen, setStagedOpen] = useState(true);
   const [changesOpen, setChangesOpen] = useState(true);
+  // Optimistic staging state — files mid-transition
+  const [optimisticStaged, setOptimisticStaged] = useState(new Set());   // paths being staged
+  const [optimisticUnstaged, setOptimisticUnstaged] = useState(new Set()); // paths being unstaged
+
+  // Reactive cleanup: clear optimistic state only once gitStatus confirms the real move.
+  // This prevents the flicker caused by clearing optimistic eagerly (before gitStatus arrives).
+  useEffect(() => {
+    if (optimisticStaged.size === 0) return;
+    const confirmed = new Set((gitStatus.staged || []).map(f => f.path));
+    const resolved = [...optimisticStaged].filter(p => confirmed.has(p));
+    if (resolved.length > 0) {
+      setOptimisticStaged(prev => { const next = new Set(prev); resolved.forEach(p => next.delete(p)); return next; });
+    }
+  }, [gitStatus, optimisticStaged]);
+
+  useEffect(() => {
+    if (optimisticUnstaged.size === 0) return;
+    const confirmed = new Set([
+      ...(gitStatus.unstaged || []).map(f => f.path),
+      ...(gitStatus.staged || []).map(f => f.path), // may appear in either list after unstage
+    ]);
+    const resolved = [...optimisticUnstaged].filter(p => !((gitStatus.staged || []).find(f => f.path === p)));
+    if (resolved.length > 0) {
+      setOptimisticUnstaged(prev => { const next = new Set(prev); resolved.forEach(p => next.delete(p)); return next; });
+    }
+  }, [gitStatus, optimisticUnstaged]);
+
   const [commits, setCommits] = useState([]);
   const [totalCommits, setTotalCommits] = useState(0);
   const [hasMoreCommits, setHasMoreCommits] = useState(true);
@@ -747,13 +817,15 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   }, [loadingMore, hasMoreCommits, effectivePath, commits.length]);
 
   const handleStageFile = async (filePath) => {
+    setOptimisticStaged(prev => new Set(prev).add(filePath));
     await window.foundry?.gitStage(projectPath, filePath);
-    refreshGit();
+    refreshGit(); // effect below clears optimistic once gitStatus confirms the move
   };
 
   const handleUnstageFile = async (filePath) => {
+    setOptimisticUnstaged(prev => new Set(prev).add(filePath));
     await window.foundry?.gitUnstage(projectPath, filePath);
-    refreshGit();
+    refreshGit(); // effect below clears optimistic once gitStatus confirms the move
   };
 
   const handleDiscardFile = async (filePath) => {
@@ -860,17 +932,17 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   };
 
   const handleStageAll = async (files) => {
-    for (const f of files) {
-      await window.foundry?.gitStage(projectPath, f.path);
-    }
-    refreshGit();
+    const paths = files.map(f => f.path);
+    setOptimisticStaged(prev => { const next = new Set(prev); paths.forEach(p => next.add(p)); return next; });
+    await Promise.all(files.map(f => window.foundry?.gitStage(projectPath, f.path)));
+    refreshGit(); // effect below clears optimistic once gitStatus confirms
   };
 
   const handleUnstageAll = async (files) => {
-    for (const f of files) {
-      await window.foundry?.gitUnstage(projectPath, f.path);
-    }
-    refreshGit();
+    const paths = files.map(f => f.path);
+    setOptimisticUnstaged(prev => { const next = new Set(prev); paths.forEach(p => next.add(p)); return next; });
+    await Promise.all(files.map(f => window.foundry?.gitUnstage(projectPath, f.path)));
+    refreshGit(); // effect below clears optimistic once gitStatus confirms
   };
 
   const statusColor = (s) => {
@@ -899,25 +971,42 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
 
   // Parse staged/unstaged from raw files if the main process hasn't been restarted
   // git status --porcelain: first char = index (staged), second char = working tree (unstaged)
-  const { staged, unstaged } = (() => {
-    if (gitStatus.staged) return { staged: gitStatus.staged, unstaged: gitStatus.unstaged || [] };
-    // Parse from files array (old format where status is the raw 2-char code)
-    const s = [], u = [];
-    for (const f of (gitStatus.files || [])) {
-      const raw = f.status;
-      if (raw === '??') {
-        u.push({ status: 'U', path: f.path });
-      } else if (raw.length === 2) {
-        // e.g. "M " = staged only, " M" = unstaged only, "MM" = both
-        if (raw[0] !== ' ') s.push({ status: raw[0], path: f.path });
-        if (raw[1] !== ' ') u.push({ status: raw[1], path: f.path });
-      } else {
-        // Single char like "M" — treat as unstaged
-        u.push({ status: raw, path: f.path });
+  const { staged, unstaged } = useMemo(() => {
+    let s, u;
+    if (gitStatus.staged) {
+      s = [...gitStatus.staged];
+      u = [...(gitStatus.unstaged || [])];
+    } else {
+      s = []; u = [];
+      for (const f of (gitStatus.files || [])) {
+        const raw = f.status;
+        if (raw === '??') {
+          u.push({ status: 'U', path: f.path });
+        } else if (raw.length === 2) {
+          if (raw[0] !== ' ') s.push({ status: raw[0], path: f.path });
+          if (raw[1] !== ' ') u.push({ status: raw[1], path: f.path });
+        } else {
+          u.push({ status: raw, path: f.path });
+        }
+      }
+    }
+    // Apply optimistic state: move files that are being staged/unstaged
+    if (optimisticStaged.size > 0) {
+      const moving = u.filter(f => optimisticStaged.has(f.path));
+      u = u.filter(f => !optimisticStaged.has(f.path));
+      for (const f of moving) {
+        if (!s.find(sf => sf.path === f.path)) s.push(f);
+      }
+    }
+    if (optimisticUnstaged.size > 0) {
+      const moving = s.filter(f => optimisticUnstaged.has(f.path));
+      s = s.filter(f => !optimisticUnstaged.has(f.path));
+      for (const f of moving) {
+        if (!u.find(uf => uf.path === f.path)) u.push(f);
       }
     }
     return { staged: s, unstaged: u };
-  })();
+  }, [gitStatus, optimisticStaged, optimisticUnstaged]);
 
   return (
     <div className={styles.panelScroll}>
@@ -984,42 +1073,53 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
         </div>
       )}
 
-      {staged.length > 0 && (
-        <>
-          <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setStagedOpen(!stagedOpen)}>
-            <motion.span
-              className={styles.sectionChevron}
-              animate={{ rotate: stagedOpen ? 90 : 0 }}
-              transition={{ duration: 0.12, ease: 'easeOut' }}
-            >
-              <FiChevronRight size={14} />
-            </motion.span>
-            <span>Staged Changes</span>
-            <div className={styles.sectionActions}>
-              <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleUnstageAll(staged); }} title="Unstage All">
-                <FiMinus size={13} />
-              </button>
-              <span className={styles.badge}>{staged.length}</span>
-            </div>
-          </div>
-          <AnimatePresence initial={false}>
-            {stagedOpen && (
-              <motion.div
-                className={styles.changesList}
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
-                style={{ overflow: 'hidden' }}
+      <AnimatePresence initial={false}>
+        {staged.length > 0 && (
+          <motion.div
+            key="staged-section"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setStagedOpen(!stagedOpen)}>
+              <motion.span
+                className={styles.sectionChevron}
+                animate={{ rotate: stagedOpen ? 90 : 0 }}
+                transition={{ duration: 0.14, ease: [0.25, 0.1, 0.25, 1] }}
               >
-                {staged.map((f, i) => (
-                  <ChangeItem key={`s-${i}`} f={f} staged onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </>
-      )}
+                <FiChevronRight size={14} />
+              </motion.span>
+              <span>Staged Changes</span>
+              <div className={styles.sectionActions}>
+                <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleUnstageAll(staged); }} title="Unstage All">
+                  <FiMinus size={13} />
+                </button>
+                <span className={styles.badge}>{staged.length}</span>
+              </div>
+            </div>
+            <AnimatePresence initial={false}>
+              {stagedOpen && (
+                <motion.div
+                  className={styles.changesList}
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <AnimatePresence initial={false}>
+                    {staged.map((f, i) => (
+                      <ChangeItem key={f.path} f={f} index={i} staged onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
+                    ))}
+                  </AnimatePresence>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setChangesOpen(!changesOpen)}>
         <motion.span
@@ -1051,12 +1151,14 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
+            transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
             style={{ overflow: 'hidden' }}
           >
-            {unstaged.map((f, i) => (
-              <ChangeItem key={`u-${i}`} f={f} onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
-            ))}
+            <AnimatePresence initial={false}>
+              {unstaged.map((f, i) => (
+                <ChangeItem key={f.path} f={f} index={i} onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
+              ))}
+            </AnimatePresence>
             {unstaged.length === 0 && staged.length === 0 && (
               <div className={styles.emptyState} style={{ padding: '16px' }}>
                 <span className={styles.emptyText}>Working tree clean</span>
@@ -1164,15 +1266,11 @@ export default function Sidebar({
     >
       <div className={styles.inner}>
         {panel === 'files' && (
-          <div className={styles.header}>
-            <span className={styles.panelTitle}>{panelTitles[panel] || 'Explorer'}</span>
+          <div className={styles.explorerHeader}>
+            <span className={styles.gitPanelTitle}>Explorer</span>
             <div className={styles.headerActions}>
-              <button className={styles.miniBtn} onClick={onRefresh} title="Refresh">
-                <FiRefreshCw size={12} />
-              </button>
-              <button className={styles.miniBtn} onClick={onOpenFolder} title="Open Folder">
-                <FiFolderPlus size={12} />
-              </button>
+              <MiniTooltipBtn icon={FiFilePlus} label="New File" onClick={() => window.foundry?.createFile?.(projectPath)} />
+              <MiniTooltipBtn icon={FiFolderPlus} label="New Folder" onClick={() => window.foundry?.createFolder?.(projectPath)} />
             </div>
           </div>
         )}

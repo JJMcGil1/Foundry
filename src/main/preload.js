@@ -112,6 +112,17 @@ contextBridge.exposeInMainWorld('foundry', {
     return () => ipcRenderer.removeListener('terminal:exit', handler);
   },
 
+  // Chat Threads & Messages
+  chatCreateThread: (data) => ipcRenderer.invoke('chat:createThread', data),
+  chatGetThreads: (workspacePath) => ipcRenderer.invoke('chat:getThreads', workspacePath),
+  chatGetThread: (id) => ipcRenderer.invoke('chat:getThread', id),
+  chatUpdateThread: (id, updates) => ipcRenderer.invoke('chat:updateThread', id, updates),
+  chatDeleteThread: (id) => ipcRenderer.invoke('chat:deleteThread', id),
+  chatSaveMessages: (messages) => ipcRenderer.invoke('chat:saveMessages', messages),
+  chatGetMessages: (threadId, limit, beforeTimestamp) => ipcRenderer.invoke('chat:getMessages', threadId, limit, beforeTimestamp),
+  chatGetMessageCount: (threadId) => ipcRenderer.invoke('chat:getMessageCount', threadId),
+  chatDeleteThreadMessages: (threadId) => ipcRenderer.invoke('chat:deleteThreadMessages', threadId),
+
   // Window
   newWindow: (projectPath) => ipcRenderer.invoke('window:new', projectPath),
   getWindowState: () => ipcRenderer.invoke('window:isFullScreen'),

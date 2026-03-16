@@ -351,44 +351,36 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 />
               </div>
             </div>
-            <AnimatePresence initial={false}>
-              {terminalVisible && !showSettings && (
-                <TerminalPanel
-                  key="terminal"
-                  height={terminalMaximized ? maxTerminalHeight : terminalHeight}
-                  onHeightChange={setTerminalHeight}
-                  projectPath={project?.path}
-                  onClose={() => { setTerminalVisible(false); setTerminalMaximized(false); }}
-                  isMaximized={terminalMaximized}
-                  onToggleMaximize={() => {
-                    if (!terminalMaximized) {
-                      // Capture the full container height BEFORE state change
-                      const fullHeight = editorContainerRef.current?.clientHeight || 600;
-                      setPreMaxTerminalHeight(terminalHeight);
-                      setMaxTerminalHeight(fullHeight);
-                      setTerminalMaximized(true);
-                    } else {
-                      setTerminalMaximized(false);
-                      setTerminalHeight(preMaxTerminalHeight);
-                    }
-                  }}
-                />
-              )}
-            </AnimatePresence>
+            <TerminalPanel
+              height={terminalMaximized ? maxTerminalHeight : terminalHeight}
+              onHeightChange={setTerminalHeight}
+              projectPath={project?.path}
+              visible={terminalVisible && !showSettings}
+              onClose={() => { setTerminalVisible(false); setTerminalMaximized(false); }}
+              isMaximized={terminalMaximized}
+              onToggleMaximize={() => {
+                if (!terminalMaximized) {
+                  // Capture the full container height BEFORE state change
+                  const fullHeight = editorContainerRef.current?.clientHeight || 600;
+                  setPreMaxTerminalHeight(terminalHeight);
+                  setMaxTerminalHeight(fullHeight);
+                  setTerminalMaximized(true);
+                } else {
+                  setTerminalMaximized(false);
+                  setTerminalHeight(preMaxTerminalHeight);
+                }
+              }}
+            />
           </div>
-          <AnimatePresence initial={false}>
-            {chatVisible && !showSettings && (
-              <ChatPanel
-                key="chat"
-                width={chatWidth}
-                onWidthChange={setChatWidth}
-                onOpenSettings={(section) => {
-                  setShowSettings(true);
-                  // The settings page will default to this section
-                }}
-              />
-            )}
-          </AnimatePresence>
+          <ChatPanel
+            visible={chatVisible && !showSettings}
+            width={chatWidth}
+            onWidthChange={setChatWidth}
+            projectPath={project?.path}
+            onOpenSettings={(section) => {
+              setShowSettings(true);
+            }}
+          />
         </div>
       </div>
     </div>

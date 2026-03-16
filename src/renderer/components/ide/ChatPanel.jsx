@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiChevronDown, FiTool, FiCopy, FiCheck } from 'react-icons/fi';
+import { FiMessageSquare, FiUser, FiCpu, FiSquare, FiAlertCircle, FiSettings, FiChevronRight, FiChevronDown, FiTool, FiCopy, FiCheck, FiPlus, FiTrash2 } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
 
 const SendIcon = ({ size = 28, active, className }) => (
@@ -23,6 +23,19 @@ const SendIcon = ({ size = 28, active, className }) => (
 );
 
 let streamIdCounter = 0;
+
+// ---- UUID Generator ---- //
+function generateId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback UUID v4
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
 
 // ---- Lightweight Markdown Renderer ---- //
 function renderMarkdown(text) {
@@ -279,8 +292,32 @@ function ToolUseBlock({ name, input, isStreaming }) {
 }
 
 
+// ---- Message serialization helpers ---- //
+// Converts in-memory message to SQLite storable format
+function messageToStored(msg, threadId) {
+  const now = Date.now();
+  return {
+    id: msg.id,
+    threadId: threadId,
+    role: msg.role,
+    createdAt: msg.createdAt || now,
+    updatedAt: now,
+    data: JSON.stringify(msg),
+  };
+}
+
+// Converts SQLite stored message back to in-memory format
+function storedToMessage(stored) {
+  try {
+    return JSON.parse(stored.data);
+  } catch {
+    return null;
+  }
+}
+
+
 // ---- Main ChatPanel Component ---- //
-export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
+export default function ChatPanel({ visible = true, width, onWidthChange, onOpenSettings, projectPath }) {
   const [isResizing, setIsResizing] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
@@ -296,9 +333,178 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
   const inputRef = useRef(null);
   const cleanupRef = useRef([]);
 
+  // ---- Thread state ---- //
+  const [threads, setThreads] = useState([]);
+  const [currentThreadId, setCurrentThreadId] = useState(null);
+  const [showThreadList, setShowThreadList] = useState(false);
+  const threadListRef = useRef(null);
+
   // Content block tracking for streaming
   const blocksRef = useRef([]);           // array of { type, content, name, input }
   const activeBlockIdxRef = useRef(-1);   // index of currently-streaming block
+
+  // ---- Pending messages for debounced save ---- //
+  const pendingMessagesRef = useRef(new Map()); // id → message
+  const saveTimerRef = useRef(null);
+  const currentThreadIdRef = useRef(null); // Keep a ref in sync for async callbacks
+
+  // Keep ref in sync
+  useEffect(() => {
+    currentThreadIdRef.current = currentThreadId;
+  }, [currentThreadId]);
+
+  // ---- Debounced message save to SQLite ---- //
+  const flushPendingMessages = useCallback(async () => {
+    const pending = pendingMessagesRef.current;
+    if (pending.size === 0) return;
+
+    const threadId = currentThreadIdRef.current;
+    if (!threadId) return;
+
+    const msgs = Array.from(pending.values());
+    const storedMsgs = msgs.map(m => messageToStored(m, threadId));
+    pending.clear();
+
+    try {
+      await window.foundry?.chatSaveMessages(storedMsgs);
+      // Update thread message count + last_modified
+      const count = await window.foundry?.chatGetMessageCount(threadId);
+      if (count != null) {
+        await window.foundry?.chatUpdateThread(threadId, { message_count: count });
+      }
+    } catch (err) {
+      console.error('[Chat] Failed to save messages:', err);
+      // Put messages back for retry
+      for (const m of msgs) {
+        pendingMessagesRef.current.set(m.id, m);
+      }
+      // Retry in 5 seconds
+      setTimeout(() => scheduleSave(), 5000);
+    }
+  }, []);
+
+  const scheduleSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      flushPendingMessages();
+    }, 1000); // 1 second debounce
+  }, [flushPendingMessages]);
+
+  const queueMessageSave = useCallback((msg) => {
+    pendingMessagesRef.current.set(msg.id, msg);
+    scheduleSave();
+  }, [scheduleSave]);
+
+  // Flush on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      flushPendingMessages();
+    };
+  }, [flushPendingMessages]);
+
+  // ---- Load threads on mount / when projectPath changes ---- //
+  useEffect(() => {
+    async function loadThreads() {
+      try {
+        const threadList = await window.foundry?.chatGetThreads(projectPath || null);
+        setThreads(threadList || []);
+
+        // Try to restore last thread from settings
+        const lastThreadId = await window.foundry?.getSetting('last_chat_thread_id');
+
+        if (lastThreadId && threadList?.find(t => t.id === lastThreadId)) {
+          // Load this thread's messages
+          await switchToThread(lastThreadId);
+        } else if (threadList?.length > 0) {
+          // Use most recent thread
+          await switchToThread(threadList[0].id);
+        } else {
+          // No threads — start fresh (will create on first message)
+          setCurrentThreadId(null);
+          setMessages([]);
+        }
+      } catch (err) {
+        console.error('[Chat] Failed to load threads:', err);
+      }
+    }
+
+    // Defer past the first animation frame so framer-motion's enter animation
+    // commits before any setState calls land — prevents the animation from
+    // resetting mid-flight and causing the "thin strip" UX bug.
+    const raf = requestAnimationFrame(() => loadThreads());
+    return () => cancelAnimationFrame(raf);
+  }, [projectPath]);
+
+  // ---- Switch to a thread: load its messages from SQLite ---- //
+  const switchToThread = useCallback(async (threadId) => {
+    if (!threadId) return;
+
+    // Flush any pending saves from current thread first
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    await flushPendingMessages();
+
+    try {
+      const result = await window.foundry?.chatGetMessages(threadId, 100, null);
+      const loadedMessages = (result?.messages || [])
+        .map(storedToMessage)
+        .filter(Boolean);
+
+      setMessages(loadedMessages);
+      setCurrentThreadId(threadId);
+      setShowThreadList(false);
+
+      // Persist current thread selection
+      await window.foundry?.setSetting('last_chat_thread_id', threadId);
+    } catch (err) {
+      console.error('[Chat] Failed to load messages for thread:', threadId, err);
+    }
+  }, [flushPendingMessages]);
+
+  // ---- Create a new thread ---- //
+  const createNewThread = useCallback(async (title) => {
+    const id = generateId();
+    try {
+      const thread = await window.foundry?.chatCreateThread({
+        id,
+        title: title || null,
+        workspacePath: projectPath || null,
+      });
+      if (thread) {
+        setThreads(prev => [thread, ...prev]);
+        setCurrentThreadId(id);
+        setMessages([]);
+        setShowThreadList(false);
+        await window.foundry?.setSetting('last_chat_thread_id', id);
+        return id;
+      }
+    } catch (err) {
+      console.error('[Chat] Failed to create thread:', err);
+    }
+    return null;
+  }, [projectPath]);
+
+  // ---- Delete a thread ---- //
+  const handleDeleteThread = useCallback(async (threadId, e) => {
+    e?.stopPropagation();
+    try {
+      await window.foundry?.chatDeleteThread(threadId);
+      setThreads(prev => prev.filter(t => t.id !== threadId));
+
+      if (currentThreadId === threadId) {
+        // Switch to next thread or clear
+        const remaining = threads.filter(t => t.id !== threadId);
+        if (remaining.length > 0) {
+          await switchToThread(remaining[0].id);
+        } else {
+          setCurrentThreadId(null);
+          setMessages([]);
+        }
+      }
+    } catch (err) {
+      console.error('[Chat] Failed to delete thread:', err);
+    }
+  }, [currentThreadId, threads, switchToThread]);
 
   // Check if a provider is connected
   useEffect(() => {
@@ -324,17 +530,20 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  // Close model dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
-    if (!showModelDropdown) return;
+    if (!showModelDropdown && !showThreadList) return;
     const handleClickOutside = (e) => {
-      if (modelSwitcherRef.current && !modelSwitcherRef.current.contains(e.target)) {
+      if (showModelDropdown && modelSwitcherRef.current && !modelSwitcherRef.current.contains(e.target)) {
         setShowModelDropdown(false);
+      }
+      if (showThreadList && threadListRef.current && !threadListRef.current.contains(e.target)) {
+        setShowThreadList(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showModelDropdown]);
+  }, [showModelDropdown, showThreadList]);
 
   const handleModelSwitch = async (key) => {
     const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
@@ -448,11 +657,14 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
         if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
-          updated[lastIdx] = {
+          const finalMsg = {
             ...updated[lastIdx],
             blocks,
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           };
+          updated[lastIdx] = finalMsg;
+          // Save completed assistant message to SQLite
+          queueMessageSave(finalMsg);
         }
         return updated;
       });
@@ -469,6 +681,11 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
           const hasContent = updated[lastIdx].blocks?.some(b => b.content);
           if (!hasContent) {
             updated.pop();
+          } else {
+            // Save partial assistant message
+            const partialMsg = { ...updated[lastIdx], blocks: updated[lastIdx].blocks.map(b => ({ ...b, streaming: false })) };
+            updated[lastIdx] = partialMsg;
+            queueMessageSave(partialMsg);
           }
         }
         return updated;
@@ -479,7 +696,7 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
     return () => {
       cleanupRef.current.forEach(fn => fn?.());
     };
-  }, [updateAssistantBlocks]);
+  }, [updateAssistantBlocks, queueMessageSave]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -489,11 +706,31 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
     if (!input.trim() || isStreaming) return;
     setError(null);
 
+    // Ensure we have a thread — create one if needed
+    let threadId = currentThreadId;
+    if (!threadId) {
+      const title = input.trim().slice(0, 50);
+      threadId = await createNewThread(title);
+      if (!threadId) return; // Failed to create thread
+    } else if (messages.length === 0) {
+      // First message in existing thread — update title
+      const title = input.trim().slice(0, 50);
+      try {
+        await window.foundry?.chatUpdateThread(threadId, { title });
+        setThreads(prev => prev.map(t => t.id === threadId ? { ...t, title } : t));
+      } catch { /* silent */ }
+    }
+
     const userMsg = {
+      id: generateId(),
       role: 'user',
       content: input.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      createdAt: Date.now(),
     };
+
+    // Save user message to SQLite immediately
+    queueMessageSave(userMsg);
 
     // Build message history for API
     const apiMessages = [...messages, userMsg]
@@ -506,10 +743,12 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
       }));
 
     const assistantPlaceholder = {
+      id: generateId(),
       role: 'assistant',
       blocks: [],
       content: '',
       timestamp: '',
+      createdAt: Date.now(),
     };
 
     setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
@@ -563,11 +802,14 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
           if (!hasContent) {
             updated.pop();
           } else {
-            updated[lastIdx] = {
+            const stoppedMsg = {
               ...updated[lastIdx],
               blocks,
               timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             };
+            updated[lastIdx] = stoppedMsg;
+            // Save stopped assistant message
+            queueMessageSave(stoppedMsg);
           }
         }
         return updated;
@@ -678,6 +920,10 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
     return 'Good evening';
   };
 
+  // Get current thread title
+  const currentThread = threads.find(t => t.id === currentThreadId);
+  const currentThreadTitle = currentThread?.title || 'New Chat';
+
   const renderEmptyState = () => {
     if (hasProvider === null) return null;
     if (hasProvider === false) {
@@ -739,23 +985,100 @@ export default function ChatPanel({ width, onWidthChange, onOpenSettings }) {
   return (
     <motion.div
       className={styles.panel}
-      style={{ width: isResizing ? width : undefined }}
-      initial={{ width: 0, opacity: 0 }}
-      animate={{ width, opacity: 1 }}
-      exit={{ width: 0, opacity: 0 }}
+      style={{
+        width: isResizing ? width : undefined,
+        pointerEvents: visible ? 'auto' : 'none',
+      }}
+      initial={false}
+      animate={{ width: visible ? width : 0, opacity: visible ? 1 : 0 }}
       transition={isResizing ? { duration: 0 } : { duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
     >
       <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
       <div className={styles.header}>
         <FiMessageSquare size={13} />
-        <span className={styles.headerTitle}>Chat</span>
+        <div className={styles.threadSelector} ref={threadListRef}>
+          <button
+            className={styles.threadSelectorBtn}
+            onClick={() => setShowThreadList(v => !v)}
+            title="Switch chat thread"
+          >
+            <span className={styles.threadTitle}>{currentThreadTitle}</span>
+            <FiChevronDown
+              size={10}
+              className={`${styles.threadChevron} ${showThreadList ? styles.threadChevronOpen : ''}`}
+            />
+          </button>
+          <AnimatePresence>
+            {showThreadList && (
+              <motion.div
+                className={styles.threadDropdown}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.15 }}
+              >
+                <button
+                  className={styles.threadNewBtn}
+                  onClick={async () => {
+                    // Flush and start fresh
+                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+                    await flushPendingMessages();
+                    setCurrentThreadId(null);
+                    setMessages([]);
+                    setShowThreadList(false);
+                  }}
+                >
+                  <FiPlus size={12} />
+                  <span>New Chat</span>
+                </button>
+                {threads.length > 0 && <div className={styles.threadDivider} />}
+                <div className={styles.threadListScroll}>
+                  {threads.map(thread => (
+                    <button
+                      key={thread.id}
+                      className={`${styles.threadItem} ${thread.id === currentThreadId ? styles.threadItemActive : ''}`}
+                      onClick={() => switchToThread(thread.id)}
+                    >
+                      <FiMessageSquare size={11} className={styles.threadItemIcon} />
+                      <span className={styles.threadItemTitle}>
+                        {thread.title || 'Untitled'}
+                      </span>
+                      <span className={styles.threadItemCount}>
+                        {thread.message_count || 0}
+                      </span>
+                      <button
+                        className={styles.threadDeleteBtn}
+                        onClick={(e) => handleDeleteThread(thread.id, e)}
+                        title="Delete thread"
+                      >
+                        <FiTrash2 size={10} />
+                      </button>
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+        <button
+          className={styles.newChatBtn}
+          onClick={async () => {
+            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+            await flushPendingMessages();
+            setCurrentThreadId(null);
+            setMessages([]);
+          }}
+          title="New chat"
+        >
+          <FiPlus size={14} />
+        </button>
       </div>
 
       <div className={styles.messages}>
         {renderEmptyState()}
         {messages.map((msg, i) => (
           <div
-            key={i}
+            key={msg.id || i}
             className={`${styles.message} ${msg.role === 'user' ? styles.messageUser : styles.messageAssistant}`}
           >
             <div className={styles.messageHeader}>
