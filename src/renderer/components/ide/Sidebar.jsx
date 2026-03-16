@@ -526,7 +526,7 @@ function CommitGraph({ commits, projectPath, onLoadMore, hasMore, loadingMore, t
   const cardLaneColor = cardRow ? GRAPH_COLORS[cardRow.lane % GRAPH_COLORS.length] : null;
 
   return (
-    <div className={styles.graphSection} style={graphOpen ? { flexShrink: 0 } : undefined}>
+    <div className={styles.graphSection}>
       <div className={styles.graphResizeHandle} onMouseDown={handleResizeStart} />
       <button className={`${styles.sectionLabel} ${styles.graphSectionLabel}`} onClick={() => setGraphOpen(!graphOpen)}>
         <motion.span
@@ -1009,7 +1009,7 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
   }, [gitStatus, optimisticStaged, optimisticUnstaged]);
 
   return (
-    <div className={styles.panelScroll}>
+    <div className={styles.gitPanelContent}>
       <div className={styles.gitPanelHeader}>
         <span className={styles.gitPanelTitle}>Source Control</span>
       </div>
@@ -1073,100 +1073,102 @@ function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile
         </div>
       )}
 
-      <AnimatePresence initial={false}>
-        {staged.length > 0 && (
-          <motion.div
-            key="staged-section"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-            style={{ overflow: 'hidden' }}
-          >
-            <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setStagedOpen(!stagedOpen)}>
-              <motion.span
-                className={styles.sectionChevron}
-                animate={{ rotate: stagedOpen ? 90 : 0 }}
-                transition={{ duration: 0.14, ease: [0.25, 0.1, 0.25, 1] }}
-              >
-                <FiChevronRight size={14} />
-              </motion.span>
-              <span>Staged Changes</span>
-              <div className={styles.sectionActions}>
-                <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleUnstageAll(staged); }} title="Unstage All">
-                  <FiMinus size={13} />
-                </button>
-                <span className={styles.badge}>{staged.length}</span>
-              </div>
-            </div>
-            <AnimatePresence initial={false}>
-              {stagedOpen && (
-                <motion.div
-                  className={styles.changesList}
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
-                  style={{ overflow: 'hidden' }}
+      <div className={styles.changesScrollArea}>
+        <AnimatePresence initial={false}>
+          {staged.length > 0 && (
+            <motion.div
+              key="staged-section"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setStagedOpen(!stagedOpen)}>
+                <motion.span
+                  className={styles.sectionChevron}
+                  animate={{ rotate: stagedOpen ? 90 : 0 }}
+                  transition={{ duration: 0.14, ease: [0.25, 0.1, 0.25, 1] }}
                 >
-                  <AnimatePresence initial={false}>
-                    {staged.map((f, i) => (
-                      <ChangeItem key={f.path} f={f} index={i} staged onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
-                    ))}
-                  </AnimatePresence>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setChangesOpen(!changesOpen)}>
-        <motion.span
-          className={styles.sectionChevron}
-          animate={{ rotate: changesOpen ? 90 : 0 }}
-          transition={{ duration: 0.12, ease: 'easeOut' }}
-        >
-          <FiChevronRight size={14} />
-        </motion.span>
-        <span>Changes</span>
-        <div className={styles.sectionActions}>
-          {unstaged.length > 0 && (
-            <>
-              <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleDiscardAll(unstaged); }} title="Discard All Changes">
-                <FiRotateCcw size={13} />
-              </button>
-              <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleStageAll(unstaged); }} title="Stage All">
-                <FiPlus size={13} />
-              </button>
-            </>
-          )}
-          {unstaged.length > 0 && <span className={styles.badge}>{unstaged.length}</span>}
-        </div>
-      </div>
-      <AnimatePresence initial={false}>
-        {changesOpen && (
-          <motion.div
-            className={styles.changesList}
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
-            style={{ overflow: 'hidden' }}
-          >
-            <AnimatePresence initial={false}>
-              {unstaged.map((f, i) => (
-                <ChangeItem key={f.path} f={f} index={i} onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
-              ))}
-            </AnimatePresence>
-            {unstaged.length === 0 && staged.length === 0 && (
-              <div className={styles.emptyState} style={{ padding: '16px' }}>
-                <span className={styles.emptyText}>Working tree clean</span>
+                  <FiChevronRight size={14} />
+                </motion.span>
+                <span>Staged Changes</span>
+                <div className={styles.sectionActions}>
+                  <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleUnstageAll(staged); }} title="Unstage All">
+                    <FiMinus size={13} />
+                  </button>
+                  <span className={styles.badge}>{staged.length}</span>
+                </div>
               </div>
+              <AnimatePresence initial={false}>
+                {stagedOpen && (
+                  <motion.div
+                    className={styles.changesList}
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+                    style={{ overflow: 'hidden' }}
+                  >
+                    <AnimatePresence initial={false}>
+                      {staged.map((f, i) => (
+                        <ChangeItem key={f.path} f={f} index={i} staged onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
+                      ))}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setChangesOpen(!changesOpen)}>
+          <motion.span
+            className={styles.sectionChevron}
+            animate={{ rotate: changesOpen ? 90 : 0 }}
+            transition={{ duration: 0.12, ease: 'easeOut' }}
+          >
+            <FiChevronRight size={14} />
+          </motion.span>
+          <span>Changes</span>
+          <div className={styles.sectionActions}>
+            {unstaged.length > 0 && (
+              <>
+                <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleDiscardAll(unstaged); }} title="Discard All Changes">
+                  <FiRotateCcw size={13} />
+                </button>
+                <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleStageAll(unstaged); }} title="Stage All">
+                  <FiPlus size={13} />
+                </button>
+              </>
             )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+            {unstaged.length > 0 && <span className={styles.badge}>{unstaged.length}</span>}
+          </div>
+        </div>
+        <AnimatePresence initial={false}>
+          {changesOpen && (
+            <motion.div
+              className={styles.changesList}
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
+              style={{ overflow: 'hidden' }}
+            >
+              <AnimatePresence initial={false}>
+                {unstaged.map((f, i) => (
+                  <ChangeItem key={f.path} f={f} index={i} onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
+                ))}
+              </AnimatePresence>
+              {unstaged.length === 0 && staged.length === 0 && (
+                <div className={styles.emptyState} style={{ padding: '16px' }}>
+                  <span className={styles.emptyText}>Working tree clean</span>
+                </div>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
       <CommitGraph commits={commits} projectPath={effectivePath} onLoadMore={loadMoreCommits} hasMore={hasMoreCommits} loadingMore={loadingMore} totalCommits={totalCommits} />
     </div>

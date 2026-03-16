@@ -33,10 +33,9 @@ function AgentContent({ msg, isStreaming, isLastMsg }) {
     if (isStreaming && isLastMsg) {
       return (
         <div className={styles.content}>
-          <div className={styles.typing}>
-            <span className={styles.typingDot} />
-            <span className={styles.typingDot} />
-            <span className={styles.typingDot} />
+          <div className={styles.shimmer}>
+            <div className={styles.shimmerLine} />
+            <div className={styles.shimmerLineShort} />
           </div>
         </div>
       );
@@ -66,13 +65,10 @@ function AgentContent({ msg, isStreaming, isLastMsg }) {
             />
           );
         }
-        // text block
+        // text block — no cursor, just render text naturally
         return (
           <div key={bi} className={styles.textBlock}>
             {renderMarkdown(block.content)}
-            {block.streaming && (
-              <span className={styles.streamCursor} />
-            )}
           </div>
         );
       })}

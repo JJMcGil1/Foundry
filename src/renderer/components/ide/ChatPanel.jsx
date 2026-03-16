@@ -292,6 +292,16 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
 
           blocksRef.current = blocks;
           updateAssistantBlocks(blocks);
+
+          // Incremental save: persist assistant message after each completed block
+          // so content survives crashes/disconnects
+          setMessages(prev => {
+            const lastIdx = prev.length - 1;
+            if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
+              saveMessageToDb({ ...prev[lastIdx], blocks });
+            }
+            return prev;
+          });
         }
         activeBlockIdxRef.current = -1;
       }
@@ -420,11 +430,20 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
       setIsStreaming(false);
       setCurrentStreamId(null);
       setError(result.error);
+      // Remove empty assistant placeholder on API error — but don't lose partial content
       setMessages(prev => {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
-        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant' && !updated[lastIdx].blocks?.length) {
-          updated.pop();
+        if (lastIdx >= 0 && updated[lastIdx].role === 'assistant') {
+          const hasContent = updated[lastIdx].blocks?.some(b => b.content);
+          if (!hasContent) {
+            updated.pop();
+          } else {
+            // Save partial content before discarding streaming state
+            const partialMsg = { ...updated[lastIdx], blocks: updated[lastIdx].blocks.map(b => ({ ...b, streaming: false })) };
+            updated[lastIdx] = partialMsg;
+            saveMessageToDb(partialMsg);
+          }
         }
         return updated;
       });

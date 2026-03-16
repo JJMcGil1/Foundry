@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LuBrainCircuit } from 'react-icons/lu';
 import styles from './ThinkingBlock.module.css';
+import sharedStyles from './shared.module.css';
 
 export default function ThinkingBlock({ content, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
@@ -26,10 +27,10 @@ export default function ThinkingBlock({ content, isStreaming }) {
           </span>
         )}
         {isStreaming && (
-          <span className={styles.pulseDots}>
-            <span className={styles.pulseDot} />
-            <span className={styles.pulseDot} />
-            <span className={styles.pulseDot} />
+          <span className={sharedStyles.pulseDots}>
+            <span className={sharedStyles.pulseDot} />
+            <span className={sharedStyles.pulseDot} />
+            <span className={sharedStyles.pulseDot} />
           </span>
         )}
       </button>

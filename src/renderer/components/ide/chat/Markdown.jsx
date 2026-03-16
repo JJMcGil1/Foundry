@@ -2,13 +2,17 @@ import React from 'react';
 import CodeBlock from './CodeBlock';
 import styles from './Markdown.module.css';
 
-// ---- Lightweight Markdown Renderer ---- //
+// ---- Markdown Renderer ---- //
+// Handles: code blocks, tables, headers (h1-h6), lists (ul/ol/task),
+// blockquotes, HR, bold, italic, bold-italic, strikethrough, inline code, links
+
 export function renderMarkdown(text) {
   if (!text) return null;
 
   // Split into code blocks and non-code segments
+  // Supports: ```lang, ``` lang, ```lang-name, ```c++, no newline after ```
   const segments = [];
-  const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+  const codeBlockRegex = /```([^\n`]*?)[ \t]*\n([\s\S]*?)```/g;
   let lastIndex = 0;
   let match;
 
@@ -16,7 +20,8 @@ export function renderMarkdown(text) {
     if (match.index > lastIndex) {
       segments.push({ type: 'text', content: text.slice(lastIndex, match.index) });
     }
-    segments.push({ type: 'code', lang: match[1] || 'text', content: match[2].replace(/\n$/, '') });
+    const lang = match[1].trim() || 'text';
+    segments.push({ type: 'code', lang, content: match[2].replace(/\n$/, '') });
     lastIndex = match.index + match[0].length;
   }
   if (lastIndex < text.length) {
@@ -31,8 +36,26 @@ export function renderMarkdown(text) {
   });
 }
 
+// ---- Table helpers ---- //
+function isTableRow(line) {
+  const t = line.trim();
+  return t.startsWith('|') && t.endsWith('|') && t.length > 2;
+}
+
+function isTableSeparator(line) {
+  const t = line.trim();
+  if (!t.startsWith('|') || !t.endsWith('|')) return false;
+  const inner = t.slice(1, -1);
+  return inner.split('|').every(cell => /^\s*:?-+:?\s*$/.test(cell.trim()));
+}
+
+function parseTableCells(line) {
+  const t = line.trim();
+  return t.slice(1, -1).split('|').map(c => c.trim());
+}
+
+// ---- Block-level parser ---- //
 function InlineMarkdown({ text }) {
-  // Process line by line for block-level elements
   const lines = text.split('\n');
   const elements = [];
   let i = 0;
@@ -40,17 +63,84 @@ function InlineMarkdown({ text }) {
   while (i < lines.length) {
     const line = lines[i];
 
-    // Headers
-    const headerMatch = line.match(/^(#{1,4})\s+(.+)/);
+    // Headers (h1 – h6)
+    const headerMatch = line.match(/^(#{1,6})\s+(.+)/);
     if (headerMatch) {
-      const level = headerMatch[1].length;
+      const level = Math.min(headerMatch[1].length, 6);
       const Tag = `h${level}`;
+      const cls = styles[`mdH${level}`] || styles.mdH4;
       elements.push(
-        <Tag key={i} className={styles[`mdH${level}`]}>
-          {processInline(headerMatch[2])}
-        </Tag>
+        <Tag key={i} className={cls}>{processInline(headerMatch[2])}</Tag>
       );
       i++;
+      continue;
+    }
+
+    // Tables
+    if (isTableRow(line)) {
+      const tableRows = [];
+      const startI = i;
+      while (i < lines.length && isTableRow(lines[i])) {
+        tableRows.push(lines[i]);
+        i++;
+      }
+      if (tableRows.length >= 2) {
+        const headerCells = parseTableCells(tableRows[0]);
+        const dataStart = (tableRows.length >= 2 && isTableSeparator(tableRows[1])) ? 2 : 1;
+        const bodyRows = tableRows.slice(dataStart).filter(r => !isTableSeparator(r));
+        elements.push(
+          <div key={`table-${startI}`} className={styles.tableWrap}>
+            <table className={styles.mdTable}>
+              <thead>
+                <tr>
+                  {headerCells.map((cell, ci) => (
+                    <th key={ci}>{processInline(cell)}</th>
+                  ))}
+                </tr>
+              </thead>
+              {bodyRows.length > 0 && (
+                <tbody>
+                  {bodyRows.map((row, ri) => {
+                    const cells = parseTableCells(row);
+                    return (
+                      <tr key={ri}>
+                        {headerCells.map((_, ci) => (
+                          <td key={ci}>{processInline(cells[ci] || '')}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              )}
+            </table>
+          </div>
+        );
+        continue;
+      }
+      i = startI; // single row — fall through
+    }
+
+    // Task list items  - [ ] or - [x]
+    if (/^[\s]*[-*]\s+\[[ xX]\]\s/.test(line)) {
+      const tasks = [];
+      while (i < lines.length && /^[\s]*[-*]\s+\[[ xX]\]\s/.test(lines[i])) {
+        const checked = /\[[xX]\]/.test(lines[i]);
+        const content = lines[i].replace(/^[\s]*[-*]\s+\[[ xX]\]\s+/, '');
+        tasks.push(
+          <li key={i} className={styles.taskItem}>
+            <span className={`${styles.taskCheck} ${checked ? styles.taskChecked : ''}`}>
+              {checked && (
+                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                  <path d="M2 5.5L4 7.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+            </span>
+            <span className={checked ? styles.taskDone : ''}>{processInline(content)}</span>
+          </li>
+        );
+        i++;
+      }
+      elements.push(<ul key={`task-${i}`} className={styles.taskList}>{tasks}</ul>);
       continue;
     }
 
@@ -58,8 +148,11 @@ function InlineMarkdown({ text }) {
     if (/^[\s]*[-*]\s+/.test(line)) {
       const listItems = [];
       while (i < lines.length && /^[\s]*[-*]\s+/.test(lines[i])) {
+        const indent = lines[i].match(/^(\s*)/)[1].length;
         listItems.push(
-          <li key={i}>{processInline(lines[i].replace(/^[\s]*[-*]\s+/, ''))}</li>
+          <li key={i} style={indent >= 2 ? { marginLeft: Math.min(indent, 4) * 8 } : undefined}>
+            {processInline(lines[i].replace(/^[\s]*[-*]\s+/, ''))}
+          </li>
         );
         i++;
       }
@@ -71,8 +164,11 @@ function InlineMarkdown({ text }) {
     if (/^[\s]*\d+\.\s+/.test(line)) {
       const listItems = [];
       while (i < lines.length && /^[\s]*\d+\.\s+/.test(lines[i])) {
+        const indent = lines[i].match(/^(\s*)/)[1].length;
         listItems.push(
-          <li key={i}>{processInline(lines[i].replace(/^[\s]*\d+\.\s+/, ''))}</li>
+          <li key={i} style={indent >= 2 ? { marginLeft: Math.min(indent, 4) * 8 } : undefined}>
+            {processInline(lines[i].replace(/^[\s]*\d+\.\s+/, ''))}
+          </li>
         );
         i++;
       }
@@ -81,10 +177,10 @@ function InlineMarkdown({ text }) {
     }
 
     // Blockquote
-    if (line.startsWith('> ')) {
+    if (/^>\s?/.test(line)) {
       const quoteLines = [];
-      while (i < lines.length && lines[i].startsWith('> ')) {
-        quoteLines.push(lines[i].slice(2));
+      while (i < lines.length && /^>\s?/.test(lines[i])) {
+        quoteLines.push(lines[i].replace(/^>\s?/, ''));
         i++;
       }
       elements.push(
@@ -95,8 +191,8 @@ function InlineMarkdown({ text }) {
       continue;
     }
 
-    // Horizontal rule
-    if (/^---+$/.test(line.trim())) {
+    // Horizontal rule (---, ***, ___)
+    if (/^[-*_]{3,}\s*$/.test(line.trim())) {
       elements.push(<hr key={i} className={styles.mdHr} />);
       i++;
       continue;
@@ -108,9 +204,18 @@ function InlineMarkdown({ text }) {
       continue;
     }
 
-    // Regular paragraph — collect consecutive non-empty lines
+    // Paragraph — collect consecutive non-block lines
     const paraLines = [];
-    while (i < lines.length && lines[i].trim() && !lines[i].match(/^#{1,4}\s/) && !/^[\s]*[-*]\s+/.test(lines[i]) && !/^[\s]*\d+\.\s+/.test(lines[i]) && !lines[i].startsWith('> ') && !/^---+$/.test(lines[i].trim())) {
+    while (
+      i < lines.length &&
+      lines[i].trim() &&
+      !lines[i].match(/^#{1,6}\s/) &&
+      !/^[\s]*[-*]\s+/.test(lines[i]) &&
+      !/^[\s]*\d+\.\s+/.test(lines[i]) &&
+      !/^>\s?/.test(lines[i]) &&
+      !/^[-*_]{3,}\s*$/.test(lines[i].trim()) &&
+      !isTableRow(lines[i])
+    ) {
       paraLines.push(lines[i]);
       i++;
     }
@@ -126,12 +231,15 @@ function InlineMarkdown({ text }) {
   return <>{elements}</>;
 }
 
+// ---- Inline parser ---- //
+// Handles: ***bold italic***, **bold**, *italic*, ~~strikethrough~~, `code`, [link](url)
+// Processes from longest/most-specific patterns first to handle nesting correctly.
 function processInline(text) {
   if (!text) return text;
 
-  // Process inline elements: bold, italic, code, links
   const parts = [];
-  const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/g;
+  // Order matters: bold-italic before bold before italic
+  const regex = /(\*\*\*(.+?)\*\*\*)|(~~(.+?)~~)|(\*\*(.+?)\*\*)|(\*(.+?)\*)|(`([^`]+)`)|(\[([^\]]+)\]\(([^)]+)\))/g;
   let lastIdx = 0;
   let m;
 
@@ -140,13 +248,27 @@ function processInline(text) {
       parts.push(text.slice(lastIdx, m.index));
     }
     if (m[1]) {
-      parts.push(<strong key={m.index}>{m[2]}</strong>);
+      // ***bold italic***
+      parts.push(<strong key={m.index}><em>{m[2]}</em></strong>);
     } else if (m[3]) {
-      parts.push(<em key={m.index}>{m[4]}</em>);
+      // ~~strikethrough~~
+      parts.push(<del key={m.index} className={styles.strikethrough}>{m[4]}</del>);
     } else if (m[5]) {
-      parts.push(<code key={m.index} className={styles.inlineCode}>{m[6]}</code>);
+      // **bold**
+      parts.push(<strong key={m.index}>{m[6]}</strong>);
     } else if (m[7]) {
-      parts.push(<a key={m.index} className={styles.mdLink} href={m[9]} target="_blank" rel="noopener noreferrer">{m[8]}</a>);
+      // *italic*
+      parts.push(<em key={m.index}>{m[8]}</em>);
+    } else if (m[9]) {
+      // `inline code`
+      parts.push(<code key={m.index} className={styles.inlineCode}>{m[10]}</code>);
+    } else if (m[11]) {
+      // [link](url)
+      parts.push(
+        <a key={m.index} className={styles.mdLink} href={m[13]} target="_blank" rel="noopener noreferrer">
+          {m[12]}
+        </a>
+      );
     }
     lastIdx = m.index + m[0].length;
   }

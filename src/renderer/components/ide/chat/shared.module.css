@@ -4,7 +4,7 @@
   display: flex;
   gap: 3px;
   align-items: center;
-  margin-left: 2px;
+  margin-left: 4px;
 }
 
 .pulseDot {
@@ -12,14 +12,13 @@
   height: 3px;
   border-radius: 50%;
   background: var(--zinc-500);
-  opacity: 0.4;
-  animation: pulseBounce 1.4s infinite;
+  animation: pulseFade 1.6s ease-in-out infinite;
 }
 
-.pulseDot:nth-child(2) { animation-delay: 0.2s; }
-.pulseDot:nth-child(3) { animation-delay: 0.4s; }
+.pulseDot:nth-child(2) { animation-delay: 0.3s; }
+.pulseDot:nth-child(3) { animation-delay: 0.6s; }
 
-@keyframes pulseBounce {
-  0%, 60%, 100% { transform: scale(1); opacity: 0.3; }
-  30% { transform: scale(1.4); opacity: 0.9; }
+@keyframes pulseFade {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.8; }
 }

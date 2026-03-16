@@ -13,7 +13,6 @@ export default function BashToolBlock({ input, isStreaming }) {
 
   const command = data.command || '';
   const description = data.description || '';
-  const displayCmd = command.length > 50 ? command.slice(0, 47) + '...' : command;
 
   const handleCopy = (e) => {
     e.stopPropagation();
@@ -23,39 +22,41 @@ export default function BashToolBlock({ input, isStreaming }) {
   };
 
   return (
-    <div className={styles.bashBlock}>
+    <div className={`${styles.bashBlock} ${isStreaming ? styles.bashBlockRunning : ''}`}>
       <div className={styles.bashHeader}>
-        <div className={styles.bashDots}>
-          <span className={styles.bashDotRed} />
-          <span className={styles.bashDotYellow} />
-          <span className={styles.bashDotGreen} />
+        <div className={styles.bashHeaderLeft}>
+          <HiTerminal size={13} className={styles.bashIcon} />
+          <span className={styles.bashTitle}>Terminal</span>
         </div>
-        <div className={styles.bashTitle}>
-          <HiTerminal size={12} className={styles.bashTitleIcon} />
-          <span>Terminal</span>
-          <span className={styles.bashTitleCmd}>$ {displayCmd}</span>
-        </div>
-        <div className={styles.bashActions}>
-          <button className={styles.bashActionBtn} onClick={handleCopy} title="Copy command">
+        <div className={styles.bashHeaderRight}>
+          {isStreaming && (
+            <div className={styles.statusRunning}>
+              <span className={styles.statusDot} />
+              <span>Running</span>
+            </div>
+          )}
+          {!isStreaming && command && (
+            <div className={styles.statusDone}>
+              <FiCheck size={11} />
+              <span>Done</span>
+            </div>
+          )}
+          <button className={styles.copyBtn} onClick={handleCopy} title="Copy command">
             {copied ? <FiCheck size={11} /> : <FiCopy size={11} />}
           </button>
         </div>
       </div>
       <div className={styles.bashBody}>
-        <span className={styles.bashPrompt}>$</span>
-        <span className={styles.bashCommand}>{command}</span>
+        <div className={styles.commandLine}>
+          <span className={styles.prompt}>$</span>
+          <span className={styles.command}>{command}</span>
+        </div>
         {description && (
-          <div className={styles.bashDescription}>{description}</div>
+          <div className={styles.description}>{description}</div>
         )}
         {isStreaming && (
-          <div className={styles.bashRunning}>
-            <span className={styles.bashCursor} />
-          </div>
-        )}
-        {!isStreaming && command && (
-          <div className={styles.bashSuccess}>
-            <FiCheck size={11} />
-            <span>Success</span>
+          <div className={styles.activity}>
+            <div className={styles.activityBar} />
           </div>
         )}
       </div>

@@ -1,85 +1,98 @@
+/* ---- Terminal Block ---- */
 .bashBlock {
   margin: 4px 0;
   border-radius: 10px;
   background: var(--surface-1);
   border: 1px solid var(--border-card);
   overflow: hidden;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
   box-shadow:
     0 1px 3px rgba(0, 0, 0, 0.05),
     0 3px 10px rgba(0, 0, 0, 0.07),
     0 6px 20px rgba(0, 0, 0, 0.05);
 }
 
+.bashBlockRunning {
+  border-color: rgba(234, 149, 56, 0.3);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    0 3px 10px rgba(0, 0, 0, 0.07),
+    0 0 0 1px rgba(234, 149, 56, 0.08);
+}
+
+/* ---- Header ---- */
 .bashHeader {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: var(--bash-header-bg);
+  justify-content: space-between;
+  padding: 7px 12px;
+  background: var(--surface-2);
   border-bottom: 1px solid var(--border);
 }
 
-.bashDots {
+.bashHeaderLeft {
   display: flex;
-  gap: 5px;
+  align-items: center;
+  gap: 7px;
+}
+
+.bashIcon {
+  color: var(--zinc-500);
   flex-shrink: 0;
-}
-
-.bashDotRed {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ff5f57;
-}
-
-.bashDotYellow {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #febc2e;
-}
-
-.bashDotGreen {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #28c840;
 }
 
 .bashTitle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 1;
-  min-width: 0;
   font-family: var(--font-sans);
   font-size: 11px;
+  font-weight: 600;
+  color: var(--zinc-400);
+  letter-spacing: 0.02em;
+}
+
+.bashHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- Status Indicators ---- */
+.statusRunning {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-sans);
+  font-size: 10px;
   font-weight: 500;
   color: var(--zinc-500);
+  letter-spacing: 0.02em;
 }
 
-.bashTitleIcon {
-  flex-shrink: 0;
-  opacity: 0.6;
+.statusDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgb(234, 149, 56);
+  animation: statusPulse 2s ease-in-out infinite;
 }
 
-.bashTitleCmd {
-  color: var(--zinc-600);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 400;
+@keyframes statusPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
-.bashActions {
+.statusDone {
   display: flex;
+  align-items: center;
   gap: 4px;
-  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 500;
+  color: #28c840;
+  letter-spacing: 0.02em;
 }
 
-.bashActionBtn {
+/* ---- Copy Button ---- */
+.copyBtn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -93,64 +106,68 @@
   transition: all 0.12s ease;
 }
 
-.bashActionBtn:hover {
+.copyBtn:hover {
   color: var(--zinc-300);
   background: var(--surface-3);
 }
 
+/* ---- Body ---- */
 .bashBody {
-  padding: 12px 14px;
+  padding: 10px 14px;
+}
+
+.commandLine {
+  display: flex;
+  gap: 8px;
   font-family: var(--font-mono);
   font-size: 12px;
   line-height: 1.6;
-  color: var(--zinc-300);
 }
 
-.bashPrompt {
+.prompt {
   color: var(--zinc-500);
-  margin-right: 8px;
   user-select: none;
+  flex-shrink: 0;
 }
 
-.bashCommand {
+.command {
   color: var(--zinc-200);
   word-break: break-all;
 }
 
-.bashDescription {
+.description {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid var(--border);
   color: var(--zinc-500);
-  font-size: 11px;
-}
-
-.bashRunning {
-  margin-top: 8px;
-  display: flex;
-  align-items: center;
-}
-
-.bashCursor {
-  display: inline-block;
-  width: 7px;
-  height: 14px;
-  background: var(--zinc-500);
-  animation: cursorBlink 0.8s steps(2) infinite;
-}
-
-@keyframes cursorBlink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
-}
-
-.bashSuccess {
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
   font-family: var(--font-sans);
   font-size: 11px;
-  font-weight: 500;
-  color: #28c840;
+  line-height: 1.5;
+}
+
+/* ---- Activity Bar (streaming) ---- */
+.activity {
+  margin-top: 10px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+
+.activityBar {
+  width: 40%;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    rgba(234, 149, 56, 0.3),
+    rgba(234, 149, 56, 0.8),
+    rgba(234, 149, 56, 0.3)
+  );
+  animation: activitySlide 1.5s ease-in-out infinite;
+}
+
+@keyframes activitySlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
 }

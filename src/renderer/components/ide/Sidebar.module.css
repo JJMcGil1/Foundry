@@ -348,6 +348,35 @@
 
 /* ── Git Panel ── */
 
+.gitPanelContent {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.changesScrollArea {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.changesScrollArea::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.changesScrollArea::-webkit-scrollbar-thumb {
+  background: var(--zinc-700);
+  border-radius: 3px;
+}
+
+.changesScrollArea::-webkit-scrollbar-thumb:hover {
+  background: var(--zinc-600);
+}
+
 .gitPanelHeader {
   padding: 8px 12px 4px;
 }
@@ -756,10 +785,10 @@
 
 /* ── Commit Graph Section ── */
 .graphSection {
-  margin-top: auto;
   position: relative;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
 }
 
 .graphResizeHandle {
