@@ -343,65 +343,36 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
   const blocksRef = useRef([]);           // array of { type, content, name, input }
   const activeBlockIdxRef = useRef(-1);   // index of currently-streaming block
 
-  // ---- Pending messages for debounced save ---- //
-  const pendingMessagesRef = useRef(new Map()); // id → message
-  const saveTimerRef = useRef(null);
+  // ---- Immediate message save to SQLite (no debounce) ---- //
   const currentThreadIdRef = useRef(null); // Keep a ref in sync for async callbacks
+  const saveLockRef = useRef(Promise.resolve()); // serialize saves to prevent races
 
   // Keep ref in sync
   useEffect(() => {
     currentThreadIdRef.current = currentThreadId;
   }, [currentThreadId]);
 
-  // ---- Debounced message save to SQLite ---- //
-  const flushPendingMessages = useCallback(async () => {
-    const pending = pendingMessagesRef.current;
-    if (pending.size === 0) return;
-
+  const saveMessageToDb = useCallback((msg) => {
     const threadId = currentThreadIdRef.current;
     if (!threadId) return;
 
-    const msgs = Array.from(pending.values());
-    const storedMsgs = msgs.map(m => messageToStored(m, threadId));
-    pending.clear();
-
-    try {
-      await window.foundry?.chatSaveMessages(storedMsgs);
-      // Update thread message count + last_modified
-      const count = await window.foundry?.chatGetMessageCount(threadId);
-      if (count != null) {
-        await window.foundry?.chatUpdateThread(threadId, { message_count: count });
+    // Chain saves to ensure ordering — each save waits for the previous one
+    saveLockRef.current = saveLockRef.current.then(async () => {
+      const storedMsg = messageToStored(msg, threadId);
+      try {
+        await window.foundry?.chatSaveMessages([storedMsg]);
+        // Update thread message count + last_modified
+        const count = await window.foundry?.chatGetMessageCount(threadId);
+        if (count != null) {
+          await window.foundry?.chatUpdateThread(threadId, { message_count: count });
+        }
+      } catch (err) {
+        console.error('[Chat] Failed to save message:', err);
       }
-    } catch (err) {
-      console.error('[Chat] Failed to save messages:', err);
-      // Put messages back for retry
-      for (const m of msgs) {
-        pendingMessagesRef.current.set(m.id, m);
-      }
-      // Retry in 5 seconds
-      setTimeout(() => scheduleSave(), 5000);
-    }
+    }).catch(err => {
+      console.error('[Chat] Save chain error:', err);
+    });
   }, []);
-
-  const scheduleSave = useCallback(() => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      flushPendingMessages();
-    }, 1000); // 1 second debounce
-  }, [flushPendingMessages]);
-
-  const queueMessageSave = useCallback((msg) => {
-    pendingMessagesRef.current.set(msg.id, msg);
-    scheduleSave();
-  }, [scheduleSave]);
-
-  // Flush on unmount
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-      flushPendingMessages();
-    };
-  }, [flushPendingMessages]);
 
   // ---- Load threads on mount / when projectPath changes ---- //
   useEffect(() => {
@@ -440,9 +411,8 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
   const switchToThread = useCallback(async (threadId) => {
     if (!threadId) return;
 
-    // Flush any pending saves from current thread first
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    await flushPendingMessages();
+    // Wait for any in-flight saves to complete before loading new thread
+    await saveLockRef.current;
 
     try {
       const result = await window.foundry?.chatGetMessages(threadId, 100, null);
@@ -459,7 +429,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     } catch (err) {
       console.error('[Chat] Failed to load messages for thread:', threadId, err);
     }
-  }, [flushPendingMessages]);
+  }, []);
 
   // ---- Create a new thread ---- //
   const createNewThread = useCallback(async (title) => {
@@ -663,8 +633,8 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
             timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           };
           updated[lastIdx] = finalMsg;
-          // Save completed assistant message to SQLite
-          queueMessageSave(finalMsg);
+          // Save completed assistant message to SQLite immediately
+          saveMessageToDb(finalMsg);
         }
         return updated;
       });
@@ -685,7 +655,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
             // Save partial assistant message
             const partialMsg = { ...updated[lastIdx], blocks: updated[lastIdx].blocks.map(b => ({ ...b, streaming: false })) };
             updated[lastIdx] = partialMsg;
-            queueMessageSave(partialMsg);
+            saveMessageToDb(partialMsg);
           }
         }
         return updated;
@@ -696,7 +666,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     return () => {
       cleanupRef.current.forEach(fn => fn?.());
     };
-  }, [updateAssistantBlocks, queueMessageSave]);
+  }, [updateAssistantBlocks, saveMessageToDb]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -730,7 +700,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     };
 
     // Save user message to SQLite immediately
-    queueMessageSave(userMsg);
+    saveMessageToDb(userMsg);
 
     // Build message history for API
     const apiMessages = [...messages, userMsg]
@@ -810,7 +780,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
             };
             updated[lastIdx] = stoppedMsg;
             // Save stopped assistant message
-            queueMessageSave(stoppedMsg);
+            saveMessageToDb(stoppedMsg);
           }
         }
         return updated;
@@ -1021,9 +991,8 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
                 <button
                   className={styles.threadNewBtn}
                   onClick={async () => {
-                    // Flush and start fresh
-                    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-                    await flushPendingMessages();
+                    // Wait for in-flight saves and start fresh
+                    await saveLockRef.current;
                     setCurrentThreadId(null);
                     setMessages([]);
                     setShowThreadList(false);
@@ -1064,8 +1033,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
         <button
           className={styles.newChatBtn}
           onClick={async () => {
-            if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-            await flushPendingMessages();
+            await saveLockRef.current;
             setCurrentThreadId(null);
             setMessages([]);
           }}

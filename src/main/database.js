@@ -113,6 +113,37 @@ async function initDatabase() {
   // Thread lookup by workspace
   db.run(`CREATE INDEX IF NOT EXISTS idx_threads_workspace ON chat_threads(workspace_path, last_modified DESC)`);
 
+  // ---- Migration: add seq column for deterministic message ordering ---- //
+  try {
+    const msgInfo = db.exec("PRAGMA table_info(chat_messages)");
+    const msgCols = msgInfo.length ? msgInfo[0].values.map(row => row[1]) : [];
+    if (!msgCols.includes('seq')) {
+      db.run("ALTER TABLE chat_messages ADD COLUMN seq INTEGER DEFAULT 0");
+      // Backfill seq for existing messages based on created_at order
+      const threadRows = db.exec('SELECT DISTINCT thread_id FROM chat_messages');
+      if (threadRows.length) {
+        for (const row of threadRows[0].values) {
+          const threadId = row[0];
+          const msgs = db.exec(
+            'SELECT id FROM chat_messages WHERE thread_id = ? ORDER BY created_at ASC, rowid ASC',
+            [threadId]
+          );
+          if (msgs.length) {
+            let seq = 1;
+            for (const msgRow of msgs[0].values) {
+              db.run('UPDATE chat_messages SET seq = ? WHERE id = ?', [seq, msgRow[0]]);
+              seq++;
+            }
+          }
+        }
+      }
+      db.run(`CREATE INDEX IF NOT EXISTS idx_messages_thread_seq ON chat_messages(thread_id, seq DESC)`);
+      console.log('[Foundry DB] Migrated: added seq column to chat_messages');
+    }
+  } catch (e) {
+    console.error('[Foundry DB] seq migration error:', e);
+  }
+
   persistDb();
 
   // Auto-save every 30 seconds as a safety net against hard kills
@@ -323,16 +354,37 @@ function deleteThread(id) {
 
 function saveMessages(messages) {
   if (!db || !messages.length) return false;
-  const stmt = db.prepare(
-    `INSERT OR REPLACE INTO chat_messages (id, thread_id, role, created_at, updated_at, data)
-     VALUES (?, ?, ?, ?, ?, ?)`
-  );
-  for (const msg of messages) {
-    stmt.run([msg.id, msg.threadId, msg.role, msg.createdAt, msg.updatedAt, msg.data]);
+
+  db.run('BEGIN TRANSACTION');
+  try {
+    for (const msg of messages) {
+      // Preserve seq for existing messages; assign next seq for new ones
+      const existing = db.exec('SELECT seq FROM chat_messages WHERE id = ?', [msg.id]);
+      let seq;
+      if (existing.length && existing[0].values.length) {
+        seq = existing[0].values[0][0];
+      } else {
+        const seqResult = db.exec(
+          'SELECT COALESCE(MAX(seq), 0) + 1 FROM chat_messages WHERE thread_id = ?',
+          [msg.threadId]
+        );
+        seq = seqResult.length ? seqResult[0].values[0][0] : 1;
+      }
+
+      db.run(
+        `INSERT OR REPLACE INTO chat_messages (id, thread_id, role, created_at, updated_at, data, seq)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [msg.id, msg.threadId, msg.role, msg.createdAt, msg.updatedAt, msg.data, seq]
+      );
+    }
+    db.run('COMMIT');
+    persistDb();
+    return true;
+  } catch (err) {
+    try { db.run('ROLLBACK'); } catch (e) { /* already rolled back */ }
+    console.error('[Foundry DB] Failed to save messages:', err);
+    return false;
   }
-  stmt.free();
-  persistDb();
-  return true;
 }
 
 function getMessages(threadId, limit = 50, beforeTimestamp = null) {
@@ -344,12 +396,14 @@ function getMessages(threadId, limit = 50, beforeTimestamp = null) {
 
   let sql, params;
   if (beforeTimestamp) {
+    // Use seq for deterministic ordering; beforeTimestamp maps to a seq lookup
     sql = `SELECT id, thread_id, role, created_at, updated_at, data FROM chat_messages
-           WHERE thread_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?`;
-    params = [threadId, beforeTimestamp, limit + 1];
+           WHERE thread_id = ? AND seq < (SELECT COALESCE(MIN(seq), 2147483647) FROM chat_messages WHERE thread_id = ? AND created_at >= ?)
+           ORDER BY seq DESC LIMIT ?`;
+    params = [threadId, threadId, beforeTimestamp, limit + 1];
   } else {
     sql = `SELECT id, thread_id, role, created_at, updated_at, data FROM chat_messages
-           WHERE thread_id = ? ORDER BY created_at DESC LIMIT ?`;
+           WHERE thread_id = ? ORDER BY seq DESC LIMIT ?`;
     params = [threadId, limit + 1];
   }
 
