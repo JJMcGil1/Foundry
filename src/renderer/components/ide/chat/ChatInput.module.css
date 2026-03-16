@@ -1,0 +1,248 @@
+/* ---- Input Area ---- */
+.inputArea {
+  padding: 16px 16px 20px;
+  flex-shrink: 0;
+  background: linear-gradient(to bottom, transparent 0%, var(--surface-1) 40%);
+  overflow: visible;
+  position: relative;
+  z-index: 10;
+}
+
+.inputWrapper {
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid rgba(249, 115, 22, 0.25);
+  border-radius: 16px;
+  overflow: visible;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 16px 48px rgba(0, 0, 0, 0.06);
+}
+
+.inputWrapper:hover:not(:focus-within) {
+  border-color: rgba(249, 115, 22, 0.4);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    inset 0 0 0 0.5px rgba(249, 115, 22, 0.35),
+    0 0 6px rgba(249, 115, 22, 0.1),
+    0 0 16px rgba(249, 115, 22, 0.05);
+}
+
+.inputWrapper:focus-within {
+  border-color: rgba(249, 115, 22, 0.55);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px rgba(249, 115, 22, 0.4),
+    0 0 10px rgba(249, 115, 22, 0.12),
+    0 0 28px rgba(249, 115, 22, 0.06);
+}
+
+.input {
+  display: block;
+  width: 100%;
+  padding: 18px 16px 10px;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  resize: none;
+  line-height: 1.5;
+  height: auto;
+  min-height: 60px;
+  max-height: 200px;
+  overflow-y: hidden;
+  border-radius: 16px 16px 0 0;
+  box-sizing: border-box;
+}
+
+.input::placeholder {
+  color: var(--zinc-600);
+}
+
+/* ---- Input Toolbar ---- */
+.inputToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 8px;
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.toolbarRight {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ---- Model Switcher ---- */
+.modelSwitcher {
+  position: relative;
+}
+
+.modelBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 11px;
+  color: var(--zinc-400);
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.modelBadge:hover {
+  background: var(--surface-3);
+  border-color: var(--zinc-600);
+  color: var(--zinc-300);
+}
+
+.modelBadgeIcon {
+  color: var(--zinc-500);
+  flex-shrink: 0;
+}
+
+.modelBadgeChevron {
+  transition: transform 0.2s ease-out;
+  color: var(--zinc-600);
+}
+
+.modelBadgeChevronOpen {
+  transform: rotate(180deg);
+}
+
+.modelDropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  min-width: 210px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  padding: 4px;
+  overflow: hidden;
+}
+
+.modelOption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--zinc-300);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-align: left;
+}
+
+.modelOption:hover {
+  background: var(--surface-3);
+  color: var(--zinc-100);
+}
+
+.modelOptionActive {
+  color: var(--zinc-100);
+  font-weight: 500;
+}
+
+.modelOptionCheck {
+  width: 14px;
+  color: var(--zinc-400);
+  flex-shrink: 0;
+}
+
+.modelOptionLabel {
+  flex: 1;
+}
+
+.modelOptionDesc {
+  font-size: 10px;
+  color: var(--zinc-500);
+}
+
+/* ---- Send Button ---- */
+.sendBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--surface-4);
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.15s ease, transform 0.15s ease, filter 0.2s ease;
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 0px transparent);
+}
+
+.sendBtn:hover:not(:disabled) {
+  color: var(--zinc-500);
+}
+
+.sendBtnActive {
+  filter: drop-shadow(0 0 4px rgba(249, 115, 22, 0.3));
+}
+
+.sendBtnActive:hover:not(:disabled) {
+  filter: drop-shadow(0 0 10px rgba(249, 115, 22, 0.45));
+  transform: translateY(-1px);
+}
+
+.sendBtnActive:active:not(:disabled) {
+  transform: translateY(0px) scale(0.94);
+  filter: drop-shadow(0 0 3px rgba(249, 115, 22, 0.25));
+}
+
+.sendBtn:disabled {
+  color: var(--surface-4);
+  cursor: default;
+  opacity: 0.4;
+  filter: none;
+}
+
+/* ---- Stop Button ---- */
+.stopBtn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(248, 113, 113, 0.1);
+  border: none;
+  color: #f87171;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.stopBtn:hover {
+  color: #fca5a5;
+  background: rgba(248, 113, 113, 0.15);
+}

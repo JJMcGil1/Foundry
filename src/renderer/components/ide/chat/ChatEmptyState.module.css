@@ -1,0 +1,145 @@
+/* ---- Empty State ---- */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 20px;
+  text-align: center;
+  flex: 1;
+}
+
+/* ---- Shared Card ---- */
+.emptyCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.12),
+    0 1px 4px rgba(0, 0, 0, 0.06);
+  max-width: 300px;
+  width: 100%;
+  overflow: hidden;
+}
+
+.emptyCardHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 28px 24px 20px;
+  width: 100%;
+}
+
+.emptyGreetingIcon {
+  font-size: 24px;
+  color: var(--zinc-500);
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.emptyCardIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  color: var(--zinc-400);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.emptyCardTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--zinc-200);
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.emptyCardDesc {
+  font-size: 12px;
+  color: var(--zinc-500);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* ---- Quick Prompts ---- */
+.quickPrompts {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-top: 1px solid var(--border);
+}
+
+.quickPromptBtn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 11px 16px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--zinc-400);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  text-align: left;
+}
+
+.quickPromptBtn:last-child {
+  border-bottom: none;
+}
+
+.quickPromptBtn:hover {
+  background: var(--surface-3);
+  color: var(--zinc-200);
+}
+
+.quickPromptLabel {
+  flex: 1;
+}
+
+.quickPromptArrow {
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: all 0.15s ease;
+  color: var(--zinc-500);
+}
+
+.quickPromptBtn:hover .quickPromptArrow {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+/* ---- Provider CTA Button ---- */
+.emptyCardBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 24px 24px;
+  padding: 8px 20px;
+  background: var(--zinc-200);
+  color: var(--zinc-900);
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.emptyCardBtn:hover {
+  background: var(--zinc-100);
+}

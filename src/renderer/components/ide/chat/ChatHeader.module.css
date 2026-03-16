@@ -1,0 +1,204 @@
+/* ---- Chat Header ---- */
+.header {
+  height: 42px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  color: var(--zinc-400);
+}
+
+/* ---- Thread Selector ---- */
+.threadSelector {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.threadSelectorBtn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--zinc-300);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  max-width: 100%;
+  transition: background 0.12s ease;
+}
+
+.threadSelectorBtn:hover {
+  background: var(--surface-3);
+}
+
+.threadTitle {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.threadChevron {
+  flex-shrink: 0;
+  transition: transform 0.2s ease-out;
+  color: var(--zinc-500);
+}
+
+.threadChevronOpen {
+  transform: rotate(180deg);
+}
+
+.threadDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 240px;
+  max-width: 300px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.threadNewBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--zinc-300);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.threadNewBtn:hover {
+  background: var(--surface-3);
+  color: var(--zinc-100);
+}
+
+.threadDivider {
+  height: 1px;
+  background: var(--border);
+}
+
+.threadListScroll {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.threadListScroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.threadListScroll::-webkit-scrollbar-thumb {
+  background: var(--zinc-700);
+  border-radius: 4px;
+}
+
+.threadItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--zinc-400);
+  cursor: pointer;
+  transition: all 0.1s ease;
+  text-align: left;
+}
+
+.threadItem:hover {
+  background: var(--surface-3);
+  color: var(--zinc-200);
+}
+
+.threadItemActive {
+  color: var(--zinc-200);
+  background: rgba(249, 115, 22, 0.06);
+}
+
+.threadItemIcon {
+  flex-shrink: 0;
+  opacity: 0.5;
+}
+
+.threadItemTitle {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.threadItemCount {
+  font-size: 10px;
+  color: var(--zinc-600);
+  flex-shrink: 0;
+  padding: 1px 5px;
+  background: var(--surface-3);
+  border-radius: 8px;
+}
+
+.threadDeleteBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: all 0.12s ease;
+}
+
+.threadItem:hover .threadDeleteBtn {
+  opacity: 1;
+}
+
+.threadDeleteBtn:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
+
+.newChatBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: 6px;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+}
+
+.newChatBtn:hover {
+  color: var(--zinc-200);
+  background: var(--surface-3);
+}
