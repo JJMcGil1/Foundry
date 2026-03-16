@@ -14,10 +14,11 @@ import ChatEmptyState from './chat/ChatEmptyState';
 let streamIdCounter = 0;
 
 // ---- Main ChatPanel Component ---- //
-export default function ChatPanel({ visible = true, width, onWidthChange, onOpenSettings, projectPath }) {
+export default function ChatPanel({ visible = true, width, onWidthChange, onOpenSettings, projectPath, onSplit, onClosePanel, panelCount = 1, isMultiPanel = false, startFresh = false }) {
   const [isResizing, setIsResizing] = useState(false);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
+  const [images, setImages] = useState([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamId, setCurrentStreamId] = useState(null);
   const [hasProvider, setHasProvider] = useState(null);
@@ -39,6 +40,13 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
   // Content block tracking for streaming
   const blocksRef = useRef([]);
   const activeBlockIdxRef = useRef(-1);
+  const currentStreamIdRef = useRef(null);
+
+  // Keep ref in sync so stream listeners can filter by panel
+  const setStreamId = useCallback((id) => {
+    currentStreamIdRef.current = id;
+    setCurrentStreamId(id);
+  }, []);
 
   // ---- Immediate message save to SQLite (no debounce) ---- //
   const currentThreadIdRef = useRef(null);
@@ -74,6 +82,13 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
       try {
         const threadList = await window.foundry?.chatGetThreads(projectPath || null);
         setThreads(threadList || []);
+
+        // Split panels start fresh — don't auto-load a thread
+        if (startFresh) {
+          setCurrentThreadId(null);
+          setMessages([]);
+          return;
+        }
 
         const lastThreadId = await window.foundry?.getSetting('last_chat_thread_id');
 
@@ -231,6 +246,8 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
   // ---- Stream listeners ---- //
   useEffect(() => {
     const cleanupStream = window.foundry?.onClaudeStream((streamId, data) => {
+      // Only process events for THIS panel's active stream
+      if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) return;
       const { type } = data;
 
       if (type === 'content_block_start') {
@@ -308,8 +325,9 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     });
 
     const cleanupEnd = window.foundry?.onClaudeStreamEnd((streamId) => {
+      if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) return;
       setIsStreaming(false);
-      setCurrentStreamId(null);
+      setStreamId(null);
       const blocks = blocksRef.current.map(b => ({ ...b, streaming: false }));
       blocksRef.current = blocks;
       setMessages(prev => {
@@ -329,8 +347,9 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     });
 
     const cleanupError = window.foundry?.onClaudeStreamError((streamId, error) => {
+      if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) return;
       setIsStreaming(false);
-      setCurrentStreamId(null);
+      setStreamId(null);
       setError(error);
       setMessages(prev => {
         const updated = [...prev];
@@ -361,40 +380,72 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
 
   // ---- Send message ---- //
   const handleSend = async () => {
-    if (!input.trim() || isStreaming) return;
+    const hasContent = input.trim() || images.length > 0;
+    if (!hasContent || isStreaming) return;
     setError(null);
 
     let threadId = currentThreadId;
     if (!threadId) {
-      const title = input.trim().slice(0, 50);
+      const title = (input.trim() || 'Image message').slice(0, 50);
       threadId = await createNewThread(title);
       if (!threadId) return;
     } else if (messages.length === 0) {
-      const title = input.trim().slice(0, 50);
+      const title = (input.trim() || 'Image message').slice(0, 50);
       try {
         await window.foundry?.chatUpdateThread(threadId, { title });
         setThreads(prev => prev.map(t => t.id === threadId ? { ...t, title } : t));
       } catch { /* silent */ }
     }
 
+    // Capture current images and clear state
+    const attachedImages = [...images];
+
     const userMsg = {
       id: generateId(),
       role: 'user',
       content: input.trim(),
+      images: attachedImages.length > 0 ? attachedImages.map(img => ({
+        id: img.id,
+        name: img.name,
+        mediaType: img.mediaType,
+        base64: img.base64,
+      })) : undefined,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       createdAt: Date.now(),
     };
 
     saveMessageToDb(userMsg);
 
+    // Build API messages — for messages with images, construct multimodal content
     const apiMessages = [...messages, userMsg]
       .filter(m => m.role === 'user' || m.role === 'assistant')
-      .map(m => ({
-        role: m.role,
-        content: m.role === 'assistant'
-          ? (m.blocks?.filter(b => b.type === 'text').map(b => b.content).join('\n') || m.content || '')
-          : m.content,
-      }));
+      .map(m => {
+        if (m.role === 'assistant') {
+          return {
+            role: m.role,
+            content: m.blocks?.filter(b => b.type === 'text').map(b => b.content).join('\n') || m.content || '',
+          };
+        }
+        // User message — check for images
+        if (m.images && m.images.length > 0) {
+          const contentBlocks = [];
+          for (const img of m.images) {
+            contentBlocks.push({
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: img.mediaType,
+                data: img.base64,
+              },
+            });
+          }
+          if (m.content) {
+            contentBlocks.push({ type: 'text', text: m.content });
+          }
+          return { role: 'user', content: contentBlocks };
+        }
+        return { role: m.role, content: m.content };
+      });
 
     const assistantPlaceholder = {
       id: generateId(),
@@ -407,6 +458,9 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
 
     setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
     setInput('');
+    setImages([]);
+    // Revoke object URLs
+    attachedImages.forEach(img => { if (img.preview) URL.revokeObjectURL(img.preview); });
     if (inputRef.current) inputRef.current.style.height = 'auto';
     setIsStreaming(true);
 
@@ -414,13 +468,18 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     activeBlockIdxRef.current = -1;
 
     const streamId = `stream-${++streamIdCounter}-${Date.now()}`;
-    setCurrentStreamId(streamId);
+    setStreamId(streamId);
 
     let model;
     try { model = await window.foundry?.claudeGetModel(); } catch { /* default */ }
 
     const result = await window.foundry?.claudeChat({
       messages: apiMessages,
+      images: attachedImages.length > 0 ? attachedImages.map(img => ({
+        base64: img.base64,
+        mediaType: img.mediaType,
+        name: img.name,
+      })) : undefined,
       model: model || 'sonnet',
       streamId,
       workspacePath: projectPath || null,
@@ -428,7 +487,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
 
     if (result?.error) {
       setIsStreaming(false);
-      setCurrentStreamId(null);
+      setStreamId(null);
       setError(result.error);
       // Remove empty assistant placeholder on API error — but don't lose partial content
       setMessages(prev => {
@@ -455,7 +514,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     if (currentStreamId) {
       await window.foundry?.claudeStopStream(currentStreamId);
       setIsStreaming(false);
-      setCurrentStreamId(null);
+      setStreamId(null);
       const blocks = blocksRef.current.map(b => ({ ...b, streaming: false }));
       blocksRef.current = blocks;
       setMessages(prev => {
@@ -514,16 +573,20 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
 
   return (
     <motion.div
-      className={styles.panel}
+      className={`${styles.panel} ${isMultiPanel ? styles.panelMulti : ''}`}
       style={{
-        width: isResizing ? width : undefined,
+        width: isMultiPanel ? undefined : (isResizing ? width : undefined),
+        flex: isMultiPanel ? 1 : undefined,
         pointerEvents: visible ? 'auto' : 'none',
       }}
       initial={false}
-      animate={{ width: visible ? width : 0, opacity: visible ? 1 : 0 }}
+      animate={isMultiPanel
+        ? { opacity: 1 }
+        : { width: visible ? width : 0, opacity: visible ? 1 : 0 }
+      }
       transition={isResizing ? { duration: 0 } : { duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
     >
-      <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
+      {!isMultiPanel && <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />}
 
       <ChatHeader
         threads={threads}
@@ -535,6 +598,9 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
         handleDeleteThread={handleDeleteThread}
         onNewChat={handleNewChat}
         threadListRef={threadListRef}
+        onSplit={onSplit}
+        onClosePanel={onClosePanel}
+        panelCount={panelCount}
       />
 
       <div className={styles.messages}>
@@ -569,6 +635,8 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
         ref={inputRef}
         input={input}
         setInput={setInput}
+        images={images}
+        setImages={setImages}
         isStreaming={isStreaming}
         hasProvider={hasProvider}
         modelLabel={modelLabel}

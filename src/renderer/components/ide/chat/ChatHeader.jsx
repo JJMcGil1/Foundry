@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiMessageSquare, FiChevronDown, FiPlus, FiTrash2 } from 'react-icons/fi';
+import { FiMessageSquare, FiChevronDown, FiPlus, FiTrash2, FiX } from 'react-icons/fi';
+import { TbLayoutColumns } from 'react-icons/tb';
 import styles from './ChatHeader.module.css';
 
 export default function ChatHeader({
@@ -13,6 +14,9 @@ export default function ChatHeader({
   handleDeleteThread,
   onNewChat,
   threadListRef,
+  onSplit,
+  onClosePanel,
+  panelCount = 1,
 }) {
   return (
     <div className={styles.header}>
@@ -81,6 +85,24 @@ export default function ChatHeader({
       >
         <FiPlus size={14} />
       </button>
+      {onSplit && panelCount < 4 && (
+        <button
+          className={styles.newChatBtn}
+          onClick={onSplit}
+          title="Split chat panel"
+        >
+          <TbLayoutColumns size={14} />
+        </button>
+      )}
+      {onClosePanel && panelCount > 1 && (
+        <button
+          className={`${styles.newChatBtn} ${styles.closePanelBtn}`}
+          onClick={onClosePanel}
+          title="Close this panel"
+        >
+          <FiX size={14} />
+        </button>
+      )}
     </div>
   );
 }

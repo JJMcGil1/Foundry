@@ -23,6 +23,12 @@
   position: relative;
 }
 
+.panelMulti {
+  flex: 1;
+  min-width: 0;
+  border-left: none;
+}
+
 /* ---- Resize Handle ---- */
 .resizeHandle {
   position: absolute;

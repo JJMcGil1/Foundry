@@ -501,6 +501,13 @@ function getGitDiff(dirPath, filePath) {
 
 // ---- IPC Handlers ---- //
 function registerIPC() {
+  // Resolve CLI aliases to full model IDs for direct API usage
+  const ALIAS_TO_MODEL = {
+    'sonnet': 'claude-sonnet-4-6',
+    'opus': 'claude-opus-4-6',
+    'haiku': 'claude-haiku-4-5-20251001',
+  };
+
   // Window
   ipcMain.handle('window:isFullScreen', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
@@ -963,110 +970,152 @@ function registerIPC() {
   ipcMain.handle('git:generateCommitMsg', async (_event, dirPath) => {
     try {
       // Get diff — prefer staged, fall back to unstaged
-      let diff = '';
+      let diffStat = '';
       try {
-        diff = execSync('git diff --cached --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        diffStat = execSync('git diff --cached --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
       } catch {}
-      if (!diff.trim()) {
+      if (!diffStat.trim()) {
         try {
-          diff = execSync('git diff --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+          diffStat = execSync('git diff --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
         } catch {}
       }
-      if (!diff.trim()) {
-        // Try status for untracked
-        diff = execSync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+      if (!diffStat.trim()) {
+        diffStat = execSync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
       }
 
-      // Get the actual diff content for smarter messages
-      let fullDiff = '';
-      try {
-        fullDiff = execSync('git diff --cached', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-        if (!fullDiff.trim()) {
-          fullDiff = execSync('git diff', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-        }
-      } catch {}
-
-      // Parse changed files from stat
-      const statLines = diff.trim().split('\n').filter(Boolean);
-      const files = [];
-      const actions = { added: [], modified: [], deleted: [], renamed: [] };
-
-      // Parse from porcelain or stat
-      for (const line of statLines) {
-        // porcelain format: "XY filename"
-        const porcelainMatch = line.match(/^(.{2})\s+(.+)$/);
-        if (porcelainMatch) {
-          const [, status, filepath] = porcelainMatch;
-          const name = path.basename(filepath);
-          if (status.includes('?') || status.includes('A')) actions.added.push(name);
-          else if (status.includes('D')) actions.deleted.push(name);
-          else if (status.includes('R')) actions.renamed.push(name);
-          else actions.modified.push(name);
-          files.push(name);
-          continue;
-        }
-        // stat format: " filename | 5 ++-"
-        const statMatch = line.match(/^\s*(.+?)\s+\|/);
-        if (statMatch) {
-          const name = path.basename(statMatch[1].trim());
-          files.push(name);
-          actions.modified.push(name);
-        }
-      }
-
-      if (files.length === 0) {
+      if (!diffStat.trim()) {
         return { message: 'Update files' };
       }
 
-      // Detect patterns from file names and diff content
-      const allFiles = files.join(' ').toLowerCase();
-      const diffLower = fullDiff.toLowerCase();
-      let prefix = 'update';
-      let scope = '';
+      // Get the actual diff content for the AI
+      let fullDiff = '';
+      try {
+        fullDiff = execSync('git diff --cached', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+        if (!fullDiff.trim()) {
+          fullDiff = execSync('git diff', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+        }
+      } catch {}
 
-      // Detect type from content
-      if (actions.added.length > 0 && actions.modified.length === 0 && actions.deleted.length === 0) {
-        prefix = 'add';
-      } else if (actions.deleted.length > 0 && actions.added.length === 0 && actions.modified.length === 0) {
-        prefix = 'remove';
-      } else if (diffLower.includes('fix') || diffLower.includes('bug') || diffLower.includes('error') || diffLower.includes('issue')) {
-        prefix = 'fix';
-      } else if (allFiles.includes('test') || allFiles.includes('spec')) {
-        prefix = 'test';
-      } else if (allFiles.includes('readme') || allFiles.includes('.md')) {
-        prefix = 'docs';
-      } else if (allFiles.includes('.css') || allFiles.includes('.scss') || allFiles.includes('style')) {
-        prefix = 'style';
-      } else if (allFiles.includes('config') || allFiles.includes('.env') || allFiles.includes('package.json')) {
-        prefix = 'chore';
-      } else if (diffLower.includes('refactor') || diffLower.includes('rename') || diffLower.includes('reorganize')) {
-        prefix = 'refactor';
-      }
+      // Truncate diff to ~8K chars to stay within reasonable token limits
+      const maxDiffLen = 8000;
+      const truncatedDiff = fullDiff.length > maxDiffLen
+        ? fullDiff.slice(0, maxDiffLen) + '\n... (diff truncated)'
+        : fullDiff;
 
-      // Build description
-      if (files.length === 1) {
-        scope = files[0];
-      } else if (files.length <= 3) {
-        scope = files.join(', ');
-      } else {
-        // Find common directory
-        const dirs = new Set();
-        for (const line of statLines) {
-          const match = line.match(/^\s*(.+?)\s+\|/) || line.match(/^.{2}\s+(.+)$/);
-          if (match) {
-            const parts = match[1].trim().split('/');
-            if (parts.length > 1) dirs.add(parts[parts.length - 2]);
+      const commitPrompt = `You are a commit message generator. Given the following git diff, write a single concise commit message. Follow conventional commit style (e.g. "feat: ...", "fix: ...", "refactor: ...", "chore: ...", "docs: ...", "style: ...", "test: ..."). The message should be one line, under 72 characters, lowercase after the prefix, no period at the end. Only output the commit message, nothing else.\n\nGit diff stat:\n${diffStat.trim()}\n\n${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
+
+      // Try AI-powered generation using the user's selected model + credentials
+      const cred = await resolveClaudeCredential();
+      const modelAlias = getSetting('claude_model') || 'sonnet';
+      console.log('[CommitMsg] cred source:', cred?.source, '| model:', modelAlias);
+
+      if (cred && cred.source === 'subscription') {
+        // Subscription OAuth → use Claude CLI (same as chat does)
+        const claudeBin = await resolveClaudeBinary();
+        console.log('[CommitMsg] CLI binary:', claudeBin);
+        if (claudeBin) {
+          const aiMessage = await new Promise((resolve) => {
+            const timeoutId = setTimeout(() => { try { proc.kill('SIGTERM'); } catch {} resolve(null); }, 20000);
+
+            const cleanEnv = { ...process.env };
+            delete cleanEnv.CLAUDECODE;
+            delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
+            Object.keys(cleanEnv).forEach(k => { if (k.startsWith('CLAUDE_CODE_')) delete cleanEnv[k]; });
+
+            const proc = spawn(claudeBin, [
+              '-p', commitPrompt,
+              '--output-format', 'text',
+              '--model', modelAlias,
+              '--max-turns', '1',
+              '--no-session-persistence',
+            ], {
+              stdio: ['ignore', 'pipe', 'pipe'],
+              env: cleanEnv,
+              cwd: dirPath,
+            });
+
+            let stdout = '';
+            let stderr = '';
+            proc.stdout.on('data', (chunk) => { stdout += chunk.toString(); });
+            proc.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+            proc.on('close', (code) => {
+              clearTimeout(timeoutId);
+              console.log('[CommitMsg] CLI exit code:', code, '| stdout length:', stdout.length, '| stderr:', stderr.slice(0, 500));
+              const text = stdout.trim();
+              resolve(text || null);
+            });
+            proc.on('error', (err) => { clearTimeout(timeoutId); console.error('[CommitMsg] CLI spawn error:', err.message); resolve(null); });
+          });
+
+          if (aiMessage) {
+            let cleaned = aiMessage.replace(/^["']|["']$/g, '').replace(/\.$/, '').trim();
+            // Take only first line in case CLI outputs extras
+            cleaned = cleaned.split('\n')[0].trim();
+            return { message: cleaned };
           }
         }
-        if (dirs.size === 1) {
-          scope = `${[...dirs][0]} (${files.length} files)`;
-        } else {
-          scope = `${files.length} files`;
+      } else if (cred && cred.source === 'api_key') {
+        // API key → direct HTTPS to Anthropic API
+        const resolvedModel = ALIAS_TO_MODEL[modelAlias] || modelAlias || 'claude-sonnet-4-6';
+        const postData = JSON.stringify({
+          model: resolvedModel,
+          max_tokens: 256,
+          messages: [{ role: 'user', content: commitPrompt }],
+        });
+
+        const aiMessage = await new Promise((resolve) => {
+          const timeoutId = setTimeout(() => resolve(null), 15000);
+
+          const req = https.request({
+            hostname: 'api.anthropic.com',
+            path: '/v1/messages',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'anthropic-version': '2023-06-01',
+              'x-api-key': cred.token,
+            },
+          }, (res) => {
+            let body = '';
+            res.on('data', (chunk) => body += chunk);
+            res.on('end', () => {
+              clearTimeout(timeoutId);
+              try {
+                if (res.statusCode === 200) {
+                  const data = JSON.parse(body);
+                  const text = data.content?.[0]?.text?.trim();
+                  resolve(text || null);
+                } else {
+                  resolve(null);
+                }
+              } catch {
+                resolve(null);
+              }
+            });
+          });
+
+          req.on('error', () => { clearTimeout(timeoutId); resolve(null); });
+          req.write(postData);
+          req.end();
+        });
+
+        if (aiMessage) {
+          let cleaned = aiMessage.replace(/^["']|["']$/g, '').replace(/\.$/, '');
+          return { message: cleaned };
         }
       }
 
-      const message = `${prefix}: ${scope}`;
-      return { message };
+      // Fallback: basic heuristic if AI is unavailable
+      const statLines = diffStat.trim().split('\n').filter(Boolean);
+      const files = [];
+      for (const line of statLines) {
+        const porcelainMatch = line.match(/^(.{2})\s+(.+)$/);
+        if (porcelainMatch) { files.push(path.basename(porcelainMatch[2])); continue; }
+        const statMatch = line.match(/^\s*(.+?)\s+\|/);
+        if (statMatch) files.push(path.basename(statMatch[1].trim()));
+      }
+      const scope = files.length <= 3 ? files.join(', ') : `${files.length} files`;
+      return { message: `update: ${scope || 'files'}` };
     } catch (err) {
       return { error: err.message };
     }
@@ -1445,11 +1494,7 @@ function registerIPC() {
   });
 
   // Resolve CLI aliases to full model IDs for direct API usage
-  const ALIAS_TO_MODEL = {
-    'sonnet': 'claude-sonnet-4-6',
-    'opus': 'claude-opus-4-6',
-    'haiku': 'claude-haiku-4-5-20251001',
-  };
+  // NOTE: ALIAS_TO_MODEL is defined at the top of registerIPC()
 
   // Validate an API key by making a test request
   ipcMain.handle('claude:validateKey', async (_event, apiKey) => {
@@ -1534,23 +1579,55 @@ function registerIPC() {
    * Uses `claude -p` with `--output-format stream-json --verbose --include-partial-messages`.
    * The CLI handles OAuth auth, token refresh, and API routing internally.
    */
-  async function streamViaCLI(event, messages, model, streamId, workspacePath) {
+  async function streamViaCLI(event, messages, images, model, streamId, workspacePath) {
     const claudeBin = await resolveClaudeBinary();
     if (!claudeBin) {
       return { error: 'Claude CLI not found. Install Claude Code or add an API key in Settings → Providers.' };
     }
 
     // Build the prompt: format conversation history + current message
+    const lastMsg = messages[messages.length - 1];
+    // Extract text content from the last message (may be string or content blocks array)
+    const lastMsgText = typeof lastMsg.content === 'string'
+      ? lastMsg.content
+      : (Array.isArray(lastMsg.content)
+        ? lastMsg.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+        : '');
+
+    // Write any attached images to temp files so the CLI's Read tool can access them
+    const tempImagePaths = [];
+    if (images && images.length > 0) {
+      const tmpDir = path.join(os.tmpdir(), 'foundry-images');
+      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      for (const img of images) {
+        const ext = img.mediaType?.split('/')[1] || 'png';
+        const tmpPath = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`);
+        fs.writeFileSync(tmpPath, Buffer.from(img.base64, 'base64'));
+        tempImagePaths.push(tmpPath);
+      }
+    }
+
+    // Build prompt with image references if present
+    let imageContext = '';
+    if (tempImagePaths.length > 0) {
+      const fileList = tempImagePaths.map(p => `- ${p}`).join('\n');
+      imageContext = `\n\nThe user has attached the following image(s). IMPORTANT: Use your Read tool to view each image file before responding:\n${fileList}\n\n`;
+    }
+
     let prompt;
     if (messages.length === 1) {
-      prompt = messages[0].content;
+      prompt = (lastMsgText || 'Please look at the attached image(s).') + imageContext;
     } else {
       // Multi-turn: format previous messages as context
-      const history = messages.slice(0, -1).map(m =>
-        `${m.role === 'user' ? 'Human' : 'Assistant'}: ${m.content}`
-      ).join('\n\n');
-      const current = messages[messages.length - 1].content;
-      prompt = `Here is our conversation so far:\n\n${history}\n\nHuman: ${current}\n\nPlease respond to my latest message above, taking the conversation history into account.`;
+      const history = messages.slice(0, -1).map(m => {
+        const text = typeof m.content === 'string'
+          ? m.content
+          : (Array.isArray(m.content)
+            ? m.content.filter(b => b.type === 'text').map(b => b.text).join('\n')
+            : '');
+        return `${m.role === 'user' ? 'Human' : 'Assistant'}: ${text}`;
+      }).join('\n\n');
+      prompt = `Here is our conversation so far:\n\n${history}\n\nHuman: ${lastMsgText}${imageContext}\n\nPlease respond to my latest message above, taking the conversation history into account.`;
     }
 
     // The CLI accepts aliases (sonnet, opus, haiku) and auto-resolves to latest.
@@ -1570,6 +1647,12 @@ function registerIPC() {
       '--max-turns', '50',
       '--no-session-persistence',
     ];
+
+    // If images are attached, add the temp directory so CLI can read them
+    if (tempImagePaths.length > 0) {
+      const tmpDir = path.join(os.tmpdir(), 'foundry-images');
+      args.push('--add-dir', tmpDir);
+    }
 
     if (autoApprove) {
       args.push('--dangerously-skip-permissions');
@@ -1644,6 +1727,10 @@ function registerIPC() {
 
       proc.on('close', (code) => {
         activeStreams.delete(streamId);
+        // Clean up temp image files
+        for (const tmpPath of tempImagePaths) {
+          try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
+        }
         if (win && !win.isDestroyed()) {
           win.webContents.send('claude:streamEnd', streamId);
         }
@@ -1680,7 +1767,10 @@ function registerIPC() {
       model: resolvedModel,
       max_tokens: supportsThinking ? 16384 : 8192,
       stream: true,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      messages: messages.map(m => ({
+        role: m.role,
+        content: m.content, // Already properly formatted — string or content blocks array
+      })),
     };
     if (supportsThinking) {
       requestBody.thinking = { type: 'enabled', budget_tokens: 10000 };
@@ -1778,7 +1868,7 @@ function registerIPC() {
   }
 
   // Main chat handler — routes to CLI (subscription) or API (key) based on auth source
-  ipcMain.handle('claude:chat', async (event, { messages, model, streamId, workspacePath }) => {
+  ipcMain.handle('claude:chat', async (event, { messages, images, model, streamId, workspacePath }) => {
     const cred = await resolveClaudeCredential();
     if (!cred) {
       return { error: 'No Claude credentials found. Connect your Claude Code subscription or add an API key in Settings → Providers.' };
@@ -1786,7 +1876,7 @@ function registerIPC() {
 
     if (cred.source === 'subscription') {
       // Subscription OAuth → use Claude CLI subprocess (handles auth internally)
-      return streamViaCLI(event, messages, model, streamId, workspacePath);
+      return streamViaCLI(event, messages, images, model, streamId, workspacePath);
     } else {
       // API key → direct HTTPS to Anthropic API
       return streamViaAPI(event, messages, model, streamId, cred.token);

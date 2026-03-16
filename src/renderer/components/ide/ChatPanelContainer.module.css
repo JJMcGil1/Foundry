@@ -1,0 +1,34 @@
+/* ---- Multi-Panel Chat Container ---- */
+.container {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden;
+  position: relative;
+  border-left: 1px solid var(--border);
+  background: var(--surface-1);
+}
+
+/* ---- Resize Handle (left edge of entire container) ---- */
+.resizeHandle {
+  position: absolute;
+  top: 0;
+  left: -2px;
+  width: 5px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 20;
+  transition: background 0.2s ease;
+}
+
+.resizeHandle:hover,
+.resizeHandle:active {
+  background: var(--zinc-600);
+}
+
+/* ---- Divider between panels ---- */
+.panelDivider {
+  width: 1px;
+  flex-shrink: 0;
+  background: var(--border);
+}

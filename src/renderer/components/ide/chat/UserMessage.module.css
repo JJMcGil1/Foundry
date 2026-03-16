@@ -35,6 +35,36 @@
   margin-left: auto;
 }
 
+/* ---- Image Strip ---- */
+.imageStrip {
+  display: flex;
+  gap: 8px;
+  padding-left: 32px;
+  flex-wrap: wrap;
+}
+
+.imageThumb {
+  width: 120px;
+  height: 90px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.imageThumb:hover {
+  border-color: var(--zinc-500);
+}
+
+.imageThumbImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .content {
   padding-left: 32px;
   font-size: 13px;

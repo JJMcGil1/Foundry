@@ -5,7 +5,7 @@ import { FiSun, FiMoon } from 'react-icons/fi';
 import ActivityBar from './ActivityBar';
 import Sidebar from './Sidebar';
 import EditorArea from './EditorArea';
-import ChatPanel from './ChatPanel';
+import ChatPanelContainer from './ChatPanelContainer';
 import TerminalPanel from './TerminalPanel';
 import SettingsPage from './SettingsPage';
 import SearchBar from './SearchBar';
@@ -372,7 +372,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               }}
             />
           </div>
-          <ChatPanel
+          <ChatPanelContainer
             visible={chatVisible && !showSettings}
             width={chatWidth}
             onWidthChange={setChatWidth}

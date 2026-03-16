@@ -186,6 +186,92 @@
   color: var(--zinc-500);
 }
 
+/* ---- Attach Button ---- */
+.attachBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--zinc-500);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.attachBtn:hover:not(:disabled) {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.attachBtn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* ---- Image Preview Strip ---- */
+.imagePreviewStrip {
+  display: flex;
+  gap: 8px;
+  padding: 12px 12px 0;
+  flex-wrap: wrap;
+}
+
+.imagePreview {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--surface-3);
+}
+
+.imagePreviewImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imageRemoveBtn {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  border: none;
+  color: var(--zinc-300);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  padding: 0;
+}
+
+.imagePreview:hover .imageRemoveBtn {
+  opacity: 1;
+}
+
+.imageRemoveBtn:hover {
+  background: rgba(239, 68, 68, 0.8);
+  color: white;
+}
+
+/* ---- Drag Over State ---- */
+.dragOver {
+  border-color: rgba(249, 115, 22, 0.6) !important;
+  background: rgba(249, 115, 22, 0.05) !important;
+}
+
 /* ---- Send Button ---- */
 .sendBtn {
   display: flex;

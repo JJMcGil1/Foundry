@@ -202,3 +202,8 @@
   color: var(--zinc-200);
   background: var(--surface-3);
 }
+
+.closePanelBtn:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.1);
+}
