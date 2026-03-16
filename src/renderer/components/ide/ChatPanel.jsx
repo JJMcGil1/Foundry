@@ -770,6 +770,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
       messages: apiMessages,
       model: model || 'sonnet',
       streamId,
+      workspacePath: projectPath || null,
     });
 
     if (result?.error) {

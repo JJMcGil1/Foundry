@@ -1534,7 +1534,7 @@ function registerIPC() {
    * Uses `claude -p` with `--output-format stream-json --verbose --include-partial-messages`.
    * The CLI handles OAuth auth, token refresh, and API routing internally.
    */
-  async function streamViaCLI(event, messages, model, streamId) {
+  async function streamViaCLI(event, messages, model, streamId, workspacePath) {
     const claudeBin = await resolveClaudeBinary();
     if (!claudeBin) {
       return { error: 'Claude CLI not found. Install Claude Code or add an API key in Settings → Providers.' };
@@ -1583,9 +1583,13 @@ function registerIPC() {
       delete cleanEnv.CLAUDE_CODE_OAUTH_TOKEN;
       Object.keys(cleanEnv).forEach(k => { if (k.startsWith('CLAUDE_CODE_')) delete cleanEnv[k]; });
 
+      // Set cwd to workspace path so Claude CLI tools (Bash, etc.) operate in the project directory
+      const effectiveCwd = workspacePath && fs.existsSync(workspacePath) ? workspacePath : undefined;
+
       const proc = spawn(claudeBin, args, {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: cleanEnv,
+        ...(effectiveCwd && { cwd: effectiveCwd }),
       });
 
       activeStreams.set(streamId, proc);
@@ -1774,7 +1778,7 @@ function registerIPC() {
   }
 
   // Main chat handler — routes to CLI (subscription) or API (key) based on auth source
-  ipcMain.handle('claude:chat', async (event, { messages, model, streamId }) => {
+  ipcMain.handle('claude:chat', async (event, { messages, model, streamId, workspacePath }) => {
     const cred = await resolveClaudeCredential();
     if (!cred) {
       return { error: 'No Claude credentials found. Connect your Claude Code subscription or add an API key in Settings → Providers.' };
@@ -1782,7 +1786,7 @@ function registerIPC() {
 
     if (cred.source === 'subscription') {
       // Subscription OAuth → use Claude CLI subprocess (handles auth internally)
-      return streamViaCLI(event, messages, model, streamId);
+      return streamViaCLI(event, messages, model, streamId, workspacePath);
     } else {
       // API key → direct HTTPS to Anthropic API
       return streamViaAPI(event, messages, model, streamId, cred.token);
