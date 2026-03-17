@@ -138,15 +138,21 @@ export default function CommitGraph({ commits, projectPath, onLoadMore, hasMore,
 
   if (commits.length === 0) return null;
 
-  const LANE_W = 14;
+  const LANE_W = 12;
   const ROW_H = 44;
   const DOT_R = 3.5;
-  const maxLanes = Math.max(rows.reduce((m, r) => Math.max(m, r.totalLanes), 1), 1);
-  const graphW = maxLanes * LANE_W + 6;
+  const PAD_L = 6; // left padding so dots aren't clipped
+
+  // Helper: x-center of a lane
+  const lx = (li) => PAD_L + li * LANE_W + LANE_W / 2;
 
   const getAvatarUrl = (row) => avatarMap[`${row.email || ''}||${row.author || ''}`] || null;
   const cardRow = cardHash ? rows.find(r => r.hash === cardHash) : null;
   const cardLaneColor = cardRow ? GRAPH_COLORS[cardRow.lane % GRAPH_COLORS.length] : null;
+
+  // Build a Set for quick lookup
+  const newMergeSet = (row) => new Set(row.newMergeLanes || []);
+  const mergingFromSet = (row) => new Set(row.mergingFromLanes || []);
 
   return (
     <div className={styles.graphSection}>
@@ -181,6 +187,99 @@ export default function CommitGraph({ commits, projectPath, onLoadMore, hasMore,
               const { branches, tags, isHead } = parseRefs(row.refs);
               const hasRefs = branches.length > 0 || tags.length > 0;
               const isLast = ri === rows.length - 1;
+              const isFirst = ri === 0;
+              const prevActiveLanes = ri > 0 ? rows[ri - 1].activeLanes : [];
+              const curActiveLanes = row.activeLanes;
+              const newMerges = newMergeSet(row);
+              const mergingFrom = mergingFromSet(row);
+
+              // Determine the max lane index we need to render for this row
+              const maxLane = Math.max(
+                curActiveLanes.length,
+                prevActiveLanes.length,
+                row.lane + 1,
+                ...row.parentLanes.map(p => p + 1),
+                ...row.mergingFromLanes.map(m => m + 1)
+              );
+              // Per-row SVG width — dynamic based on how many lanes this row uses
+              const rowGraphW = PAD_L + maxLane * LANE_W + 4;
+
+              const svgElements = [];
+
+              for (let li = 0; li < maxLane; li++) {
+                if (li === row.lane) continue; // handled separately below
+
+                const aliveAbove = li < prevActiveLanes.length && prevActiveLanes[li] != null;
+                const aliveBelow = li < curActiveLanes.length && curActiveLanes[li] != null;
+                const laneColor = GRAPH_COLORS[li % GRAPH_COLORS.length];
+                const isNewMerge = newMerges.has(li);
+                const isMergingIn = mergingFrom.has(li);
+
+                if (isMergingIn) {
+                  // This lane was expecting this commit and converges here.
+                  // Draw curve from top of this lane to the commit dot.
+                  svgElements.push(
+                    <path
+                      key={`join-${li}`}
+                      d={`M ${lx(li)} 0 C ${lx(li)} ${ROW_H * 0.45}, ${lx(row.lane)} ${ROW_H * 0.15}, ${lx(row.lane)} ${ROW_H / 2}`}
+                      stroke={laneColor}
+                      strokeWidth={2}
+                      fill="none"
+                      opacity={0.7}
+                    />
+                  );
+                } else if (isNewMerge) {
+                  // This lane was just created by this commit's merge parent — draw bottom half only.
+                  // The merge curve from the dot handles the top connection.
+                  svgElements.push(
+                    <line
+                      key={`new-${li}`}
+                      x1={lx(li)} y1={ROW_H / 2}
+                      x2={lx(li)} y2={ROW_H}
+                      stroke={laneColor}
+                      strokeWidth={2}
+                      opacity={0.6}
+                    />
+                  );
+                } else if (aliveAbove && aliveBelow) {
+                  // Pure pass-through — full vertical line
+                  svgElements.push(
+                    <line
+                      key={`pass-${li}`}
+                      x1={lx(li)} y1={0}
+                      x2={lx(li)} y2={ROW_H}
+                      stroke={laneColor}
+                      strokeWidth={2}
+                      opacity={0.6}
+                    />
+                  );
+                } else if (aliveAbove && !aliveBelow) {
+                  // Lane terminates here (but wasn't a merge-in to our dot — just freed)
+                  // Draw top half
+                  svgElements.push(
+                    <line
+                      key={`end-${li}`}
+                      x1={lx(li)} y1={0}
+                      x2={lx(li)} y2={ROW_H / 2}
+                      stroke={laneColor}
+                      strokeWidth={2}
+                      opacity={0.6}
+                    />
+                  );
+                } else if (!aliveAbove && aliveBelow && !isNewMerge) {
+                  // Lane starts fresh (not from our merge) — draw bottom half
+                  svgElements.push(
+                    <line
+                      key={`start-${li}`}
+                      x1={lx(li)} y1={ROW_H / 2}
+                      x2={lx(li)} y2={ROW_H}
+                      stroke={laneColor}
+                      strokeWidth={2}
+                      opacity={0.6}
+                    />
+                  );
+                }
+              }
 
               return (
                 <div
@@ -189,71 +288,76 @@ export default function CommitGraph({ commits, projectPath, onLoadMore, hasMore,
                   onMouseEnter={(e) => handleRowMouseEnter(e, row.hash)}
                   onMouseLeave={handleRowMouseLeave}
                 >
-                  <svg className={styles.graphSvg} width={graphW} height={ROW_H}>
-                    {/* Vertical lane lines for all active lanes */}
-                    {row.activeLanes.map((laneHash, li) => {
-                      if (laneHash === null) return null;
-                      const isFirst = ri === 0 && li === row.lane;
-                      return (
-                        <line
-                          key={`v-${li}`}
-                          x1={li * LANE_W + LANE_W / 2}
-                          y1={isFirst ? ROW_H / 2 : 0}
-                          x2={li * LANE_W + LANE_W / 2}
-                          y2={isLast && li === row.lane ? ROW_H / 2 : ROW_H}
-                          stroke={GRAPH_COLORS[li % GRAPH_COLORS.length]}
-                          strokeWidth={1.5}
-                          opacity={0.35}
-                        />
-                      );
-                    })}
-                    {ri > 0 && (
+                  <svg className={styles.graphSvg} width={rowGraphW} height={ROW_H}>
+                    {/* Pass-through, merge-in, and new-merge lane lines */}
+                    {svgElements}
+
+                    {/* Commit's own lane — incoming line from top to dot */}
+                    {!isFirst && (
                       <line
-                        x1={row.lane * LANE_W + LANE_W / 2}
-                        y1={0}
-                        x2={row.lane * LANE_W + LANE_W / 2}
-                        y2={ROW_H / 2}
+                        x1={lx(row.lane)} y1={0}
+                        x2={lx(row.lane)} y2={ROW_H / 2}
                         stroke={color}
-                        strokeWidth={1.5}
-                        opacity={0.6}
+                        strokeWidth={2}
+                        opacity={0.85}
                       />
                     )}
-                    {row.parents.length > 0 && (
-                      <line
-                        x1={row.lane * LANE_W + LANE_W / 2}
-                        y1={ROW_H / 2}
-                        x2={row.parentLanes[0] * LANE_W + LANE_W / 2}
-                        y2={ROW_H}
-                        stroke={color}
-                        strokeWidth={1.5}
-                        opacity={0.6}
-                      />
-                    )}
-                    {row.parentLanes.slice(1).map((pLane, pi) => {
-                      const x1 = row.lane * LANE_W + LANE_W / 2;
-                      const x2 = pLane * LANE_W + LANE_W / 2;
+
+                    {/* Outgoing: dot to first parent */}
+                    {row.parents.length > 0 && (() => {
+                      const x1 = lx(row.lane);
+                      const x2 = lx(row.parentLanes[0]);
+                      if (x1 === x2) {
+                        return (
+                          <line
+                            x1={x1} y1={ROW_H / 2}
+                            x2={x2} y2={isLast ? ROW_H / 2 : ROW_H}
+                            stroke={color}
+                            strokeWidth={2}
+                            opacity={0.85}
+                          />
+                        );
+                      }
+                      // First parent is in a different lane — curve to it
                       return (
                         <path
-                          key={`m-${pi}`}
-                          d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.85}, ${x2} ${ROW_H * 0.5}, ${x2} ${ROW_H}`}
-                          stroke={GRAPH_COLORS[pLane % GRAPH_COLORS.length]}
-                          strokeWidth={1.5}
+                          d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.8}, ${x2} ${ROW_H * 0.55}, ${x2} ${ROW_H}`}
+                          stroke={color}
+                          strokeWidth={2}
                           fill="none"
-                          opacity={0.5}
+                          opacity={0.85}
+                        />
+                      );
+                    })()}
+
+                    {/* Merge-out curves: dot to additional parent lanes */}
+                    {row.parentLanes.slice(1).map((pLane, pi) => {
+                      const x1 = lx(row.lane);
+                      const x2 = lx(pLane);
+                      const pColor = GRAPH_COLORS[pLane % GRAPH_COLORS.length];
+                      return (
+                        <path
+                          key={`merge-${pi}`}
+                          d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.85}, ${x2} ${ROW_H * 0.5}, ${x2} ${ROW_H}`}
+                          stroke={pColor}
+                          strokeWidth={2}
+                          fill="none"
+                          opacity={0.7}
                         />
                       );
                     })}
-                    {/* Commit dot — magnifies on row hover */}
+
+                    {/* Commit dot */}
                     {(() => {
                       const isHovered = hoveredHash === row.hash;
-                      const cx = row.lane * LANE_W + LANE_W / 2;
+                      const cx = lx(row.lane);
                       const cy = ROW_H / 2;
-                      const baseR = isHead ? DOT_R + 1.5 : DOT_R;
+                      const isMerge = row.parents.length > 1;
+                      const baseR = isHead ? DOT_R + 1.5 : (isMerge ? DOT_R + 0.5 : DOT_R);
                       const hoverR = baseR + 3;
                       const glowR = hoverR + 4;
                       return (
                         <>
-                          {/* Glow ring */}
                           <circle
                             className={styles.graphDotGlow}
                             cx={cx} cy={cy}
@@ -263,7 +367,6 @@ export default function CommitGraph({ commits, projectPath, onLoadMore, hasMore,
                             strokeWidth={1.5}
                             opacity={isHovered ? 0.3 : 0}
                           />
-                          {/* Main dot */}
                           <circle
                             className={styles.graphDot}
                             cx={cx} cy={cy}

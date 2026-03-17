@@ -1,44 +1,80 @@
 /* ── Git Utility Functions & Constants ── */
 
 export const COMMITS_PAGE_SIZE = 15;
-export const GRAPH_COLORS = ['#F97316', '#FB923C', '#FDBA74', '#D97706', '#EA580C', '#C2410C'];
+export const GRAPH_COLORS = ['#F97316', '#3B82F6', '#A855F7', '#10B981', '#EF4444', '#F59E0B', '#EC4899', '#06B6D4'];
 
 export function buildGraph(commits) {
+  // lanes[i] = hash of the commit expected to arrive in lane i (or null if free)
   const lanes = [];
   const rows = [];
 
   for (const commit of commits) {
-    let lane = -1;
+    // 1. Find ALL lanes that expect this commit
+    const matchingLanes = [];
     for (let i = 0; i < lanes.length; i++) {
-      if (lanes[i] === commit.hash) { lane = i; break; }
+      if (lanes[i] === commit.hash) matchingLanes.push(i);
     }
-    if (lane === -1) {
+
+    let lane;
+    let mergingFromLanes = []; // other lanes that also expected this commit (converge here)
+
+    if (matchingLanes.length > 0) {
+      lane = matchingLanes[0]; // take the leftmost
+      // All other matching lanes are "merging in" — free them
+      mergingFromLanes = matchingLanes.slice(1);
+      for (const ml of mergingFromLanes) {
+        lanes[ml] = null;
+      }
+    } else {
+      // Not expected — allocate new lane
       const empty = lanes.indexOf(null);
       lane = empty !== -1 ? empty : lanes.length;
       if (empty !== -1) lanes[empty] = commit.hash;
       else lanes.push(commit.hash);
     }
 
+    // 2. Assign parent lanes
     const parentLanes = [];
+    const newMergeLanes = []; // lanes freshly allocated for merge parents
+
     for (let pi = 0; pi < commit.parents.length; pi++) {
       const parentHash = commit.parents[pi];
       if (pi === 0) {
-        lanes[lane] = parentHash;
-        parentLanes.push(lane);
+        // First parent: check if it already has a lane somewhere
+        let existing = -1;
+        for (let i = 0; i < lanes.length; i++) {
+          if (i !== lane && lanes[i] === parentHash) { existing = i; break; }
+        }
+        if (existing !== -1) {
+          // Parent already expected in another lane — our lane becomes free
+          lanes[lane] = null;
+          parentLanes.push(existing);
+        } else {
+          lanes[lane] = parentHash;
+          parentLanes.push(lane);
+        }
       } else {
-        let pLane = lanes.indexOf(parentHash);
+        // Merge parent — check if already expected somewhere
+        let pLane = -1;
+        for (let i = 0; i < lanes.length; i++) {
+          if (lanes[i] === parentHash) { pLane = i; break; }
+        }
         if (pLane === -1) {
+          // Allocate a new lane
           const empty = lanes.indexOf(null);
           pLane = empty !== -1 ? empty : lanes.length;
           if (empty !== -1) lanes[empty] = parentHash;
           else lanes.push(parentHash);
+          newMergeLanes.push(pLane);
         }
-        lanes[pLane] = parentHash;
         parentLanes.push(pLane);
       }
     }
 
+    // 3. Root commits free their lane
     if (commit.parents.length === 0) lanes[lane] = null;
+
+    // 4. Trim trailing nulls
     while (lanes.length > 0 && lanes[lanes.length - 1] === null) lanes.pop();
 
     rows.push({
@@ -46,6 +82,8 @@ export function buildGraph(commits) {
       lane,
       parentLanes,
       activeLanes: [...lanes],
+      mergingFromLanes,  // lanes that converged INTO this commit (from above)
+      newMergeLanes,     // lanes freshly created for merge parents (going below)
       totalLanes: Math.max(lanes.length, 1),
     });
   }

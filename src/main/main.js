@@ -445,7 +445,7 @@ function getGitLog(dirPath, count = 20, skip = 0) {
     const SEP = '@@@COMMIT@@@';
     const skipArg = skip > 0 ? ` --skip=${skip}` : '';
     const result = execSync(
-      `git log --all --pretty=format:"${SEP}%H|||%h|||%s|||%an|||%ae|||%ar|||%aI|||%P|||%D" --numstat -${count}${skipArg}`,
+      `git log --all --topo-order --pretty=format:"${SEP}%H|||%h|||%s|||%an|||%ae|||%ar|||%aI|||%P|||%D" --numstat -${count}${skipArg}`,
       { cwd: dirPath, encoding: 'utf8', timeout: 10000 }
     );
 

@@ -47,6 +47,8 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
       </div>
 
       <div className={styles.bottom}>
+        <div className={styles.divider} />
+
         <div className={styles.itemWrap}>
           <button
             className={`${styles.item} ${showSettings ? styles.active : ''}`}
@@ -69,13 +71,23 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
           )}
         </div>
 
-        <div className={styles.divider} />
-
-        <div className={styles.avatar}>
-          {profile?.profile_photo_data ? (
-            <img src={profile.profile_photo_data} alt="" className={styles.avatarImg} />
-          ) : (
-            <span className={styles.avatarText}>{initials}</span>
+        <div className={styles.itemWrap}>
+          <button
+            className={styles.avatar}
+            onClick={() => onPanelClick('settings')}
+            onMouseEnter={() => setHoveredId('profile')}
+            onMouseLeave={() => setHoveredId(null)}
+          >
+            {profile?.profile_photo_data ? (
+              <img src={profile.profile_photo_data} alt="" className={styles.avatarImg} />
+            ) : (
+              <span className={styles.avatarText}>{initials}</span>
+            )}
+          </button>
+          {hoveredId === 'profile' && (
+            <div className={styles.tooltip}>
+              <span className={styles.tooltipText}>Profile</span>
+            </div>
           )}
         </div>
       </div>

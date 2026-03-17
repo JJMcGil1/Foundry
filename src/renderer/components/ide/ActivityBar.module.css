@@ -189,7 +189,9 @@
   justify-content: center;
   overflow: hidden;
   margin-top: 4px;
-  cursor: default;
+  padding: 0;
+  outline: none;
+  cursor: pointer;
   transition: border-color 0.2s ease;
 }
 
