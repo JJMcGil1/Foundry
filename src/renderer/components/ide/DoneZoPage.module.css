@@ -1,0 +1,90 @@
+.root {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-0);
+  overflow: hidden;
+}
+
+/* Single unified header row */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  height: 44px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--surface-1);
+}
+
+.title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--zinc-400);
+  font-family: var(--font-sans);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+/* Tab group — centered */
+.tabs {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  color: var(--zinc-500);
+  background: none;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.tab:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.tabActive {
+  color: var(--zinc-100);
+  background: var(--surface-3);
+}
+
+.closeBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+}
+
+.closeBtn:hover {
+  color: var(--zinc-200);
+  background: var(--surface-3);
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}

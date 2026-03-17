@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   FiRefreshCw, FiChevronRight,
-  FiCheck, FiPlus, FiMinus, FiRotateCcw,
+  FiCheck, FiPlus, FiMinus, FiRotateCcw, FiUpload,
 } from 'react-icons/fi';
 import { IoSparkles } from 'react-icons/io5';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -326,7 +326,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
           disabled={!commitMsg.trim() && !loading}
           onClick={handleCommit}
         >
-          {loading ? <FiRefreshCw size={12} className={styles.spinning} /> : <FiCheck size={12} />}
+          {loading ? <FiRefreshCw size={13} className={styles.spinning} /> : <FiUpload size={13} />}
           <span>{loading ? (STEP_LABELS[syncStep] || 'Syncing…') : 'Commit'}</span>
           {loading && (
             <div className={styles.commitProgress}>

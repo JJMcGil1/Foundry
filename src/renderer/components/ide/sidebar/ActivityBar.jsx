@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
+import { VscFiles, VscSourceControl, VscSettingsGear, VscChecklist } from 'react-icons/vsc';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
   { id: 'files',  icon: VscFiles,          label: 'Explorer' },
   { id: 'git',    icon: VscSourceControl,  label: 'Source Control' },
+  { id: 'donezo', icon: VscChecklist,      label: 'DoneZo' },
 ];
 
-export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings }) {
+export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, showDoneZo, gitChangeCount = 0 }) {
   const [hoveredId, setHoveredId] = useState(null);
 
   const initials = profile
@@ -18,7 +19,7 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
     <nav className={styles.bar}>
       <div className={styles.top}>
         {panels.map(p => {
-          const active = activePanel === p.id && !showSettings;
+          const active = p.id === 'donezo' ? showDoneZo : (activePanel === p.id && !showSettings && !showDoneZo);
           const Icon = p.icon;
           return (
             <div key={p.id} className={styles.itemWrap}>
@@ -28,7 +29,12 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
                 onMouseEnter={() => setHoveredId(p.id)}
                 onMouseLeave={() => setHoveredId(null)}
               >
-                <Icon size={24} />
+                <span className={p.id === 'git' ? styles.iconWrap : undefined}>
+                  <Icon size={24} />
+                  {p.id === 'git' && gitChangeCount > 0 && (
+                    <span className={styles.badge}>{gitChangeCount > 99 ? '99+' : gitChangeCount}</span>
+                  )}
+                </span>
                 {active && (
                   <span className={styles.indicator}>
                     <span className={styles.indicatorLine} />

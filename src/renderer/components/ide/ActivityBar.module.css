@@ -119,6 +119,26 @@
   transform: scale(1.15);
 }
 
+/* Icon + badge wrapper — scales together on hover */
+.iconWrap {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.item:hover .iconWrap {
+  transform: scale(1.15);
+}
+
+/* When using iconWrap, cancel the double-scale on svg */
+.item:hover .iconWrap svg {
+  transform: none;
+}
+
 .item:active {
   color: var(--zinc-100);
 }
@@ -130,6 +150,38 @@
 
 .active:hover {
   color: var(--zinc-50);
+}
+
+/* ── Change Count Badge ── */
+.badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: #f97316;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  line-height: 14px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(249, 115, 22, 0.35);
+  animation: badgeIn 0.2s ease-out forwards;
+}
+
+@keyframes badgeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* ── Flyout Tooltip ── */

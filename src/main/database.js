@@ -144,6 +144,39 @@ async function initDatabase() {
     console.error('[Foundry DB] seq migration error:', e);
   }
 
+  // ---- DoneZo Tables ---- //
+  try {
+    db.run(`
+      CREATE TABLE IF NOT EXISTS donezo_entries (
+        id TEXT PRIMARY KEY,
+        workspace_path TEXT NOT NULL,
+        text TEXT NOT NULL,
+        description TEXT,
+        tag TEXT DEFAULT 'note',
+        date TEXT NOT NULL,
+        timestamp TEXT NOT NULL,
+        completed INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL
+      )
+    `);
+    db.run(`CREATE INDEX IF NOT EXISTS idx_donezo_entries_ws_date ON donezo_entries(workspace_path, date)`);
+
+    db.run(`
+      CREATE TABLE IF NOT EXISTS donezo_tags (
+        id TEXT NOT NULL,
+        workspace_path TEXT NOT NULL,
+        label TEXT NOT NULL,
+        color TEXT NOT NULL,
+        icon TEXT DEFAULT 'TbTag',
+        sort_order INTEGER DEFAULT 0,
+        PRIMARY KEY (id, workspace_path)
+      )
+    `);
+    console.log('[Foundry DB] DoneZo tables ready');
+  } catch (e) {
+    console.error('[Foundry DB] DoneZo table init error:', e);
+  }
+
   persistDb();
 
   // Auto-save every 30 seconds as a safety net against hard kills
@@ -435,6 +468,184 @@ function deleteThreadMessages(threadId) {
   return true;
 }
 
+// ---- DoneZo Entries ---- //
+
+function donezoGetEntries(workspacePath, date) {
+  if (!db) return [];
+  let sql, params;
+  if (date) {
+    sql = 'SELECT id, text, description, tag, date, timestamp, completed, created_at FROM donezo_entries WHERE workspace_path = ? AND date = ? ORDER BY timestamp DESC';
+    params = [workspacePath, date];
+  } else {
+    sql = 'SELECT id, text, description, tag, date, timestamp, completed, created_at FROM donezo_entries WHERE workspace_path = ? ORDER BY timestamp DESC';
+    params = [workspacePath];
+  }
+  const results = db.exec(sql, params);
+  if (!results.length) return [];
+  return results[0].values.map(row => ({
+    id: row[0], text: row[1], description: row[2], tag: row[3],
+    date: row[4], timestamp: row[5], completed: row[6], created_at: row[7],
+  }));
+}
+
+function donezoAddEntry({ workspacePath, text, description, tag, date, timestamp }) {
+  if (!db) return null;
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+  const now = new Date().toISOString();
+  const d = date || new Date().toISOString().split('T')[0];
+  const ts = timestamp || now;
+  db.run(
+    `INSERT INTO donezo_entries (id, workspace_path, text, description, tag, date, timestamp, completed, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+    [id, workspacePath, text, description || null, tag || 'note', d, ts, now]
+  );
+  persistDb();
+  return { id, text, description: description || null, tag: tag || 'note', date: d, timestamp: ts, completed: 1, created_at: now };
+}
+
+function donezoUpdateEntry(id, updates) {
+  if (!db) return null;
+  const stmt = db.prepare('SELECT * FROM donezo_entries WHERE id = ?');
+  stmt.bind([id]);
+  if (!stmt.step()) { stmt.free(); return null; }
+  const current = stmt.getAsObject();
+  stmt.free();
+
+  const text = updates.text !== undefined ? updates.text : current.text;
+  const description = updates.description !== undefined ? updates.description : current.description;
+  const tag = updates.tag !== undefined ? updates.tag : current.tag;
+
+  db.run('UPDATE donezo_entries SET text = ?, description = ?, tag = ? WHERE id = ?', [text, description, tag, id]);
+  persistDb();
+  return { ...current, text, description, tag };
+}
+
+function donezoDeleteEntry(id) {
+  if (!db) return false;
+  db.run('DELETE FROM donezo_entries WHERE id = ?', [id]);
+  persistDb();
+  return true;
+}
+
+function donezoGetStats(workspacePath) {
+  if (!db) return { today: 0, allTime: 0, streak: 0, weekData: [] };
+
+  const today = new Date().toISOString().split('T')[0];
+
+  // Today count
+  const todayResult = db.exec('SELECT COUNT(*) FROM donezo_entries WHERE workspace_path = ? AND date = ?', [workspacePath, today]);
+  const todayCount = todayResult.length ? todayResult[0].values[0][0] : 0;
+
+  // All time count
+  const allResult = db.exec('SELECT COUNT(*) FROM donezo_entries WHERE workspace_path = ?', [workspacePath]);
+  const allTime = allResult.length ? allResult[0].values[0][0] : 0;
+
+  // Streak: consecutive days going backwards from today with at least one entry
+  let streak = 0;
+  const d = new Date();
+  while (true) {
+    const dateStr = d.toISOString().split('T')[0];
+    const r = db.exec('SELECT COUNT(*) FROM donezo_entries WHERE workspace_path = ? AND date = ?', [workspacePath, dateStr]);
+    const count = r.length ? r[0].values[0][0] : 0;
+    if (count > 0) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else {
+      break;
+    }
+  }
+
+  // Week data: last 7 days (Mon-Sun aligned to current week)
+  const now = new Date();
+  const dayOfWeek = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - ((dayOfWeek + 6) % 7));
+  const weekData = [];
+  for (let i = 0; i < 7; i++) {
+    const wd = new Date(monday);
+    wd.setDate(monday.getDate() + i);
+    const dateStr = wd.toISOString().split('T')[0];
+    const r = db.exec('SELECT COUNT(*) FROM donezo_entries WHERE workspace_path = ? AND date = ?', [workspacePath, dateStr]);
+    const count = r.length ? r[0].values[0][0] : 0;
+    weekData.push({ date: dateStr, count, day: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][i] });
+  }
+
+  return { today: todayCount, allTime, streak, weekData };
+}
+
+// ---- DoneZo Tags ---- //
+
+function donezoGetTags(workspacePath) {
+  if (!db) return [];
+  const results = db.exec('SELECT id, label, color, icon, sort_order FROM donezo_tags WHERE workspace_path = ? ORDER BY sort_order ASC', [workspacePath]);
+  if (!results.length) return [];
+  return results[0].values.map(row => ({
+    id: row[0], label: row[1], color: row[2], icon: row[3], sort_order: row[4],
+  }));
+}
+
+function donezoSeedTags(workspacePath) {
+  if (!db) return [];
+  // Check if tags already exist for this workspace
+  const existing = db.exec('SELECT COUNT(*) FROM donezo_tags WHERE workspace_path = ?', [workspacePath]);
+  if (existing.length && existing[0].values[0][0] > 0) return donezoGetTags(workspacePath);
+
+  const defaults = [
+    { id: 'milestone', label: 'Milestone', color: '#4ADE80', icon: 'TbFlag', sort_order: 0 },
+    { id: 'progress',  label: 'Progress',  color: '#22D3EE', icon: 'TbBolt', sort_order: 1 },
+    { id: 'win',       label: 'Win',       color: '#FACC15', icon: 'TbTrophy', sort_order: 2 },
+    { id: 'blocker',   label: 'Blocker',   color: '#F87171', icon: 'TbBarrierBlock', sort_order: 3 },
+    { id: 'note',      label: 'Note',      color: '#A1A1AA', icon: 'TbNote', sort_order: 4 },
+  ];
+  for (const t of defaults) {
+    db.run(
+      'INSERT INTO donezo_tags (id, workspace_path, label, color, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+      [t.id, workspacePath, t.label, t.color, t.icon, t.sort_order]
+    );
+  }
+  persistDb();
+  return donezoGetTags(workspacePath);
+}
+
+function donezoCreateTag({ workspacePath, id, label, color, icon }) {
+  if (!db) return null;
+  const sortResult = db.exec('SELECT COALESCE(MAX(sort_order), -1) + 1 FROM donezo_tags WHERE workspace_path = ?', [workspacePath]);
+  const sortOrder = sortResult.length ? sortResult[0].values[0][0] : 0;
+  db.run(
+    'INSERT INTO donezo_tags (id, workspace_path, label, color, icon, sort_order) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, workspacePath, label, color, icon || 'TbTag', sortOrder]
+  );
+  persistDb();
+  return { id, label, color, icon: icon || 'TbTag', sort_order: sortOrder };
+}
+
+function donezoUpdateTag(id, workspacePath, updates) {
+  if (!db) return null;
+  const stmt = db.prepare('SELECT * FROM donezo_tags WHERE id = ? AND workspace_path = ?');
+  stmt.bind([id, workspacePath]);
+  if (!stmt.step()) { stmt.free(); return null; }
+  const current = stmt.getAsObject();
+  stmt.free();
+
+  const label = updates.label !== undefined ? updates.label : current.label;
+  const color = updates.color !== undefined ? updates.color : current.color;
+  const icon = updates.icon !== undefined ? updates.icon : current.icon;
+
+  db.run('UPDATE donezo_tags SET label = ?, color = ?, icon = ? WHERE id = ? AND workspace_path = ?',
+    [label, color, icon, id, workspacePath]);
+  persistDb();
+  return { ...current, label, color, icon };
+}
+
+function donezoDeleteTag(id, workspacePath) {
+  if (!db) return false;
+  // Reassign entries with this tag to 'note'
+  db.run('UPDATE donezo_entries SET tag = ? WHERE tag = ? AND workspace_path = ?', ['note', id, workspacePath]);
+  db.run('DELETE FROM donezo_tags WHERE id = ? AND workspace_path = ?', [id, workspacePath]);
+  persistDb();
+  return true;
+}
+
 function closeDatabase() {
   if (db) {
     persistDb();
@@ -467,4 +678,15 @@ module.exports = {
   getMessages,
   getMessageCount,
   deleteThreadMessages,
+  // DoneZo
+  donezoGetEntries,
+  donezoAddEntry,
+  donezoUpdateEntry,
+  donezoDeleteEntry,
+  donezoGetStats,
+  donezoGetTags,
+  donezoSeedTags,
+  donezoCreateTag,
+  donezoUpdateTag,
+  donezoDeleteTag,
 };

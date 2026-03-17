@@ -498,10 +498,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 8px;
   padding: 8px 14px;
-  background: var(--zinc-200);
-  color: var(--zinc-900);
+  background: linear-gradient(to right, #FB923C, #EA580C);
+  color: white;
   border: none;
   border-radius: var(--radius-sm);
   font-size: 12px;
@@ -511,16 +511,24 @@
   outline: none;
   position: relative;
   overflow: hidden;
-  transition: background 0.2s ease, color 0.2s ease;
+  filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.35));
+  transition: filter 0.2s ease, transform 0.15s ease;
 }
 
-.commitBtn:hover {
-  background: var(--zinc-100);
+.commitBtn:hover:not(:disabled) {
+  filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.4));
+  transform: translateY(-1px);
+}
+
+.commitBtn:active:not(:disabled) {
+  transform: translateY(0px) scale(0.97);
+  filter: drop-shadow(0 0 4px rgba(249, 115, 22, 0.25));
 }
 
 .commitBtn:disabled {
   opacity: 0.2;
   cursor: not-allowed;
+  filter: none;
 }
 
 .sectionLabel {

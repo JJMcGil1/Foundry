@@ -7,7 +7,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 const pty = require('node-pty');
 const https = require('https');
-const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages } = require('./database');
+const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages, donezoGetEntries, donezoAddEntry, donezoUpdateEntry, donezoDeleteEntry, donezoGetStats, donezoGetTags, donezoSeedTags, donezoCreateTag, donezoUpdateTag, donezoDeleteTag } = require('./database');
 const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 
 // ---- GitHub Avatar Resolution ---- //
@@ -1973,10 +1973,46 @@ function registerIPC() {
   ipcMain.handle('chat:deleteThreadMessages', async (_event, threadId) => {
     return deleteThreadMessages(threadId);
   });
+
+  // ---- DoneZo ---- //
+  ipcMain.handle('donezo:getEntries', async (_event, workspacePath, date) => {
+    return donezoGetEntries(workspacePath, date);
+  });
+  ipcMain.handle('donezo:addEntry', async (_event, data) => {
+    return donezoAddEntry(data);
+  });
+  ipcMain.handle('donezo:updateEntry', async (_event, id, updates) => {
+    return donezoUpdateEntry(id, updates);
+  });
+  ipcMain.handle('donezo:deleteEntry', async (_event, id) => {
+    return donezoDeleteEntry(id);
+  });
+  ipcMain.handle('donezo:getStats', async (_event, workspacePath) => {
+    return donezoGetStats(workspacePath);
+  });
+  ipcMain.handle('donezo:getTags', async (_event, workspacePath) => {
+    return donezoGetTags(workspacePath);
+  });
+  ipcMain.handle('donezo:seedTags', async (_event, workspacePath) => {
+    return donezoSeedTags(workspacePath);
+  });
+  ipcMain.handle('donezo:createTag', async (_event, data) => {
+    return donezoCreateTag(data);
+  });
+  ipcMain.handle('donezo:updateTag', async (_event, id, workspacePath, updates) => {
+    return donezoUpdateTag(id, workspacePath, updates);
+  });
+  ipcMain.handle('donezo:deleteTag', async (_event, id, workspacePath) => {
+    return donezoDeleteTag(id, workspacePath);
+  });
 }
 
 app.on('ready', async () => {
-  await initDatabase();
+  try {
+    await initDatabase();
+  } catch (e) {
+    console.error('[Foundry] initDatabase failed:', e);
+  }
   registerIPC();
   buildAppMenu();
   createWindow();
