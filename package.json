@@ -1,6 +1,6 @@
 {
   "name": "foundry",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "description": "Foundry — The modern forge for building software",
   "main": "src/main/main.js",
   "scripts": {
