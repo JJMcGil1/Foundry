@@ -1,61 +1,12 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import { FiTerminal, FiPlus, FiX, FiMaximize2, FiMinimize2 } from 'react-icons/fi';
+import { FiPlus, FiX, FiMaximize2, FiMinimize2 } from 'react-icons/fi';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import styles from './TerminalPanel.module.css';
-
-/* ── Read current theme colors from CSS custom properties ── */
-function getTerminalTheme() {
-  const s = getComputedStyle(document.documentElement);
-  const get = (v) => s.getPropertyValue(v).trim();
-  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
-
-  return {
-    background: get('--surface-1') || (isDark ? '#111113' : '#F5F5F6'),
-    foreground: get('--zinc-200') || (isDark ? '#E4E4E7' : '#27272A'),
-    cursor: isDark ? '#E4E4E7' : '#27272A',
-    cursorAccent: get('--surface-1') || (isDark ? '#111113' : '#F5F5F6'),
-    selectionBackground: isDark ? 'rgba(228, 228, 231, 0.15)' : 'rgba(39, 39, 42, 0.15)',
-    selectionForeground: undefined,
-    // ANSI colors tuned for both themes
-    black:         isDark ? '#18181B' : '#D4D4D8',
-    red:           isDark ? '#f87171' : '#DC2626',
-    green:         isDark ? '#4ade80' : '#16A34A',
-    yellow:        isDark ? '#facc15' : '#CA8A04',
-    blue:          isDark ? '#60a5fa' : '#2563EB',
-    magenta:       isDark ? '#c084fc' : '#9333EA',
-    cyan:          isDark ? '#22d3ee' : '#0891B2',
-    white:         isDark ? '#d4d4d8' : '#3F3F46',
-    brightBlack:   isDark ? '#52525b' : '#A1A1AA',
-    brightRed:     isDark ? '#fca5a5' : '#EF4444',
-    brightGreen:   isDark ? '#86efac' : '#22C55E',
-    brightYellow:  isDark ? '#fde68a' : '#EAB308',
-    brightBlue:    isDark ? '#93c5fd' : '#3B82F6',
-    brightMagenta: isDark ? '#d8b4fe' : '#A855F7',
-    brightCyan:    isDark ? '#67e8f9' : '#06B6D4',
-    brightWhite:   isDark ? '#fafafa' : '#18181B',
-  };
-}
-
-function TerminalTab({ id, label, active, onSelect, onClose }) {
-  return (
-    <button
-      className={`${styles.tab} ${active ? styles.tabActive : ''}`}
-      onClick={() => onSelect(id)}
-    >
-      <FiTerminal size={12} />
-      <span>{label}</span>
-      <span
-        className={styles.tabClose}
-        onClick={(e) => { e.stopPropagation(); onClose(id); }}
-      >
-        <FiX size={11} />
-      </span>
-    </button>
-  );
-}
+import { getTerminalTheme } from './terminalTheme';
+import TerminalTab from './TerminalTab';
+import styles from '../TerminalPanel.module.css';
 
 export default function TerminalPanel({ height, onHeightChange, projectPath, visible = true, onClose, isMaximized, onToggleMaximize }) {
   const [isResizing, setIsResizing] = useState(false);
@@ -144,7 +95,6 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
   }, []);
 
   // Strip escape sequences that override cursor color or shape
-  // OSC 12 = cursor color, OSC 112 = reset cursor color, DECSCUSR = cursor shape
   const stripCursorEscapes = useCallback((data) => {
     return data
       .replace(/\x1b\]12;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '')   // OSC 12: set cursor color
@@ -294,7 +244,7 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
     document.addEventListener('mouseup', handleMouseUp);
   }, [height, onHeightChange]);
 
-  // Cleanup on unmount (app close / window navigation only — component stays mounted during hide/show)
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       for (const [, entry] of terminalsRef.current) {

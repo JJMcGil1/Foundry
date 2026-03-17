@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
-import styles from './ActivityBar.module.css';
+import styles from '../ActivityBar.module.css';
 
 const panels = [
   { id: 'files',  icon: VscFiles,          label: 'Explorer' },

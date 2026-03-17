@@ -1,24 +1,20 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  FiGitBranch, FiChevronRight, FiCheck, FiX,
-  FiPlus, FiRefreshCw, FiSearch, FiTrash2, FiGlobe,
+  FiSearch, FiPlus, FiCheck, FiX,
+  FiRefreshCw, FiGitBranch, FiTrash2, FiGlobe,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import styles from './GitControls.module.css';
+import styles from '../ProjectControls.module.css';
 
-/* ── Branch Selector ── */
-function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
-  const [open, setOpen] = useState(false);
+export default function BranchPanel({ isOpen, onClose, dropdownPos, projectPath, currentBranch, onBranchChanged }) {
   const [branches, setBranches] = useState({ local: [], remote: [] });
   const [search, setSearch] = useState('');
   const [creating, setCreating] = useState(false);
   const [newBranchName, setNewBranchName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0 });
   const searchRef = useRef(null);
   const newBranchRef = useRef(null);
-  const triggerRef = useRef(null);
 
   const fetchBranches = useCallback(async () => {
     if (!projectPath) return;
@@ -29,7 +25,7 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
   }, [projectPath]);
 
   useEffect(() => {
-    if (open) {
+    if (isOpen) {
       fetchBranches();
       setSearch('');
       setCreating(false);
@@ -37,14 +33,7 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
       setError('');
       setTimeout(() => searchRef.current?.focus(), 50);
     }
-  }, [open, fetchBranches]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (e.key === 'Escape') setOpen(false); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [open]);
+  }, [isOpen, fetchBranches]);
 
   const handleCheckout = async (branchName) => {
     setLoading(true);
@@ -52,7 +41,7 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
     const result = await window.foundry?.gitCheckout(projectPath, branchName);
     if (result?.error) { setError('Checkout failed. Stash or commit changes first.'); setLoading(false); return; }
     setLoading(false);
-    setOpen(false);
+    onClose();
     onBranchChanged?.();
   };
 
@@ -62,7 +51,7 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
     const result = await window.foundry?.gitCheckoutRemoteBranch(projectPath, remoteBranch);
     if (result?.error) { setError('Failed to checkout remote branch.'); setLoading(false); return; }
     setLoading(false);
-    setOpen(false);
+    onClose();
     onBranchChanged?.();
   };
 
@@ -74,7 +63,7 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
     const result = await window.foundry?.gitCreateBranch(projectPath, name, true);
     if (result?.error) { setError(result.error.includes('already exists') ? 'Branch already exists.' : 'Failed to create branch.'); setLoading(false); return; }
     setLoading(false);
-    setOpen(false);
+    onClose();
     setCreating(false);
     setNewBranchName('');
     onBranchChanged?.();
@@ -96,50 +85,24 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
   const filteredRemote = branches.remote.filter(b => b.shortName.toLowerCase().includes(lowerSearch));
 
   return (
-    <div className={styles.branchSelector}>
-      <button ref={triggerRef} className={styles.branchTrigger} onClick={() => {
-        if (!open && triggerRef.current) {
-          const rect = triggerRef.current.getBoundingClientRect();
-          setDropdownPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 320) });
-        }
-        setOpen(!open);
-      }}>
-        <FiGitBranch size={12} />
-        <span className={styles.branchTriggerName}>{currentBranch || 'HEAD'}</span>
-        <motion.span
-          className={styles.branchTriggerChevron}
-          animate={{ rotate: open ? 180 : 0 }}
-          transition={{ duration: 0.15, ease: 'easeOut' }}
-        >
-          <FiChevronRight size={10} style={{ transform: 'rotate(90deg)' }} />
-        </motion.span>
-      </button>
-
-      <AnimatePresence>
-        {open && (
-          <>
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          <div className={styles.overlay} onClick={onClose} />
           <motion.div
-            className={styles.branchOverlay}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.1 }}
-            onClick={() => setOpen(false)}
-          />
-          <motion.div
-            className={styles.branchDropdown}
+            className={styles.dropdown}
             style={{ top: dropdownPos.top, left: dropdownPos.left }}
-            initial={{ opacity: 0, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            transition={{ duration: 0.12, ease: 'easeOut' }}
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
           >
-            <div className={styles.branchSearch}>
-              <FiSearch size={12} className={styles.branchSearchIcon} />
+            <div className={styles.search}>
+              <FiSearch size={12} className={styles.searchIcon} />
               <input
                 ref={searchRef}
                 type="text"
-                className={styles.branchSearchInput}
+                className={styles.searchInput}
                 placeholder="Select a branch or tag to checkout..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -153,10 +116,10 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
               />
             </div>
 
-            {error && <div className={styles.branchError}>{error}</div>}
+            {error && <div className={styles.error}>{error}</div>}
 
             {!creating && (
-              <button className={styles.branchCreateBtn} onClick={() => {
+              <button className={styles.actionBtn} style={{ width: '100%', padding: '7px 10px', borderBottom: '1px solid var(--border)', borderRadius: 0 }} onClick={() => {
                 setCreating(true);
                 setNewBranchName(search.trim());
                 setTimeout(() => newBranchRef.current?.focus(), 50);
@@ -167,11 +130,11 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
             )}
 
             {creating && (
-              <div className={styles.branchCreateForm}>
+              <div className={styles.createForm}>
                 <input
                   ref={newBranchRef}
                   type="text"
-                  className={styles.branchCreateInput}
+                  className={styles.createInput}
                   placeholder="new-branch-name"
                   value={newBranchName}
                   onChange={(e) => setNewBranchName(e.target.value.replace(/\s/g, '-'))}
@@ -180,16 +143,16 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
                     if (e.key === 'Escape') { setCreating(false); setNewBranchName(''); }
                   }}
                 />
-                <button className={styles.branchCreateConfirm} onClick={handleCreate} disabled={!newBranchName.trim() || loading}>
+                <button className={styles.createConfirm} onClick={handleCreate} disabled={!newBranchName.trim() || loading}>
                   {loading ? <FiRefreshCw size={11} className={styles.spinning} /> : <FiCheck size={11} />}
                 </button>
-                <button className={styles.branchCreateCancel} onClick={() => { setCreating(false); setNewBranchName(''); }}>
+                <button className={styles.createCancel} onClick={() => { setCreating(false); setNewBranchName(''); }}>
                   <FiX size={11} />
                 </button>
               </div>
             )}
 
-            <div className={styles.branchList}>
+            <div className={styles.list}>
               {filteredLocal.map(b => (
                 <button
                   key={b.name}
@@ -219,8 +182,8 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
               ))}
 
               {filteredRemote.length > 0 && (
-                <div className={styles.branchGroup}>
-                  <div className={styles.branchGroupLabel}>Remote</div>
+                <>
+                  <div className={styles.sectionLabel}>Remote</div>
                   {filteredRemote.map(b => (
                     <button key={b.name} className={styles.branchItem} onClick={() => handleCheckoutRemote(b.name)} disabled={loading}>
                       <FiGlobe size={13} className={styles.branchItemIcon} />
@@ -237,77 +200,16 @@ function BranchSelector({ projectPath, currentBranch, onBranchChanged }) {
                       </div>
                     </button>
                   ))}
-                </div>
+                </>
               )}
 
               {filteredLocal.length === 0 && filteredRemote.length === 0 && search && (
-                <div className={styles.branchEmpty}>No branches match "{search}"</div>
+                <div className={styles.empty}>No branches match "{search}"</div>
               )}
             </div>
           </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-/* ── Git Controls (titlebar pill: branch + sync) ── */
-export default function GitControls({ gitStatus, projectPath, onRefresh }) {
-  const [syncing, setSyncing] = useState(false);
-  const [hovered, setHovered] = useState(false);
-
-  if (!gitStatus?.isRepo) return null;
-
-  const handleSync = async (e) => {
-    e.stopPropagation();
-    if (syncing) return;
-    setSyncing(true);
-    try {
-      await window.foundry?.gitPull(projectPath);
-      await window.foundry?.gitPush(projectPath);
-      onRefresh?.();
-    } catch (err) {
-      console.error('Sync failed:', err);
-    }
-    setSyncing(false);
-  };
-
-  const behind = gitStatus.behind || 0;
-  const ahead = gitStatus.ahead || 0;
-  const totalUpdates = behind + ahead;
-
-  return (
-    <div className={styles.controls}>
-      <BranchSelector
-        projectPath={projectPath}
-        currentBranch={gitStatus.branch}
-        onBranchChanged={onRefresh}
-      />
-      <div
-        className={styles.syncWrap}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-      >
-        <button
-          className={`${styles.syncBtn} ${syncing ? styles.syncBtnActive : ''}`}
-          onClick={handleSync}
-          disabled={syncing}
-        >
-          <FiRefreshCw size={12} className={syncing ? styles.syncSpinning : ''} />
-          <span className={styles.syncLabel}>{syncing ? 'Syncing' : 'Sync'}</span>
-          {totalUpdates > 0 && !syncing && (
-            <span className={styles.syncBadge}>{totalUpdates}</span>
-          )}
-        </button>
-        {hovered && !syncing && totalUpdates > 0 && (
-          <div className={styles.tooltip}>
-            <span className={styles.tooltipText}>
-              {behind > 0 ? `${behind}\u2193 behind` : ''}{behind > 0 && ahead > 0 ? ' \u00B7 ' : ''}{ahead > 0 ? `${ahead}\u2191 ahead` : ''}
-            </span>
-          </div>
-        )}
-      </div>
-    </div>
+        </>
+      )}
+    </AnimatePresence>
   );
 }

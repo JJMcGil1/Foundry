@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { FiSearch, FiFile, FiChevronRight } from 'react-icons/fi';
-import styles from './SearchBar.module.css';
+import styles from '../SearchBar.module.css';
 
 const TABS = [
   { id: 'files', label: 'File Name' },
@@ -222,7 +222,7 @@ export default function SearchBar({ projectPath, onOpenFile }) {
   };
 
   const isMac = navigator.platform?.includes('Mac');
-  const modKey = isMac ? '⌘' : 'Ctrl';
+  const modKey = isMac ? '\u2318' : 'Ctrl';
 
   const hasResults = activeTabId === 'files' ? fileResults.length > 0 : contentResults.length > 0;
   const showDropdown = open && (query.trim() || true); // always show when open
