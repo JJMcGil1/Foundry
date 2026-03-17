@@ -5,10 +5,10 @@ export function getTerminalTheme() {
   const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
 
   return {
-    background: get('--surface-1') || (isDark ? '#111113' : '#F5F5F6'),
+    background: get('--terminal-bg') || (isDark ? '#0E0E11' : '#EEEEEF'),
     foreground: get('--zinc-200') || (isDark ? '#E4E4E7' : '#27272A'),
     cursor: isDark ? '#E4E4E7' : '#27272A',
-    cursorAccent: get('--surface-1') || (isDark ? '#111113' : '#F5F5F6'),
+    cursorAccent: get('--terminal-bg') || (isDark ? '#0E0E11' : '#EEEEEF'),
     selectionBackground: isDark ? 'rgba(228, 228, 231, 0.15)' : 'rgba(39, 39, 42, 0.15)',
     selectionForeground: undefined,
     // ANSI colors tuned for both themes
