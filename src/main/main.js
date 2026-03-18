@@ -7,7 +7,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 const pty = require('node-pty');
 const https = require('https');
-const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages, donezoGetEntries, donezoAddEntry, donezoUpdateEntry, donezoDeleteEntry, donezoGetStats, donezoGetTags, donezoSeedTags, donezoCreateTag, donezoUpdateTag, donezoDeleteTag } = require('./database');
+const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages } = require('./database');
 const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 
 // ---- GitHub Avatar Resolution ---- //
@@ -1410,15 +1410,18 @@ function registerIPC() {
     if (oauthCreds?.accessToken) {
       // Check if token is expired (with 60s buffer)
       const isExpired = oauthCreds.expiresAt && (Date.now() > oauthCreds.expiresAt - 60000);
-      if (!isExpired) {
-        return {
-          token: oauthCreds.accessToken,
-          source: 'subscription',
-          subscriptionType: oauthCreds.subscriptionType,
-          authHeader: { 'Authorization': `Bearer ${oauthCreds.accessToken}` },
-        };
-      }
-      // Token expired — fall through to API key
+      // Always return subscription source when keychain credentials exist — even if
+      // the token is expired.  Chat routes through the CLI subprocess which handles
+      // its own OAuth token refresh internally.  Blocking here previously caused
+      // the UI to show "not authenticated" after idle periods even though the CLI
+      // would have refreshed the token on the next chat request.
+      return {
+        token: oauthCreds.accessToken,
+        source: 'subscription',
+        expired: isExpired,
+        subscriptionType: oauthCreds.subscriptionType,
+        authHeader: isExpired ? {} : { 'Authorization': `Bearer ${oauthCreds.accessToken}` },
+      };
     }
 
     // Priority 2: Manual API key
@@ -1977,37 +1980,6 @@ function registerIPC() {
     return deleteThreadMessages(threadId);
   });
 
-  // ---- DoneZo ---- //
-  ipcMain.handle('donezo:getEntries', async (_event, workspacePath, date) => {
-    return donezoGetEntries(workspacePath, date);
-  });
-  ipcMain.handle('donezo:addEntry', async (_event, data) => {
-    return donezoAddEntry(data);
-  });
-  ipcMain.handle('donezo:updateEntry', async (_event, id, updates) => {
-    return donezoUpdateEntry(id, updates);
-  });
-  ipcMain.handle('donezo:deleteEntry', async (_event, id) => {
-    return donezoDeleteEntry(id);
-  });
-  ipcMain.handle('donezo:getStats', async (_event, workspacePath) => {
-    return donezoGetStats(workspacePath);
-  });
-  ipcMain.handle('donezo:getTags', async (_event, workspacePath) => {
-    return donezoGetTags(workspacePath);
-  });
-  ipcMain.handle('donezo:seedTags', async (_event, workspacePath) => {
-    return donezoSeedTags(workspacePath);
-  });
-  ipcMain.handle('donezo:createTag', async (_event, data) => {
-    return donezoCreateTag(data);
-  });
-  ipcMain.handle('donezo:updateTag', async (_event, id, workspacePath, updates) => {
-    return donezoUpdateTag(id, workspacePath, updates);
-  });
-  ipcMain.handle('donezo:deleteTag', async (_event, id, workspacePath) => {
-    return donezoDeleteTag(id, workspacePath);
-  });
 }
 
 app.on('ready', async () => {

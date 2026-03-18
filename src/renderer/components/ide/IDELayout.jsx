@@ -7,7 +7,6 @@ import { EditorArea } from './editor';
 import ChatPanelContainer from './ChatPanelContainer';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
-import DoneZoPage from './DoneZoPage';
 import { SearchBar, ProjectControls } from './titlebar';
 import styles from './IDELayout.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
@@ -25,7 +24,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [preMaxTerminalHeight, setPreMaxTerminalHeight] = useState(240);
   const [maxTerminalHeight, setMaxTerminalHeight] = useState(600);
   const [showSettings, setShowSettings] = useState(false);
-  const [showDoneZo, setShowDoneZo] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState(null);
   const editorContainerRef = useRef(null);
 
   const [windowState, setWindowState] = useState({ isFullScreen: false, isMaximized: false });
@@ -210,10 +209,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, [activeTab, handleSaveFile]);
 
   const handleActivityClick = (panel) => {
-    if (panel === 'settings') { setShowSettings(v => !v); if (showDoneZo) setShowDoneZo(false); return; }
-    if (panel === 'donezo') { setShowDoneZo(v => !v); if (showSettings) setShowSettings(false); return; }
+    if (panel === 'settings') { setShowSettings(v => !v); return; }
     if (showSettings) setShowSettings(false);
-    if (showDoneZo) setShowDoneZo(false);
     if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
     else { setActivePanel(panel); setSidebarVisible(true); }
   };
@@ -236,7 +233,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           onPanelClick={handleActivityClick}
           profile={profile}
           showSettings={showSettings}
-          showDoneZo={showDoneZo}
           gitChangeCount={gitStatus?.files?.length || 0}
         />
       </div>
@@ -308,7 +304,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         </div>
         <div className={styles.main}>
           <AnimatePresence initial={false}>
-            {sidebarVisible && !showSettings && !showDoneZo && (
+            {sidebarVisible && !showSettings && (
               <Sidebar
                 key="sidebar"
                 panel={activePanel}
@@ -331,7 +327,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               <div style={{ display: showSettings ? 'contents' : 'none' }}>
                 <SettingsPage
                   profile={profile}
-                  onClose={() => setShowSettings(false)}
+                  initialSection={settingsInitialSection}
+                  onClose={() => { setShowSettings(false); setSettingsInitialSection(null); }}
                   onProfileChange={onProfileChange}
                   onCloneRepo={(result) => {
                     setProject({ path: result.path, name: result.name });
@@ -346,13 +343,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                   }}
                 />
               </div>
-              <div style={{ display: showDoneZo && !showSettings ? 'contents' : 'none' }}>
-                <DoneZoPage
-                  projectPath={project?.path}
-                  onClose={() => setShowDoneZo(false)}
-                />
-              </div>
-              <div style={{ display: showSettings || showDoneZo ? 'none' : 'contents' }}>
+              <div style={{ display: showSettings ? 'none' : 'contents' }}>
                 <EditorArea
                   tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
                   onCloseTab={handleCloseTab} onContentChange={handleContentChange}
@@ -365,7 +356,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               height={terminalMaximized ? maxTerminalHeight : terminalHeight}
               onHeightChange={setTerminalHeight}
               projectPath={project?.path}
-              visible={terminalVisible && !showSettings && !showDoneZo}
+              visible={terminalVisible && !showSettings}
               onClose={() => { setTerminalVisible(false); setTerminalMaximized(false); }}
               isMaximized={terminalMaximized}
               onToggleMaximize={() => {
@@ -383,11 +374,12 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             />
           </div>
           <ChatPanelContainer
-            visible={chatVisible && !showSettings && !showDoneZo}
+            visible={chatVisible && !showSettings}
             width={chatWidth}
             onWidthChange={setChatWidth}
             projectPath={project?.path}
             onOpenSettings={(section) => {
+              setSettingsInitialSection(section || null);
               setShowSettings(true);
             }}
           />

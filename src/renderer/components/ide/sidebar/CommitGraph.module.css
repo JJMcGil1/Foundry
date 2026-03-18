@@ -1,0 +1,277 @@
+/* ── Commit Graph ── */
+
+/* Section wrapper */
+.graphSection {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.graphResizeHandle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  cursor: row-resize;
+  z-index: 20;
+  transition: background 0.2s ease;
+}
+
+.graphResizeHandle:hover,
+.graphResizeHandle:active {
+  background: var(--zinc-600);
+}
+
+/* Section label (self-contained copy for graph) */
+.sectionLabel {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--zinc-200);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  text-align: left;
+  outline: none;
+  transition: background 0.1s ease;
+}
+
+.sectionLabel:hover {
+  background: var(--tree-hover);
+}
+
+.graphSectionLabel {
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.sectionChevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--zinc-400);
+}
+
+.sectionActions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.badge {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-3);
+  border-radius: 10px;
+  color: var(--zinc-300);
+  padding: 0 6px;
+}
+
+/* Scrollable graph area */
+.commitGraph {
+  padding: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.commitGraph::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.commitGraph::-webkit-scrollbar-thumb {
+  background: var(--zinc-600);
+  border-radius: 3px;
+}
+
+.commitGraph::-webkit-scrollbar-thumb:hover {
+  background: var(--zinc-500);
+}
+
+.commitGraph::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Row ── */
+.graphRow {
+  display: flex;
+  align-items: stretch;
+  height: 52px;
+  min-height: 52px;
+  max-height: 52px;
+  padding: 0;
+  margin: 0;
+  cursor: default;
+  transition: background 0.1s ease;
+  gap: 0;
+  overflow: visible;
+}
+
+.graphRow:hover {
+  background: var(--tree-hover);
+}
+
+.graphRowHovered {
+  background: var(--tree-active);
+}
+
+/* HEAD row */
+.graphRowHead {
+  background: color-mix(in srgb, var(--primary) 4%, transparent);
+}
+
+.graphRowHead:hover {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+/* ── SVG lane lines ── */
+.graphSvg {
+  flex-shrink: 0;
+  align-self: stretch;
+  overflow: visible;
+}
+
+.graphDot {
+  transition: r 0.18s ease-out,
+              stroke-width 0.18s ease-out,
+              fill 0.18s ease-out;
+}
+
+.graphDotGlow {
+  transition: r 0.18s ease-out,
+              opacity 0.18s ease-out;
+}
+
+/* ── Text content (message + meta) ── */
+.graphContent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: visible;
+  padding: 0 8px 0 0;
+}
+
+.graphLine1 {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.graphLine2 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.graphMsg {
+  flex: 1;
+  font-size: 11px;
+  color: var(--zinc-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.graphMsgHead {
+  font-weight: 600;
+  color: var(--zinc-200);
+}
+
+.graphAuthor {
+  font-size: 10px;
+  color: var(--zinc-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.graphDate {
+  font-size: 10px;
+  color: var(--zinc-500);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Ref badges (inline) ── */
+.graphRefs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.refBadgeInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 5px;
+  height: 16px;
+  font-size: 9px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.refBranchInline {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  color: var(--zinc-300);
+}
+
+.refTagInline {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
+  color: var(--primary-hover);
+}
+
+/* ── Loading indicator ── */
+.graphLoadMore {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 0;
+  font-size: 10px;
+  color: var(--zinc-600);
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning {
+  animation: spin 1s linear infinite;
+}

@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
-import { VscFiles, VscSourceControl, VscSettingsGear, VscChecklist } from 'react-icons/vsc';
+import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
   { id: 'files',  icon: VscFiles,          label: 'Explorer' },
   { id: 'git',    icon: VscSourceControl,  label: 'Source Control' },
-  { id: 'donezo', icon: VscChecklist,      label: 'DoneZo' },
 ];
 
-export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, showDoneZo, gitChangeCount = 0 }) {
+export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, gitChangeCount = 0 }) {
   const [hoveredId, setHoveredId] = useState(null);
 
   const initials = profile
@@ -19,7 +18,7 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
     <nav className={styles.bar}>
       <div className={styles.top}>
         {panels.map(p => {
-          const active = p.id === 'donezo' ? showDoneZo : (activePanel === p.id && !showSettings && !showDoneZo);
+          const active = activePanel === p.id && !showSettings;
           const Icon = p.icon;
           return (
             <div key={p.id} className={styles.itemWrap}>

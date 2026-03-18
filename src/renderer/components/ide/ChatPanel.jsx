@@ -182,28 +182,80 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
   }, []);
 
   // ---- Check provider ---- //
-  useEffect(() => {
-    async function checkProvider() {
-      try {
-        const [tokenResult, modelResult] = await Promise.all([
-          window.foundry?.claudeGetToken(),
-          window.foundry?.claudeGetModel(),
-        ]);
-        setHasProvider(!!tokenResult?.token);
-        if (modelResult) {
-          const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
-          setModelLabel(labels[modelResult] || modelResult);
-          setModelKey(modelResult);
-        }
-      } catch {
-        setHasProvider(false);
+  const reconnectRef = useRef(null);
+
+  const checkProvider = useCallback(async () => {
+    try {
+      const [tokenResult, modelResult] = await Promise.all([
+        window.foundry?.claudeGetToken(),
+        window.foundry?.claudeGetModel(),
+      ]);
+      const connected = !!tokenResult?.token;
+      setHasProvider(connected);
+      if (modelResult) {
+        const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
+        setModelLabel(labels[modelResult] || modelResult);
+        setModelKey(modelResult);
+      }
+      // If we reconnected, stop the retry loop
+      if (connected && reconnectRef.current) {
+        clearInterval(reconnectRef.current);
+        reconnectRef.current = null;
+      }
+      // If disconnected, start a retry loop to auto-reconnect
+      if (!connected && !reconnectRef.current) {
+        reconnectRef.current = setInterval(async () => {
+          try {
+            const retry = await window.foundry?.claudeGetToken();
+            if (retry?.token) {
+              setHasProvider(true);
+              clearInterval(reconnectRef.current);
+              reconnectRef.current = null;
+              // Also refresh model info
+              const m = await window.foundry?.claudeGetModel();
+              if (m) {
+                const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
+                setModelLabel(labels[m] || m);
+                setModelKey(m);
+              }
+            }
+          } catch { /* keep retrying */ }
+        }, 3000); // retry every 3s when disconnected
+      }
+    } catch {
+      setHasProvider(false);
+      // Start retry loop on error too
+      if (!reconnectRef.current) {
+        reconnectRef.current = setInterval(async () => {
+          try {
+            const retry = await window.foundry?.claudeGetToken();
+            if (retry?.token) {
+              setHasProvider(true);
+              clearInterval(reconnectRef.current);
+              reconnectRef.current = null;
+            }
+          } catch { /* keep retrying */ }
+        }, 3000);
       }
     }
+  }, []);
+
+  useEffect(() => {
     checkProvider();
+    // Re-check on window focus (e.g. switching back to app)
     const handleFocus = () => checkProvider();
     window.addEventListener('focus', handleFocus);
-    return () => window.removeEventListener('focus', handleFocus);
-  }, []);
+    // Re-check when page becomes visible (e.g. waking from sleep)
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') checkProvider();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      if (reconnectRef.current) clearInterval(reconnectRef.current);
+    };
+  }, [checkProvider]);
 
   // ---- Close dropdowns on outside click ---- //
   useEffect(() => {
@@ -351,6 +403,11 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
       setIsStreaming(false);
       setStreamId(null);
       setError(error);
+      // If the error looks auth-related, re-check provider to trigger auto-reconnect
+      const errLower = (error || '').toLowerCase();
+      if (errLower.includes('auth') || errLower.includes('401') || errLower.includes('unauthorized') || errLower.includes('token') || errLower.includes('credential')) {
+        checkProvider();
+      }
       setMessages(prev => {
         const updated = [...prev];
         const lastIdx = updated.length - 1;
@@ -372,7 +429,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     return () => {
       cleanupRef.current.forEach(fn => fn?.());
     };
-  }, [updateAssistantBlocks, saveMessageToDb]);
+  }, [updateAssistantBlocks, saveMessageToDb, checkProvider]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -489,6 +546,11 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
       setIsStreaming(false);
       setStreamId(null);
       setError(result.error);
+      // If auth-related error, trigger reconnect check
+      const errLower = (result.error || '').toLowerCase();
+      if (errLower.includes('auth') || errLower.includes('401') || errLower.includes('unauthorized') || errLower.includes('token') || errLower.includes('credential')) {
+        checkProvider();
+      }
       // Remove empty assistant placeholder on API error — but don't lose partial content
       setMessages(prev => {
         const updated = [...prev];

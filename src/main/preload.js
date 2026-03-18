@@ -139,18 +139,6 @@ contextBridge.exposeInMainWorld('foundry', {
     return () => ipcRenderer.removeListener('window:state-changed', handler);
   },
 
-  // DoneZo
-  donezoGetEntries: (workspacePath, date) => ipcRenderer.invoke('donezo:getEntries', workspacePath, date),
-  donezoAddEntry: (data) => ipcRenderer.invoke('donezo:addEntry', data),
-  donezoUpdateEntry: (id, updates) => ipcRenderer.invoke('donezo:updateEntry', id, updates),
-  donezoDeleteEntry: (id) => ipcRenderer.invoke('donezo:deleteEntry', id),
-  donezoGetStats: (workspacePath) => ipcRenderer.invoke('donezo:getStats', workspacePath),
-  donezoGetTags: (workspacePath) => ipcRenderer.invoke('donezo:getTags', workspacePath),
-  donezoSeedTags: (workspacePath) => ipcRenderer.invoke('donezo:seedTags', workspacePath),
-  donezoCreateTag: (data) => ipcRenderer.invoke('donezo:createTag', data),
-  donezoUpdateTag: (id, workspacePath, updates) => ipcRenderer.invoke('donezo:updateTag', id, workspacePath, updates),
-  donezoDeleteTag: (id, workspacePath) => ipcRenderer.invoke('donezo:deleteTag', id, workspacePath),
-
   // Claude Provider
   claudeDetectAuth: () => ipcRenderer.invoke('claude:detectAuth'),
   claudeGetToken: () => ipcRenderer.invoke('claude:getToken'),

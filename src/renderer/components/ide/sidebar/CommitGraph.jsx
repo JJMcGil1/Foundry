@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import GitAvatar from './GitAvatar';
 import CommitHoverCard from './CommitHoverCard';
 import { buildGraph, parseRefs, GRAPH_COLORS, COMMITS_PAGE_SIZE } from './gitUtils';
-import styles from '../Sidebar.module.css';
+import styles from './CommitGraph.module.css';
 
 function formatRelativeTime(isoDate) {
   if (!isoDate) return '';
@@ -154,7 +154,7 @@ export default function CommitGraph({
   if (commits.length === 0 && !loadingMore) return null;
 
   const LANE_W = 12;
-  const ROW_H = 44;
+  const ROW_H = 52;
   const DOT_R = 3.5;
   const PAD_L = 6;
 
@@ -476,6 +476,12 @@ export default function CommitGraph({
                     </svg>
                     <div className={styles.graphContent}>
                       <div className={styles.graphLine1}>
+                        <span className={`${styles.graphMsg} ${isHead ? styles.graphMsgHead : ''}`}>{row.message}</span>
+                      </div>
+                      <div className={styles.graphLine2}>
+                        <GitAvatar author={row.author} avatarUrl={getAvatarUrl(row)} size={18} />
+                        <span className={styles.graphAuthor}>{row.author}</span>
+                        <span className={styles.graphDate}>{formatRelativeTime(row.isoDate)}</span>
                         {hasRefs && (
                           <div className={styles.graphRefs}>
                             {refBranches.map(b => (
@@ -490,12 +496,6 @@ export default function CommitGraph({
                             ))}
                           </div>
                         )}
-                        <span className={`${styles.graphMsg} ${isHead ? styles.graphMsgHead : ''}`}>{row.message}</span>
-                      </div>
-                      <div className={styles.graphLine2}>
-                        <GitAvatar author={row.author} avatarUrl={getAvatarUrl(row)} size={14} />
-                        <span className={styles.graphAuthor}>{row.author}</span>
-                        <span className={styles.graphDate}>{formatRelativeTime(row.isoDate)}</span>
                       </div>
                     </div>
                   </div>

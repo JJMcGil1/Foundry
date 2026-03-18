@@ -34,7 +34,7 @@ export default function ChatEmptyState({ hasProvider, hasMessages, onOpenSetting
           </div>
           {onOpenSettings && (
             <button className={styles.emptyCardBtn} onClick={() => onOpenSettings('providers')}>
-              Open Settings
+              Open Provider Settings
               <FiChevronRight size={14} />
             </button>
           )}

@@ -53,57 +53,42 @@ export default function ChatPanelContainer({ visible, width, onWidthChange, onOp
   }, [width, onWidthChange]);
 
   const panelCount = panels.length;
+  const isMultiPanel = panelCount > 1;
 
-  // Single panel — delegate entirely to ChatPanel (it has its own motion.div)
-  if (panelCount === 1) {
-    return (
-      <ChatPanel
-        key={panels[0].id}
-        visible={visible}
-        width={width}
-        onWidthChange={onWidthChange}
-        onOpenSettings={onOpenSettings}
-        projectPath={projectPath}
-        onSplit={handleSplit}
-        onClosePanel={null}
-        panelCount={1}
-        startFresh={panels[0].startFresh}
-      />
-    );
-  }
-
-  // Multiple panels — animated container with flex children
+  // Always use the same container layout so panels never unmount when splitting.
+  // This prevents active streams from being killed when a new panel is added.
   return (
     <motion.div
-      className={styles.container}
+      className={isMultiPanel ? styles.container : undefined}
       style={{
         width: isResizing ? width : undefined,
         pointerEvents: visible ? 'auto' : 'none',
+        display: isMultiPanel ? undefined : 'contents',
       }}
       initial={false}
-      animate={{
-        width: visible ? width : 0,
-        opacity: visible ? 1 : 0,
-      }}
+      animate={isMultiPanel
+        ? { width: visible ? width : 0, opacity: visible ? 1 : 0 }
+        : {}
+      }
       transition={isResizing
         ? { duration: 0 }
         : { duration: 0.25, ease: easeOut }
       }
     >
-      <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
+      {isMultiPanel && <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />}
       {panels.map((panel, idx) => (
         <React.Fragment key={panel.id}>
           {idx > 0 && <div className={styles.panelDivider} />}
           <ChatPanel
-            visible={true}
-            width={null}
-            onWidthChange={() => {}}
+            visible={isMultiPanel ? true : visible}
+            width={isMultiPanel ? null : width}
+            onWidthChange={isMultiPanel ? () => {} : onWidthChange}
             onOpenSettings={onOpenSettings}
             projectPath={projectPath}
             onSplit={handleSplit}
-            onClosePanel={() => handleClosePanel(panel.id)}
+            onClosePanel={isMultiPanel ? () => handleClosePanel(panel.id) : null}
             panelCount={panelCount}
-            isMultiPanel={true}
+            isMultiPanel={isMultiPanel}
             startFresh={panel.startFresh}
           />
         </React.Fragment>

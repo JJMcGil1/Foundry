@@ -7,4 +7,3 @@ export { default as CommitHoverCard } from './CommitHoverCard';
 export { default as GitAvatar } from './GitAvatar';
 export { default as ChangeItem } from './ChangeItem';
 export { default as MiniTooltipBtn } from './MiniTooltipBtn';
-export { default as DoneZoPanel } from './DoneZoPanel';

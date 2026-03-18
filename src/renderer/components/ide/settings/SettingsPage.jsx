@@ -7,8 +7,13 @@ import AppearanceSection from './AppearanceSection';
 import AboutSection from './AboutSection';
 import styles from '../SettingsPage.module.css';
 
-export default function SettingsPage({ profile, onClose, onProfileChange, onCloneRepo }) {
-  const [activeSection, setActiveSection] = useState('account');
+export default function SettingsPage({ profile, onClose, onProfileChange, onCloneRepo, initialSection }) {
+  const [activeSection, setActiveSection] = useState(initialSection || 'account');
+
+  // When initialSection changes (e.g. navigating from "Open Provider Settings"), update active section
+  React.useEffect(() => {
+    if (initialSection) setActiveSection(initialSection);
+  }, [initialSection]);
   const [theme, setTheme] = useState(profile?.theme || 'dark');
 
   const handleThemeChange = async (newTheme) => {
