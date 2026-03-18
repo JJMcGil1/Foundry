@@ -139,6 +139,16 @@ function createWindow(projectPath) {
     win.show();
   });
 
+  win.on('close', () => {
+    // Kill all PTY processes before the window is destroyed to prevent
+    // "Object has been destroyed" errors from onData callbacks firing
+    // after webContents is gone.
+    for (const [id, p] of ptyProcesses) {
+      try { p.kill(); } catch {}
+    }
+    ptyProcesses.clear();
+  });
+
   win.on('closed', () => {
     allWindows.delete(win);
   });
@@ -1356,18 +1366,24 @@ function registerIPC() {
     ptyProcesses.set(id, ptyProcess);
 
     ptyProcess.onData((data) => {
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('terminal:data', id, data);
-      }
+      try {
+        if (event.sender.isDestroyed()) return;
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('terminal:data', id, data);
+        }
+      } catch {}
     });
 
     ptyProcess.onExit(({ exitCode }) => {
       ptyProcesses.delete(id);
-      const win = BrowserWindow.fromWebContents(event.sender);
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('terminal:exit', id, exitCode);
-      }
+      try {
+        if (event.sender.isDestroyed()) return;
+        const win = BrowserWindow.fromWebContents(event.sender);
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('terminal:exit', id, exitCode);
+        }
+      } catch {}
     });
 
     const shellName = path.basename(shellPath);
