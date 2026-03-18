@@ -8,6 +8,19 @@ export function buildGraph(commits) {
   const lanes = [];
   const rows = [];
 
+  // Helper: find the closest null lane to `target`, or append
+  const closestFreeLane = (target) => {
+    let best = -1;
+    let bestDist = Infinity;
+    for (let i = 0; i < lanes.length; i++) {
+      if (lanes[i] === null) {
+        const d = Math.abs(i - target);
+        if (d < bestDist) { bestDist = d; best = i; }
+      }
+    }
+    return best;
+  };
+
   for (const commit of commits) {
     // 1. Find ALL lanes that expect this commit
     const matchingLanes = [];
@@ -26,8 +39,8 @@ export function buildGraph(commits) {
         lanes[ml] = null;
       }
     } else {
-      // Not expected — allocate new lane
-      const empty = lanes.indexOf(null);
+      // Not expected — allocate new lane (closest to lane 0)
+      const empty = closestFreeLane(0);
       lane = empty !== -1 ? empty : lanes.length;
       if (empty !== -1) lanes[empty] = commit.hash;
       else lanes.push(commit.hash);
@@ -36,6 +49,8 @@ export function buildGraph(commits) {
     // 2. Assign parent lanes
     const parentLanes = [];
     const newMergeLanes = []; // lanes freshly allocated for merge parents
+    // Track lanes just freed by merging so we don't reuse them for new parents
+    const justFreed = new Set(mergingFromLanes);
 
     for (let pi = 0; pi < commit.parents.length; pi++) {
       const parentHash = commit.parents[pi];
@@ -60,8 +75,16 @@ export function buildGraph(commits) {
           if (lanes[i] === parentHash) { pLane = i; break; }
         }
         if (pLane === -1) {
-          // Allocate a new lane
-          const empty = lanes.indexOf(null);
+          // Allocate closest free lane, but skip lanes that just merged in
+          // so the graph doesn't look like the merged branch continues through
+          let empty = -1;
+          let bestDist = Infinity;
+          for (let i = 0; i < lanes.length; i++) {
+            if (lanes[i] === null && !justFreed.has(i)) {
+              const d = Math.abs(i - lane);
+              if (d < bestDist) { bestDist = d; empty = i; }
+            }
+          }
           pLane = empty !== -1 ? empty : lanes.length;
           if (empty !== -1) lanes[empty] = parentHash;
           else lanes.push(parentHash);

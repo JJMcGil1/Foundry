@@ -439,13 +439,15 @@ function getGitStatus(dirPath) {
   }
 }
 
-function getGitLog(dirPath, count = 20, skip = 0) {
+function getGitLog(dirPath, count = 20, skip = 0, branch = null) {
   try {
     // Single git log call with numstat — uses @@@ as commit delimiter
     const SEP = '@@@COMMIT@@@';
     const skipArg = skip > 0 ? ` --skip=${skip}` : '';
+    // If branch is specified, show only that branch's commits; otherwise show all
+    const branchArg = branch && branch !== 'all' ? ` "${branch.replace(/"/g, '')}"` : ' --all';
     const result = execSync(
-      `git log --all --topo-order --pretty=format:"${SEP}%H|||%h|||%s|||%an|||%ae|||%ar|||%aI|||%P|||%D" --numstat -${count}${skipArg}`,
+      `git log${branchArg} --topo-order --pretty=format:"${SEP}%H|||%h|||%s|||%an|||%ae|||%ar|||%aI|||%P|||%D" --numstat -${count}${skipArg}`,
       { cwd: dirPath, encoding: 'utf8', timeout: 10000 }
     );
 
@@ -481,9 +483,10 @@ function getGitLog(dirPath, count = 20, skip = 0) {
   }
 }
 
-function getGitCommitCount(dirPath) {
+function getGitCommitCount(dirPath, branch = null) {
   try {
-    const result = execSync('git rev-list --count --all', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const branchArg = branch && branch !== 'all' ? ` "${branch.replace(/"/g, '')}"` : ' --all';
+    const result = execSync(`git rev-list --count${branchArg}`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
     return parseInt(result.trim(), 10) || 0;
   } catch {
     return 0;
@@ -757,10 +760,10 @@ function registerIPC() {
 
   // Git
   ipcMain.handle('git:status', async (_event, dirPath) => getGitStatus(dirPath));
-  ipcMain.handle('git:log', async (_event, dirPath, count, skip) => getGitLog(dirPath, count, skip));
+  ipcMain.handle('git:log', async (_event, dirPath, count, skip, branch) => getGitLog(dirPath, count, skip, branch));
   ipcMain.handle('git:submodules', async (_event, dirPath) => getGitSubmodules(dirPath));
   ipcMain.handle('git:remotes', async (_event, dirPath) => getGitRemotes(dirPath));
-  ipcMain.handle('git:commitCount', async (_event, dirPath) => getGitCommitCount(dirPath));
+  ipcMain.handle('git:commitCount', async (_event, dirPath, branch) => getGitCommitCount(dirPath, branch));
   ipcMain.handle('git:resolveAvatars', async (_event, authors) => resolveAvatarsBatch(authors));
   ipcMain.handle('git:diff', async (_event, dirPath, filePath) => getGitDiff(dirPath, filePath));
 

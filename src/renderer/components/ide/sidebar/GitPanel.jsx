@@ -71,14 +71,17 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   // The effective path for git operations (root or submodule)
   const effectivePath = selectedRepo ? selectedRepo : projectPath;
 
+  // Always show commits for the current branch
+  const effectiveBranch = gitStatus.branch || null;
+
   // Fetch commit log for the selected repo on mount and after refreshes
   useEffect(() => {
     if (!effectivePath || !gitStatus.isRepo) return;
     let cancelled = false;
     (async () => {
       const [log, count] = await Promise.all([
-        window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE),
-        window.foundry?.gitCommitCount(effectivePath),
+        window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, 0, effectiveBranch),
+        window.foundry?.gitCommitCount(effectivePath, effectiveBranch),
       ]);
       if (!cancelled) {
         if (log) {
@@ -89,13 +92,13 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       }
     })();
     return () => { cancelled = true; };
-  }, [effectivePath, gitStatus]);
+  }, [effectivePath, gitStatus, effectiveBranch]);
 
   const refreshGit = async () => {
     onRefreshGit?.();
     const [log, count] = await Promise.all([
-      window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE),
-      window.foundry?.gitCommitCount(effectivePath),
+      window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, 0, effectiveBranch),
+      window.foundry?.gitCommitCount(effectivePath, effectiveBranch),
     ]);
     if (log) {
       setCommits(log);
@@ -108,7 +111,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     if (loadingMore || !hasMoreCommits || !effectivePath) return;
     setLoadingMore(true);
     try {
-      const more = await window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, commits.length);
+      const more = await window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, commits.length, effectiveBranch);
       if (more && more.length > 0) {
         setCommits(prev => [...prev, ...more]);
         setHasMoreCommits(more.length >= COMMITS_PAGE_SIZE);
@@ -117,7 +120,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       }
     } catch { setHasMoreCommits(false); }
     setLoadingMore(false);
-  }, [loadingMore, hasMoreCommits, effectivePath, commits.length]);
+  }, [loadingMore, hasMoreCommits, effectivePath, commits.length, effectiveBranch]);
 
   const handleStageFile = async (filePath) => {
     setOptimisticStaged(prev => new Set(prev).add(filePath));
@@ -459,7 +462,14 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
         </AnimatePresence>
       </div>
 
-      <CommitGraph commits={commits} projectPath={effectivePath} onLoadMore={loadMoreCommits} hasMore={hasMoreCommits} loadingMore={loadingMore} totalCommits={totalCommits} />
+      <CommitGraph
+        commits={commits}
+        projectPath={effectivePath}
+        onLoadMore={loadMoreCommits}
+        hasMore={hasMoreCommits}
+        loadingMore={loadingMore}
+        totalCommits={totalCommits}
+      />
     </div>
   );
 }

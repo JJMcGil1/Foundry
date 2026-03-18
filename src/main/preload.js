@@ -60,8 +60,8 @@ contextBridge.exposeInMainWorld('foundry', {
 
   // Git
   gitStatus: (dirPath) => ipcRenderer.invoke('git:status', dirPath),
-  gitLog: (dirPath, count, skip) => ipcRenderer.invoke('git:log', dirPath, count, skip),
-  gitCommitCount: (dirPath) => ipcRenderer.invoke('git:commitCount', dirPath),
+  gitLog: (dirPath, count, skip, branch) => ipcRenderer.invoke('git:log', dirPath, count, skip, branch),
+  gitCommitCount: (dirPath, branch) => ipcRenderer.invoke('git:commitCount', dirPath, branch),
   gitResolveAvatars: (authors) => ipcRenderer.invoke('git:resolveAvatars', authors),
   gitDiff: (dirPath, filePath) => ipcRenderer.invoke('git:diff', dirPath, filePath),
   gitRemoteUrl: (dirPath) => ipcRenderer.invoke('git:remoteUrl', dirPath),
