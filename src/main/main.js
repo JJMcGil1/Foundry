@@ -1297,6 +1297,37 @@ function registerIPC() {
   });
 
   // ---- Terminal (PTY) ---- //
+
+  // Resolve the user's login shell and full environment once at startup.
+  // When Electron is launched from Finder/Dock (not a terminal), process.env
+  // has the minimal macOS launchd environment — PATH is just /usr/bin:/bin:/usr/sbin:/sbin.
+  // Tools installed via Homebrew, nvm, pyenv, etc. won't be found.
+  // We fix this by running a login shell once to capture the real PATH.
+  let resolvedShellEnv = null;
+  function getShellEnv(shellPath) {
+    if (resolvedShellEnv) return resolvedShellEnv;
+    resolvedShellEnv = { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' };
+    if (process.platform !== 'win32') {
+      try {
+        const output = execSync(`${shellPath} -l -i -c 'echo "___FOUNDRY_PATH___"; echo $PATH'`, {
+          timeout: 5000,
+          encoding: 'utf8',
+          env: { ...process.env, HOME: os.homedir() },
+        });
+        // Extract PATH after our marker to avoid profile greeting messages
+        const lines = output.trim().split('\n');
+        const markerIdx = lines.lastIndexOf('___FOUNDRY_PATH___');
+        const resolvedPath = markerIdx >= 0 && lines[markerIdx + 1] ? lines[markerIdx + 1] : null;
+        if (resolvedPath && resolvedPath.includes('/')) {
+          resolvedShellEnv.PATH = resolvedPath;
+        }
+      } catch {
+        // Fall through with Electron's inherited PATH
+      }
+    }
+    return resolvedShellEnv;
+  }
+
   ipcMain.handle('terminal:create', async (event, cwd) => {
     const id = ++ptyIdCounter;
 
@@ -1304,19 +1335,22 @@ function registerIPC() {
     if (process.platform === 'win32') {
       shellPath = 'powershell.exe';
     } else {
-      // Use SHELL env var, validate it exists, fallback through options
       const candidates = [process.env.SHELL, '/bin/zsh', '/bin/bash', '/bin/sh'].filter(Boolean);
       shellPath = candidates.find(s => { try { return fs.statSync(s).isFile(); } catch { return false; } }) || '/bin/sh';
     }
 
     const effectiveCwd = cwd && fs.existsSync(cwd) ? cwd : os.homedir();
 
-    const ptyProcess = pty.spawn(shellPath, [], {
+    // Spawn as login shell (-l) so .zshrc/.bash_profile/.profile get sourced.
+    // This is how VS Code's integrated terminal works too.
+    const shellArgs = process.platform === 'win32' ? [] : ['-l'];
+
+    const ptyProcess = pty.spawn(shellPath, shellArgs, {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
       cwd: effectiveCwd,
-      env: { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' },
+      env: getShellEnv(shellPath),
     });
 
     ptyProcesses.set(id, ptyProcess);
