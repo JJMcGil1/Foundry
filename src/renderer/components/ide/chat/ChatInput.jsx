@@ -1,7 +1,8 @@
-import React, { forwardRef, useRef, useCallback } from 'react';
+import React, { forwardRef, useRef, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiCpu, FiChevronDown, FiCheck, FiSquare, FiPaperclip, FiX } from 'react-icons/fi';
 import styles from './ChatInput.module.css';
+import MediaPreview from './MediaPreview';
 
 const SendIcon = ({ size = 28, active }) => (
   <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
@@ -61,6 +62,7 @@ const ChatInput = forwardRef(function ChatInput({
 }, inputRef) {
   const fileInputRef = useRef(null);
   const dropTargetRef = useRef(null);
+  const [previewIndex, setPreviewIndex] = useState(null);
 
   const hasContent = input.trim() || (images && images.length > 0);
 
@@ -172,11 +174,11 @@ const ChatInput = forwardRef(function ChatInput({
         {images && images.length > 0 && (
           <div className={styles.imagePreviewStrip}>
             {images.map(img => (
-              <div key={img.id} className={styles.imagePreview}>
+              <div key={img.id} className={styles.imagePreview} onClick={() => setPreviewIndex(images.indexOf(img))}>
                 <img src={img.preview} alt={img.name} className={styles.imagePreviewImg} />
                 <button
                   className={styles.imageRemoveBtn}
-                  onClick={() => handleRemoveImage(img.id)}
+                  onClick={(e) => { e.stopPropagation(); handleRemoveImage(img.id); }}
                   title="Remove image"
                 >
                   <FiX size={10} />
@@ -270,6 +272,14 @@ const ChatInput = forwardRef(function ChatInput({
           </div>
         </div>
       </div>
+      {previewIndex !== null && images && images.length > 0 && (
+        <MediaPreview
+          images={images}
+          currentIndex={previewIndex}
+          onClose={() => setPreviewIndex(null)}
+          onNavigate={setPreviewIndex}
+        />
+      )}
     </div>
   );
 });

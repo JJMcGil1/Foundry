@@ -1,6 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { FiUser, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import styles from './UserMessage.module.css';
+import MediaPreview from './MediaPreview';
 
 const COLLAPSED_HEIGHT = 100; // px – roughly ~4 lines at 13px/1.6
 
@@ -22,6 +23,7 @@ export default function UserMessage({ msg }) {
   const [expanded, setExpanded] = useState(false);
   const [needsTruncation, setNeedsTruncation] = useState(false);
   const [profile, setProfile] = useState(cachedProfile);
+  const [previewIndex, setPreviewIndex] = useState(null);
   const contentRef = useRef(null);
 
   // Generate data URLs for stored images (base64 in DB) — memoize to avoid re-creation
@@ -70,8 +72,8 @@ export default function UserMessage({ msg }) {
       <div className={styles.bubble}>
         {imageUrls.length > 0 && (
           <div className={styles.imageStrip}>
-            {imageUrls.map(img => (
-              <div key={img.id} className={styles.imageThumb}>
+            {imageUrls.map((img, idx) => (
+              <div key={img.id} className={styles.imageThumb} onClick={() => setPreviewIndex(idx)}>
                 <img src={img.url} alt={img.name || 'Attached image'} className={styles.imageThumbImg} />
               </div>
             ))}
@@ -97,6 +99,14 @@ export default function UserMessage({ msg }) {
         )}
         <div className={styles.tail} />
       </div>
+      {previewIndex !== null && imageUrls.length > 0 && (
+        <MediaPreview
+          images={imageUrls}
+          currentIndex={previewIndex}
+          onClose={() => setPreviewIndex(null)}
+          onNavigate={setPreviewIndex}
+        />
+      )}
     </div>
   );
 }

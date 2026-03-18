@@ -229,6 +229,12 @@
   border: 1px solid var(--border);
   flex-shrink: 0;
   background: var(--surface-3);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+
+.imagePreview:hover {
+  border-color: var(--zinc-500);
 }
 
 .imagePreviewImg {
