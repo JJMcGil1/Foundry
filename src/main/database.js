@@ -150,6 +150,24 @@ async function initDatabase() {
     db.run('DROP TABLE IF EXISTS donezo_tags');
   } catch (e) { /* ignore */ }
 
+  // ---- Tasks (Kanban) ---- //
+  db.run(`
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      status TEXT NOT NULL DEFAULT 'todo',
+      priority TEXT DEFAULT 'medium',
+      color TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      workspace_path TEXT,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, position)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks(workspace_path, status)`);
+
   persistDb();
 
   // Auto-save every 30 seconds as a safety net against hard kills
@@ -441,6 +459,100 @@ function deleteThreadMessages(threadId) {
   return true;
 }
 
+// ---- Tasks (Kanban) ---- //
+
+function getTasks(workspacePath) {
+  if (!db) return [];
+  let sql, params;
+  if (workspacePath) {
+    sql = 'SELECT * FROM tasks WHERE workspace_path = ? ORDER BY status, position ASC';
+    params = [workspacePath];
+  } else {
+    sql = 'SELECT * FROM tasks ORDER BY status, position ASC';
+    params = [];
+  }
+  const results = db.exec(sql, params);
+  if (!results.length) return [];
+  const cols = results[0].columns;
+  return results[0].values.map(row => {
+    const obj = {};
+    cols.forEach((c, i) => obj[c] = row[i]);
+    return obj;
+  });
+}
+
+function createTask({ id, title, description, status, priority, color, position, workspacePath }) {
+  if (!db) return null;
+  const now = Date.now();
+  // If no position given, put at end of that status column
+  if (position === undefined || position === null) {
+    const res = db.exec(
+      'SELECT COALESCE(MAX(position), -1) + 1 FROM tasks WHERE status = ?',
+      [status || 'todo']
+    );
+    position = res.length ? res[0].values[0][0] : 0;
+  }
+  db.run(
+    `INSERT INTO tasks (id, title, description, status, priority, color, position, workspace_path, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, title, description || null, status || 'todo', priority || 'medium', color || null, position, workspacePath || null, now, now]
+  );
+  persistDb();
+  return { id, title, description: description || null, status: status || 'todo', priority: priority || 'medium', color: color || null, position, workspace_path: workspacePath || null, created_at: now, updated_at: now };
+}
+
+function updateTask(id, updates) {
+  if (!db) return null;
+  const results = db.exec('SELECT * FROM tasks WHERE id = ?', [id]);
+  if (!results.length || !results[0].values.length) return null;
+  const cols = results[0].columns;
+  const current = {};
+  cols.forEach((c, i) => current[c] = results[0].values[0][i]);
+
+  const title = updates.title !== undefined ? updates.title : current.title;
+  const description = updates.description !== undefined ? updates.description : current.description;
+  const status = updates.status !== undefined ? updates.status : current.status;
+  const priority = updates.priority !== undefined ? updates.priority : current.priority;
+  const color = updates.color !== undefined ? updates.color : current.color;
+  const position = updates.position !== undefined ? updates.position : current.position;
+  const now = Date.now();
+
+  db.run(
+    `UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, color = ?, position = ?, updated_at = ? WHERE id = ?`,
+    [title, description, status, priority, color, position, now, id]
+  );
+  persistDb();
+  return { ...current, title, description, status, priority, color, position, updated_at: now };
+}
+
+function deleteTask(id) {
+  if (!db) return false;
+  db.run('DELETE FROM tasks WHERE id = ?', [id]);
+  persistDb();
+  return true;
+}
+
+function reorderTasks(taskUpdates) {
+  if (!db || !taskUpdates.length) return false;
+  db.run('BEGIN TRANSACTION');
+  try {
+    const now = Date.now();
+    for (const t of taskUpdates) {
+      db.run(
+        'UPDATE tasks SET status = ?, position = ?, updated_at = ? WHERE id = ?',
+        [t.status, t.position, now, t.id]
+      );
+    }
+    db.run('COMMIT');
+    persistDb();
+    return true;
+  } catch (err) {
+    try { db.run('ROLLBACK'); } catch (e) { /* */ }
+    console.error('[Foundry DB] Failed to reorder tasks:', err);
+    return false;
+  }
+}
+
 function closeDatabase() {
   if (db) {
     persistDb();
@@ -473,4 +585,10 @@ module.exports = {
   getMessages,
   getMessageCount,
   deleteThreadMessages,
+  // Tasks (Kanban)
+  getTasks,
+  createTask,
+  updateTask,
+  deleteTask,
+  reorderTasks,
 };

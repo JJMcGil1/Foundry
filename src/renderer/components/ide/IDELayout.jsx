@@ -7,6 +7,7 @@ import { EditorArea } from './editor';
 import ChatPanelContainer from './ChatPanelContainer';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
+import { TasksPage } from './tasks';
 import { SearchBar, ProjectControls } from './titlebar';
 import styles from './IDELayout.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
@@ -24,6 +25,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [preMaxTerminalHeight, setPreMaxTerminalHeight] = useState(240);
   const [maxTerminalHeight, setMaxTerminalHeight] = useState(600);
   const [showSettings, setShowSettings] = useState(false);
+  const [showTasks, setShowTasks] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState(null);
   const editorContainerRef = useRef(null);
 
@@ -209,8 +211,10 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, [activeTab, handleSaveFile]);
 
   const handleActivityClick = (panel) => {
-    if (panel === 'settings') { setShowSettings(v => !v); return; }
+    if (panel === 'settings') { setShowSettings(v => !v); setShowTasks(false); return; }
+    if (panel === 'tasks') { setShowTasks(v => !v); setShowSettings(false); return; }
     if (showSettings) setShowSettings(false);
+    if (showTasks) setShowTasks(false);
     if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
     else { setActivePanel(panel); setSidebarVisible(true); }
   };
@@ -233,6 +237,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           onPanelClick={handleActivityClick}
           profile={profile}
           showSettings={showSettings}
+          showTasks={showTasks}
           gitChangeCount={gitStatus?.files?.length || 0}
         />
       </div>
@@ -304,7 +309,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         </div>
         <div className={styles.main}>
           <AnimatePresence initial={false}>
-            {sidebarVisible && !showSettings && (
+            {sidebarVisible && !showSettings && !showTasks && (
               <Sidebar
                 key="sidebar"
                 panel={activePanel}
@@ -323,7 +328,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           </AnimatePresence>
           <div className={styles.editorContainer} ref={editorContainerRef}>
             <div className={`${styles.editorArea} ${terminalMaximized ? styles.editorAreaHidden : ''}`}>
-              {/* Keep both mounted; toggle visibility so SettingsPage retains state across open/close */}
+              {/* Keep all mounted; toggle visibility so pages retain state across open/close */}
               <div style={{ display: showSettings ? 'contents' : 'none' }}>
                 <SettingsPage
                   profile={profile}
@@ -343,7 +348,10 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                   }}
                 />
               </div>
-              <div style={{ display: showSettings ? 'none' : 'contents' }}>
+              <div style={{ display: showTasks ? 'contents' : 'none' }}>
+                <TasksPage workspacePath={project?.path} />
+              </div>
+              <div style={{ display: (showSettings || showTasks) ? 'none' : 'contents' }}>
                 <EditorArea
                   tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
                   onCloseTab={handleCloseTab} onContentChange={handleContentChange}
@@ -356,7 +364,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               height={terminalMaximized ? maxTerminalHeight : terminalHeight}
               onHeightChange={setTerminalHeight}
               projectPath={project?.path}
-              visible={terminalVisible && !showSettings}
+              visible={terminalVisible && !showSettings && !showTasks}
               onClose={() => { setTerminalVisible(false); setTerminalMaximized(false); }}
               isMaximized={terminalMaximized}
               onToggleMaximize={() => {
@@ -374,7 +382,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             />
           </div>
           <ChatPanelContainer
-            visible={chatVisible && !showSettings}
+            visible={chatVisible && !showSettings && !showTasks}
             width={chatWidth}
             onWidthChange={setChatWidth}
             projectPath={project?.path}

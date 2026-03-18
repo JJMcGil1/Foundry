@@ -123,6 +123,13 @@ contextBridge.exposeInMainWorld('foundry', {
   chatGetMessageCount: (threadId) => ipcRenderer.invoke('chat:getMessageCount', threadId),
   chatDeleteThreadMessages: (threadId) => ipcRenderer.invoke('chat:deleteThreadMessages', threadId),
 
+  // Tasks (Kanban)
+  tasksGetAll: (workspacePath) => ipcRenderer.invoke('tasks:list', workspacePath),
+  tasksCreate: (data) => ipcRenderer.invoke('tasks:create', data),
+  tasksUpdate: (id, updates) => ipcRenderer.invoke('tasks:update', id, updates),
+  tasksDelete: (id) => ipcRenderer.invoke('tasks:delete', id),
+  tasksReorder: (taskUpdates) => ipcRenderer.invoke('tasks:reorder', taskUpdates),
+
   // Window
   newWindow: (projectPath) => ipcRenderer.invoke('window:new', projectPath),
   getWindowState: () => ipcRenderer.invoke('window:isFullScreen'),

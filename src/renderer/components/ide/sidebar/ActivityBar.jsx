@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
+import { MdTaskAlt } from 'react-icons/md';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
@@ -7,7 +8,7 @@ const panels = [
   { id: 'git',    icon: VscSourceControl,  label: 'Source Control' },
 ];
 
-export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, gitChangeCount = 0 }) {
+export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, showTasks, gitChangeCount = 0 }) {
   const [hoveredId, setHoveredId] = useState(null);
 
   const initials = profile
@@ -53,6 +54,28 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
 
       <div className={styles.bottom}>
         <div className={styles.divider} />
+
+        <div className={styles.itemWrap}>
+          <button
+            className={`${styles.item} ${showTasks ? styles.active : ''}`}
+            onClick={() => onPanelClick('tasks')}
+            onMouseEnter={() => setHoveredId('tasks')}
+            onMouseLeave={() => setHoveredId(null)}
+          >
+            <MdTaskAlt size={22} />
+            {showTasks && (
+              <span className={styles.indicator}>
+                <span className={styles.indicatorLine} />
+                <span className={styles.indicatorGlow} />
+              </span>
+            )}
+          </button>
+          {hoveredId === 'tasks' && (
+            <div className={styles.tooltip}>
+              <span className={styles.tooltipText}>Tasks</span>
+            </div>
+          )}
+        </div>
 
         <div className={styles.itemWrap}>
           <button

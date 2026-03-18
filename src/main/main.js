@@ -7,7 +7,7 @@ const { promisify } = require('util');
 const execAsync = promisify(exec);
 const pty = require('node-pty');
 const https = require('https');
-const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages } = require('./database');
+const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages, getTasks, createTask, updateTask, deleteTask, reorderTasks } = require('./database');
 const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 
 // ---- GitHub Avatar Resolution ---- //
@@ -1978,6 +1978,28 @@ function registerIPC() {
 
   ipcMain.handle('chat:deleteThreadMessages', async (_event, threadId) => {
     return deleteThreadMessages(threadId);
+  });
+
+  // ---- Tasks (Kanban) ---- //
+
+  ipcMain.handle('tasks:list', async (_event, workspacePath) => {
+    return getTasks(workspacePath);
+  });
+
+  ipcMain.handle('tasks:create', async (_event, data) => {
+    return createTask(data);
+  });
+
+  ipcMain.handle('tasks:update', async (_event, id, updates) => {
+    return updateTask(id, updates);
+  });
+
+  ipcMain.handle('tasks:delete', async (_event, id) => {
+    return deleteTask(id);
+  });
+
+  ipcMain.handle('tasks:reorder', async (_event, taskUpdates) => {
+    return reorderTasks(taskUpdates);
   });
 
 }
