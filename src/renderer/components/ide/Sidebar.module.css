@@ -638,6 +638,7 @@
   border-left: 2px solid transparent;
   cursor: pointer;
   position: relative;
+  overflow: hidden;
   transition: color 0.15s ease-out, background 0.15s ease-out, border-color 0.15s ease-out;
   will-change: transform, opacity;
 }
@@ -676,8 +677,11 @@
 .changeFileName {
   color: var(--zinc-200);
   font-weight: 500;
-  flex-shrink: 0;
+  flex-shrink: 1;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .changeDirPath {

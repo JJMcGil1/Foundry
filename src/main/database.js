@@ -150,6 +150,32 @@ async function initDatabase() {
     db.run('DROP TABLE IF EXISTS donezo_tags');
   } catch (e) { /* ignore */ }
 
+  // ---- Boards ---- //
+  db.run(`
+    CREATE TABLE IF NOT EXISTS boards (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      workspace_path TEXT,
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+      updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_boards_workspace ON boards(workspace_path, position)`);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS board_columns (
+      id TEXT PRIMARY KEY,
+      board_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      color TEXT NOT NULL DEFAULT '#a78bfa',
+      position INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
+      FOREIGN KEY (board_id) REFERENCES boards(id) ON DELETE CASCADE
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_board_columns_board ON board_columns(board_id, position)`);
+
   // ---- Tasks (Kanban) ---- //
   db.run(`
     CREATE TABLE IF NOT EXISTS tasks (
@@ -161,12 +187,27 @@ async function initDatabase() {
       color TEXT,
       position INTEGER NOT NULL DEFAULT 0,
       workspace_path TEXT,
+      board_id TEXT,
       created_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000),
       updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now') * 1000)
     )
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, position)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks(workspace_path, status)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_board ON tasks(board_id, status, position)`);
+
+  // ---- Migration: add board_id to tasks if missing ---- //
+  try {
+    const taskInfo = db.exec("PRAGMA table_info(tasks)");
+    const taskCols = taskInfo.length ? taskInfo[0].values.map(row => row[1]) : [];
+    if (!taskCols.includes('board_id')) {
+      db.run("ALTER TABLE tasks ADD COLUMN board_id TEXT");
+      console.log('[Foundry DB] Migrated: added board_id column to tasks');
+    }
+  } catch (e) { /* column already exists */ }
+
+  // ---- Ensure default board exists for each workspace ---- //
+  _ensureDefaultBoards();
 
   persistDb();
 
@@ -481,7 +522,7 @@ function getTasks(workspacePath) {
   });
 }
 
-function createTask({ id, title, description, status, priority, color, position, workspacePath }) {
+function createTask({ id, title, description, status, priority, color, position, workspacePath, boardId }) {
   if (!db) return null;
   const now = Date.now();
   // If no position given, put at end of that status column
@@ -493,12 +534,12 @@ function createTask({ id, title, description, status, priority, color, position,
     position = res.length ? res[0].values[0][0] : 0;
   }
   db.run(
-    `INSERT INTO tasks (id, title, description, status, priority, color, position, workspace_path, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [id, title, description || null, status || 'todo', priority || 'medium', color || null, position, workspacePath || null, now, now]
+    `INSERT INTO tasks (id, title, description, status, priority, color, position, workspace_path, board_id, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, title, description || null, status || 'todo', priority || 'medium', color || null, position, workspacePath || null, boardId || null, now, now]
   );
   persistDb();
-  return { id, title, description: description || null, status: status || 'todo', priority: priority || 'medium', color: color || null, position, workspace_path: workspacePath || null, created_at: now, updated_at: now };
+  return { id, title, description: description || null, status: status || 'todo', priority: priority || 'medium', color: color || null, position, workspace_path: workspacePath || null, board_id: boardId || null, created_at: now, updated_at: now };
 }
 
 function updateTask(id, updates) {
@@ -553,6 +594,198 @@ function reorderTasks(taskUpdates) {
   }
 }
 
+// ---- Boards ---- //
+
+function _ensureDefaultBoards() {
+  if (!db) return;
+  // Get all distinct workspace_paths from tasks that don't have a board_id
+  const orphanWs = db.exec("SELECT DISTINCT workspace_path FROM tasks WHERE board_id IS NULL");
+  if (!orphanWs.length) return;
+  for (const row of orphanWs[0].values) {
+    const wsPath = row[0];
+    // Check if a board already exists for this workspace
+    const existing = db.exec(
+      'SELECT id FROM boards WHERE workspace_path IS ? LIMIT 1',
+      [wsPath]
+    );
+    let boardId;
+    if (existing.length && existing[0].values.length) {
+      boardId = existing[0].values[0][0];
+    } else {
+      boardId = `board_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const now = Date.now();
+      db.run(
+        'INSERT INTO boards (id, name, workspace_path, position, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)',
+        [boardId, 'Default Board', wsPath, now, now]
+      );
+      // Create default columns
+      const defaultCols = [
+        { name: 'To Do', color: '#a78bfa', status: 'todo' },
+        { name: 'In Progress', color: '#fbbf24', status: 'in_progress' },
+        { name: 'Review', color: '#38bdf8', status: 'review' },
+        { name: 'Done', color: '#34d399', status: 'done' },
+      ];
+      defaultCols.forEach((col, idx) => {
+        const colId = col.status; // Use status as column id for migration compatibility
+        db.run(
+          'INSERT INTO board_columns (id, board_id, name, color, position) VALUES (?, ?, ?, ?, ?)',
+          [colId, boardId, col.name, col.color, idx]
+        );
+      });
+    }
+    // Assign orphaned tasks to this board
+    db.run('UPDATE tasks SET board_id = ? WHERE workspace_path IS ? AND board_id IS NULL', [boardId, wsPath]);
+  }
+  persistDb();
+}
+
+function getBoards(workspacePath) {
+  if (!db) return [];
+  let sql, params;
+  if (workspacePath) {
+    sql = 'SELECT * FROM boards WHERE workspace_path = ? ORDER BY position ASC';
+    params = [workspacePath];
+  } else {
+    sql = 'SELECT * FROM boards WHERE workspace_path IS NULL ORDER BY position ASC';
+    params = [];
+  }
+  const results = db.exec(sql, params);
+  if (!results.length) return [];
+  const cols = results[0].columns;
+  return results[0].values.map(row => {
+    const obj = {};
+    cols.forEach((c, i) => obj[c] = row[i]);
+    return obj;
+  });
+}
+
+function createBoard({ id, name, workspacePath }) {
+  if (!db) return null;
+  const now = Date.now();
+  // Get next position
+  const res = db.exec(
+    'SELECT COALESCE(MAX(position), -1) + 1 FROM boards WHERE workspace_path IS ?',
+    [workspacePath || null]
+  );
+  const position = res.length ? res[0].values[0][0] : 0;
+  db.run(
+    'INSERT INTO boards (id, name, workspace_path, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, name, workspacePath || null, position, now, now]
+  );
+  // Create default columns for new board
+  const defaultCols = [
+    { name: 'To Do', color: '#a78bfa' },
+    { name: 'In Progress', color: '#fbbf24' },
+    { name: 'Review', color: '#38bdf8' },
+    { name: 'Done', color: '#34d399' },
+  ];
+  defaultCols.forEach((col, idx) => {
+    const colId = `col_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    db.run(
+      'INSERT INTO board_columns (id, board_id, name, color, position) VALUES (?, ?, ?, ?, ?)',
+      [colId, id, col.name, col.color, idx]
+    );
+  });
+  persistDb();
+  return { id, name, workspace_path: workspacePath || null, position, created_at: now, updated_at: now };
+}
+
+function updateBoard(id, updates) {
+  if (!db) return null;
+  const results = db.exec('SELECT * FROM boards WHERE id = ?', [id]);
+  if (!results.length || !results[0].values.length) return null;
+  const cols = results[0].columns;
+  const current = {};
+  cols.forEach((c, i) => current[c] = results[0].values[0][i]);
+
+  const name = updates.name !== undefined ? updates.name : current.name;
+  const position = updates.position !== undefined ? updates.position : current.position;
+  const now = Date.now();
+  db.run('UPDATE boards SET name = ?, position = ?, updated_at = ? WHERE id = ?', [name, position, now, id]);
+  persistDb();
+  return { ...current, name, position, updated_at: now };
+}
+
+function deleteBoard(id) {
+  if (!db) return false;
+  db.run('DELETE FROM board_columns WHERE board_id = ?', [id]);
+  db.run('DELETE FROM tasks WHERE board_id = ?', [id]);
+  db.run('DELETE FROM boards WHERE id = ?', [id]);
+  persistDb();
+  return true;
+}
+
+// ---- Board Columns ---- //
+
+function getBoardColumns(boardId) {
+  if (!db) return [];
+  const results = db.exec('SELECT * FROM board_columns WHERE board_id = ? ORDER BY position ASC', [boardId]);
+  if (!results.length) return [];
+  const cols = results[0].columns;
+  return results[0].values.map(row => {
+    const obj = {};
+    cols.forEach((c, i) => obj[c] = row[i]);
+    return obj;
+  });
+}
+
+function createBoardColumn({ id, boardId, name, color }) {
+  if (!db) return null;
+  const now = Date.now();
+  const res = db.exec(
+    'SELECT COALESCE(MAX(position), -1) + 1 FROM board_columns WHERE board_id = ?',
+    [boardId]
+  );
+  const position = res.length ? res[0].values[0][0] : 0;
+  db.run(
+    'INSERT INTO board_columns (id, board_id, name, color, position, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, boardId, name, color || '#a78bfa', position, now]
+  );
+  persistDb();
+  return { id, board_id: boardId, name, color: color || '#a78bfa', position, created_at: now };
+}
+
+function updateBoardColumn(id, updates) {
+  if (!db) return null;
+  const results = db.exec('SELECT * FROM board_columns WHERE id = ?', [id]);
+  if (!results.length || !results[0].values.length) return null;
+  const cols = results[0].columns;
+  const current = {};
+  cols.forEach((c, i) => current[c] = results[0].values[0][i]);
+
+  const name = updates.name !== undefined ? updates.name : current.name;
+  const color = updates.color !== undefined ? updates.color : current.color;
+  const position = updates.position !== undefined ? updates.position : current.position;
+  db.run('UPDATE board_columns SET name = ?, color = ?, position = ? WHERE id = ?', [name, color, position, id]);
+  persistDb();
+  return { ...current, name, color, position };
+}
+
+function deleteBoardColumn(id) {
+  if (!db) return false;
+  // Move tasks in this column to null status (or delete them)
+  db.run('DELETE FROM tasks WHERE status = ? AND board_id = (SELECT board_id FROM board_columns WHERE id = ?)', [id, id]);
+  db.run('DELETE FROM board_columns WHERE id = ?', [id]);
+  persistDb();
+  return true;
+}
+
+function reorderBoardColumns(columnUpdates) {
+  if (!db || !columnUpdates.length) return false;
+  db.run('BEGIN TRANSACTION');
+  try {
+    for (const c of columnUpdates) {
+      db.run('UPDATE board_columns SET position = ? WHERE id = ?', [c.position, c.id]);
+    }
+    db.run('COMMIT');
+    persistDb();
+    return true;
+  } catch (err) {
+    try { db.run('ROLLBACK'); } catch (e) { /* */ }
+    return false;
+  }
+}
+
 function closeDatabase() {
   if (db) {
     persistDb();
@@ -585,6 +818,17 @@ module.exports = {
   getMessages,
   getMessageCount,
   deleteThreadMessages,
+  // Boards
+  getBoards,
+  createBoard,
+  updateBoard,
+  deleteBoard,
+  // Board Columns
+  getBoardColumns,
+  createBoardColumn,
+  updateBoardColumn,
+  deleteBoardColumn,
+  reorderBoardColumns,
   // Tasks (Kanban)
   getTasks,
   createTask,

@@ -59,6 +59,167 @@
   gap: 10px;
 }
 
+/* ── Board Selector ── */
+.boardSelector {
+  position: relative;
+}
+
+.boardSelectorBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.boardSelectorBtn:hover {
+  background: var(--surface-2);
+}
+
+.boardSelectorChevron {
+  color: var(--zinc-500);
+}
+
+.boardMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 240px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  overflow: hidden;
+}
+
+.boardMenuItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.boardMenuItem:last-of-type {
+  border-bottom: none;
+}
+
+.boardMenuItemBtn {
+  flex: 1;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: var(--zinc-300);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s ease;
+}
+
+.boardMenuItemBtn:hover {
+  background: var(--surface-2);
+}
+
+.boardMenuItemActive .boardMenuItemBtn {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.boardMenuItemDelete {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 4px;
+  margin-right: 8px;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.boardMenuItemDelete:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.boardMenuCreate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-top: 1px solid var(--border);
+}
+
+.boardMenuInput {
+  flex: 1;
+  padding: 6px 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+}
+
+.boardMenuInput::placeholder {
+  color: var(--zinc-600);
+}
+
+.boardMenuInput:focus {
+  border-color: var(--zinc-500);
+}
+
+.boardMenuCreateBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: var(--primary-text);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease;
+}
+
+.boardMenuCreateBtn:hover {
+  background: var(--primary-hover);
+}
+
+/* ── Settings Button ── */
+.settingsBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settingsBtn:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
+}
+
 .searchBar {
   display: flex;
   align-items: center;
@@ -133,6 +294,14 @@
   color: var(--text-primary);
 }
 
+/* ── Board Container ── */
+.boardContainer {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* ── Board ── */
 .board {
   flex: 1;
@@ -141,8 +310,12 @@
   padding: 20px 28px 28px;
   overflow-x: auto;
   overflow-y: hidden;
-  max-width: 1400px;
   min-height: 0;
+  transition: flex 0.25s ease;
+}
+
+.boardWithPanel {
+  flex: 1;
 }
 
 /* ── Column ── */
@@ -444,6 +617,9 @@
 }
 
 .inlineSubmit {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 5px 12px;
   background: var(--primary);
   color: var(--primary-text);
@@ -478,7 +654,239 @@
   border-color: var(--zinc-600);
 }
 
-/* ── Edit Modal ── */
+/* ── Side Panel ── */
+.sidePanel {
+  width: 420px;
+  min-width: 420px;
+  background: var(--surface-0);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: slidePanelIn 0.2s ease;
+}
+
+@keyframes slidePanelIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.sidePanelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.sidePanelTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--zinc-100);
+  font-family: var(--font-sans);
+}
+
+.sidePanelClose {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.sidePanelClose:hover {
+  color: var(--zinc-200);
+  background: var(--surface-3);
+}
+
+.sidePanelBody {
+  flex: 1;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+.sidePanelFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ── TipTap Editor ── */
+.editorToolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.toolbarBtn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-500);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  transition: all 0.15s ease;
+}
+
+.toolbarBtn:hover {
+  color: var(--zinc-200);
+  background: var(--surface-3);
+}
+
+.toolbarBtnActive {
+  color: var(--primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.toolbarDivider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 4px;
+}
+
+.editorWrapper {
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  min-height: 160px;
+  max-height: 340px;
+  overflow-y: auto;
+}
+
+.tiptapEditor {
+  padding: 12px;
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  min-height: 140px;
+}
+
+.editorWrapper :global(.ProseMirror) {
+  padding: 12px;
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.6;
+  outline: none;
+  min-height: 140px;
+}
+
+.editorWrapper :global(.ProseMirror p) {
+  margin: 0 0 8px;
+}
+
+.editorWrapper :global(.ProseMirror p:last-child) {
+  margin-bottom: 0;
+}
+
+.editorWrapper :global(.ProseMirror h1),
+.editorWrapper :global(.ProseMirror h2),
+.editorWrapper :global(.ProseMirror h3) {
+  color: var(--zinc-100);
+  font-weight: 600;
+  margin: 0 0 8px;
+}
+
+.editorWrapper :global(.ProseMirror h1) { font-size: 20px; }
+.editorWrapper :global(.ProseMirror h2) { font-size: 17px; }
+.editorWrapper :global(.ProseMirror h3) { font-size: 15px; }
+
+.editorWrapper :global(.ProseMirror ul),
+.editorWrapper :global(.ProseMirror ol) {
+  padding-left: 20px;
+  margin: 0 0 8px;
+}
+
+.editorWrapper :global(.ProseMirror li) {
+  margin-bottom: 4px;
+}
+
+.editorWrapper :global(.ProseMirror code) {
+  background: var(--surface-2);
+  color: var(--zinc-300);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.editorWrapper :global(.ProseMirror pre) {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin: 0 0 8px;
+  overflow-x: auto;
+}
+
+.editorWrapper :global(.ProseMirror pre code) {
+  background: none;
+  padding: 0;
+  color: var(--zinc-200);
+}
+
+.editorWrapper :global(.ProseMirror img) {
+  max-width: 100%;
+  border-radius: var(--radius-sm);
+  margin: 8px 0;
+}
+
+.editorWrapper :global(.ProseMirror blockquote) {
+  border-left: 3px solid var(--zinc-600);
+  padding-left: 12px;
+  margin: 0 0 8px;
+  color: var(--zinc-400);
+}
+
+.editorWrapper :global(.ProseMirror strong) {
+  color: var(--zinc-100);
+  font-weight: 600;
+}
+
+.editorWrapper :global(.ProseMirror em) {
+  font-style: italic;
+}
+
+.editorWrapper :global(.ProseMirror hr) {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+/* ── Modal (shared) ── */
 .modalBackdrop {
   position: fixed;
   inset: 0;
@@ -494,6 +902,18 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   width: 440px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
+}
+
+.settingsModal {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  width: 520px;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -655,6 +1075,25 @@
   font-size: 12px;
 }
 
+.colorSwatchSmall {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.colorSwatchSmall:hover {
+  transform: scale(1.15);
+}
+
+.colorSwatchSmallActive {
+  border-color: var(--zinc-100);
+  box-shadow: 0 0 0 1px var(--surface-1), 0 0 0 2px var(--zinc-500);
+}
+
 .modalActions {
   display: flex;
   justify-content: flex-end;
@@ -696,6 +1135,108 @@
 
 .modalSaveBtn:hover {
   background: var(--primary-hover);
+}
+
+/* ── Board Settings: Column List ── */
+.columnList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.columnListItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.columnListItemLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.columnListItemName {
+  font-size: 13px;
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+}
+
+.columnListItemActions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.columnMoveBtn {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0;
+  font-size: 9px;
+  transition: all 0.15s ease;
+}
+
+.columnMoveBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.columnEditRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.columnEditInput {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--zinc-200);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+}
+
+.columnEditInput:focus {
+  border-color: var(--zinc-500);
+}
+
+.columnEditColors {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.columnEditActions {
+  display: flex;
+  gap: 6px;
+}
+
+.addColumnRow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addColumnColors {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
 }
 
 /* ── Drop placeholder ── */

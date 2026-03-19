@@ -123,6 +123,17 @@ contextBridge.exposeInMainWorld('foundry', {
   chatGetMessageCount: (threadId) => ipcRenderer.invoke('chat:getMessageCount', threadId),
   chatDeleteThreadMessages: (threadId) => ipcRenderer.invoke('chat:deleteThreadMessages', threadId),
 
+  // Boards
+  boardsGetAll: (workspacePath) => ipcRenderer.invoke('boards:list', workspacePath),
+  boardsCreate: (data) => ipcRenderer.invoke('boards:create', data),
+  boardsUpdate: (id, updates) => ipcRenderer.invoke('boards:update', id, updates),
+  boardsDelete: (id) => ipcRenderer.invoke('boards:delete', id),
+  // Board Columns
+  boardColumnsGetAll: (boardId) => ipcRenderer.invoke('boards:columns:list', boardId),
+  boardColumnsCreate: (data) => ipcRenderer.invoke('boards:columns:create', data),
+  boardColumnsUpdate: (id, updates) => ipcRenderer.invoke('boards:columns:update', id, updates),
+  boardColumnsDelete: (id) => ipcRenderer.invoke('boards:columns:delete', id),
+  boardColumnsReorder: (columnUpdates) => ipcRenderer.invoke('boards:columns:reorder', columnUpdates),
   // Tasks (Kanban)
   tasksGetAll: (workspacePath) => ipcRenderer.invoke('tasks:list', workspacePath),
   tasksCreate: (data) => ipcRenderer.invoke('tasks:create', data),

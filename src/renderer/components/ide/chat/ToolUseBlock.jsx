@@ -4,6 +4,7 @@ import { FiEdit2, FiDownload, FiTerminal, FiSearch, FiTool, FiGlobe } from 'reac
 import { FaEye } from 'react-icons/fa';
 import BashToolBlock from './BashToolBlock';
 import EditToolBlock from './EditToolBlock';
+import WriteToolBlock from './WriteToolBlock';
 import styles from './ToolUseBlock.module.css';
 import sharedStyles from './shared.module.css';
 
@@ -48,6 +49,10 @@ export default function ToolUseBlock({ name, input, isStreaming }) {
   // Edit gets a diff view
   if (name === 'Edit') {
     return <EditToolBlock input={input} isStreaming={isStreaming} />;
+  }
+  // Write gets a code file view
+  if (name === 'Write') {
+    return <WriteToolBlock input={input} isStreaming={isStreaming} />;
   }
 
   const [expanded, setExpanded] = useState(false);

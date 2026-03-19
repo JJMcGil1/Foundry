@@ -1,0 +1,134 @@
+/* ---- Write / New File Block ---- */
+.writeBlock {
+  margin: 4px 0;
+  border-radius: 10px;
+  background: var(--surface-1);
+  border: 1px solid var(--border-card);
+  overflow: hidden;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.05),
+    0 3px 10px rgba(0, 0, 0, 0.07),
+    0 6px 20px rgba(0, 0, 0, 0.05);
+}
+
+.writeHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+}
+
+.writeFileIcon {
+  flex-shrink: 0;
+  color: #22c55e;
+}
+
+.writeFileName {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--zinc-300);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writeBadges {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.writeBadgeAdd {
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.writeCollapseBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: 5px;
+  flex-shrink: 0;
+  transition: all 0.12s ease;
+}
+
+.writeCollapseBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.writeBody {
+  position: relative;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.7;
+  overflow-x: auto;
+  padding: 8px 12px;
+}
+
+.writeBodyCollapsed {
+  max-height: 128px;
+  overflow: hidden;
+}
+
+.writeBodyCollapsed::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: linear-gradient(to bottom, transparent, var(--surface-1));
+  pointer-events: none;
+}
+
+.writeBody::-webkit-scrollbar {
+  height: 4px;
+}
+
+.writeBody::-webkit-scrollbar-thumb {
+  background: var(--zinc-700);
+  border-radius: 4px;
+}
+
+.writeLine {
+  display: flex;
+  background: rgba(34, 197, 94, 0.06);
+  border-radius: 4px;
+}
+
+.writeLineNum {
+  width: 36px;
+  padding: 1px 8px;
+  text-align: right;
+  color: var(--zinc-600);
+  user-select: none;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.writeLineText {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 0;
+  white-space: pre;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--zinc-300);
+}
