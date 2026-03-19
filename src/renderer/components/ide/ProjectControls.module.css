@@ -53,12 +53,12 @@
 }
 
 :global([data-theme="light"]) .segment {
-  color: var(--zinc-500);
+  color: var(--zinc-400);
 }
 
 :global([data-theme="light"]) .segment:hover {
   background: rgba(0, 0, 0, 0.05);
-  color: var(--zinc-700);
+  color: var(--zinc-200);
 }
 
 :global([data-theme="light"]) .segment:active {
@@ -67,7 +67,7 @@
 
 :global([data-theme="light"]) .segmentOpen {
   background: rgba(0, 0, 0, 0.06);
-  color: var(--zinc-800);
+  color: var(--zinc-100);
 }
 
 .segmentDivider {
@@ -95,7 +95,7 @@
 }
 
 :global([data-theme="light"]) .segment:hover .segmentIcon {
-  color: var(--zinc-600);
+  color: var(--zinc-200);
 }
 
 .segmentName {
@@ -162,7 +162,7 @@
 
 :global([data-theme="light"]) .syncIcon:hover {
   background: rgba(0, 0, 0, 0.05);
-  color: var(--zinc-700);
+  color: var(--zinc-200);
 }
 
 /* syncSpinning handled by framer-motion in JSX */
