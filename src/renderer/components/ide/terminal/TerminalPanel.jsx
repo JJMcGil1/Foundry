@@ -212,18 +212,28 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
     const entry = terminalsRef.current.get(id);
     if (entry) {
       window.foundry?.terminalKill(entry.ptyId);
+      // Detach xterm element from DOM before disposing to avoid visible teardown flash
+      if (entry.xterm.element?.parentNode) {
+        entry.xterm.element.parentNode.removeChild(entry.xterm.element);
+      }
       entry.xterm.dispose();
       terminalsRef.current.delete(id);
     }
 
     setTerminals(prev => {
       const next = prev.filter(t => t.id !== id);
+      if (next.length === 0) {
+        // Last terminal closed — auto-hide the panel
+        setActiveTermId(null);
+        onClose?.();
+        return next;
+      }
       if (activeTermId === id) {
-        setActiveTermId(next.length > 0 ? next[next.length - 1].id : null);
+        setActiveTermId(next[next.length - 1].id);
       }
       return next;
     });
-  }, [activeTermId]);
+  }, [activeTermId, onClose]);
 
   const handleClear = useCallback(() => {
     if (!activeTermId) return;
@@ -272,8 +282,18 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
       className={`${styles.panel} ${isMaximized ? styles.panelMaximized : ''}`}
       style={isResizing ? { height } : undefined}
       initial={false}
-      animate={visible ? { height, opacity: 1 } : { height: 0, opacity: 0 }}
-      transition={isResizing ? { duration: 0 } : { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }}
+      animate={
+        visible
+          ? { height, opacity: 1, y: 0 }
+          : { height: 0, opacity: 0, y: 10 }
+      }
+      transition={
+        isResizing
+          ? { duration: 0 }
+          : visible
+            ? { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }
+            : { height: { duration: 0 }, opacity: { duration: 0.15 }, y: { duration: 0.15 } }
+      }
     >
       <div style={{ display: visible ? 'flex' : 'none', height: '100%', flexDirection: 'column' }}>
         {!isMaximized && <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />}
