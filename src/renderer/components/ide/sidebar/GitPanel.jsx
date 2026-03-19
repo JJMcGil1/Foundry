@@ -239,6 +239,8 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
         console.error('Commit failed:', commitResult.error);
         hadError = true;
         addToast({ message: `Commit failed: ${commitResult.error.split('\n')[0]}`, type: 'error' });
+      } else {
+        addToast({ message: `Committed: ${commitMsg.length > 50 ? commitMsg.slice(0, 50) + '…' : commitMsg}`, type: 'success' });
       }
       markDone('commit');
 
@@ -252,14 +254,12 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       }
       markDone('push');
 
-      // Show sync success toast
-      if (!hadError) {
-        let msg = 'Synced successfully';
-        if (pullInfo) {
-          if (pullInfo.upToDate) {
-            msg = 'Synced — already up to date';
-          } else if (pullInfo.filesChanged != null) {
-            msg = `Synced — pulled ${pullInfo.filesChanged} file${pullInfo.filesChanged !== 1 ? 's' : ''} changed`;
+      // Show push success toast
+      if (!pushResult?.error) {
+        let msg = 'Pushed to remote';
+        if (pullInfo && !pullInfo.upToDate) {
+          if (pullInfo.filesChanged != null) {
+            msg += ` — pulled ${pullInfo.filesChanged} file${pullInfo.filesChanged !== 1 ? 's' : ''} changed`;
             if (pullInfo.insertions || pullInfo.deletions) {
               const parts = [];
               if (pullInfo.insertions) parts.push(`+${pullInfo.insertions}`);
@@ -267,7 +267,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
               msg += ` (${parts.join(', ')})`;
             }
           } else {
-            msg = 'Synced — pulled new changes';
+            msg += ' — pulled new changes';
           }
         }
         addToast({ message: msg, type: 'success' });

@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { FiPlus, FiX, FiMaximize2, FiMinimize2 } from 'react-icons/fi';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@xterm/xterm/css/xterm.css';
 import { getTerminalTheme } from './terminalTheme';
 import TerminalTab from './TerminalTab';
@@ -39,17 +41,21 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
 
     const xterm = new Terminal({
       fontSize: 13,
-      fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', monospace",
-      lineHeight: 1.4,
+      fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Menlo', 'Consolas', monospace",
+      lineHeight: 1.0,
+      letterSpacing: 0,
       cursorBlink: true,
       cursorStyle: 'block',
       theme: getTerminalTheme(),
       scrollback: 5000,
       drawBoldTextInBrightColors: true,
+      allowTransparency: false,
+      minimumContrastRatio: 1,
     });
 
     const fitAddon = new FitAddon();
     xterm.loadAddon(fitAddon);
+    xterm.loadAddon(new WebLinksAddon());
 
     xterm.onData((data) => {
       window.foundry?.terminalWrite(ptyId, data);
@@ -138,6 +144,12 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
 
     if (!entry.xterm.element) {
       entry.xterm.open(containerRef.current);
+      // Load WebGL renderer after terminal is in the DOM (requires canvas context)
+      try {
+        entry.xterm.loadAddon(new WebglAddon());
+      } catch {
+        // WebGL not available — falls back to canvas renderer automatically
+      }
     } else {
       containerRef.current.appendChild(entry.xterm.element);
     }

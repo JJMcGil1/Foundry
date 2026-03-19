@@ -1,143 +1,197 @@
 /* ========================================
    Foundry — Toast Notifications
+   Refined, minimal, modern.
    ======================================== */
 
 .container {
   position: fixed;
-  top: 40px;
-  right: 16px;
+  top: 44px;
+  right: 20px;
   z-index: 99998;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   pointer-events: none;
-  max-width: 380px;
+  max-width: 360px;
 }
 
+/* ── Toast card ── */
 .toast {
   pointer-events: all;
+  position: relative;
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  background: #1c1c1e;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
-  min-width: 260px;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(30, 30, 32, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.3),
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    0 16px 40px rgba(0, 0, 0, 0.35);
+  min-width: 280px;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  overflow: hidden;
+  cursor: default;
 }
 
-/* Type variants */
-.success {
-  border-color: rgba(52, 211, 153, 0.2);
+.toast:hover .close {
+  opacity: 1;
 }
 
-.success .icon {
-  background: rgba(52, 211, 153, 0.12);
-  color: #34D399;
+.toast:hover .progressTrack {
+  opacity: 0;
 }
 
-.error {
-  border-color: rgba(239, 68, 68, 0.2);
-}
-
-.error .icon {
-  background: rgba(239, 68, 68, 0.12);
-  color: #EF4444;
-}
-
-.info {
-  border-color: rgba(96, 165, 250, 0.2);
-}
-
-.info .icon {
-  background: rgba(96, 165, 250, 0.12);
-  color: #60A5FA;
-}
-
-/* Icon pill */
+/* ── Icon ── */
 .icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
   flex-shrink: 0;
+  margin-top: 1px;
 }
 
-/* Message text */
+/* ── Type variants ── */
+.success .icon {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34D399;
+}
+
+.error .icon {
+  background: rgba(248, 113, 113, 0.15);
+  color: #F87171;
+}
+
+.info .icon {
+  background: rgba(129, 140, 248, 0.15);
+  color: #818CF8;
+}
+
+/* ── Message ── */
 .message {
   flex: 1;
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.88);
-  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.45;
   min-width: 0;
+  letter-spacing: -0.01em;
+  padding-top: 1px;
 }
 
-/* Close button */
+/* ── Close button — hidden until hover ── */
 .close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.4);
   cursor: pointer;
-  border-radius: 5px;
-  transition: background 0.15s, color 0.15s;
-  flex-shrink: 0;
+  border-radius: 6px;
   padding: 0;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
 .close:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.7);
 }
 
-/* Light theme overrides */
+/* ── Progress bar (auto-dismiss countdown) ── */
+.progressTrack {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: transparent;
+  overflow: hidden;
+  border-radius: 0 0 14px 14px;
+  transition: opacity 0.2s ease;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 0 0 14px 14px;
+  transform-origin: left;
+  will-change: transform;
+}
+
+.success .progressBar {
+  background: rgba(52, 211, 153, 0.35);
+}
+
+.error .progressBar {
+  background: rgba(248, 113, 113, 0.35);
+}
+
+.info .progressBar {
+  background: rgba(129, 140, 248, 0.35);
+}
+
+/* ========================================
+   Light theme
+   ======================================== */
 [data-theme="light"] .toast {
-  background: #ffffff;
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.08),
+    0 16px 40px rgba(0, 0, 0, 0.12);
 }
 
 [data-theme="light"] .message {
   color: rgba(0, 0, 0, 0.85);
+  font-weight: 500;
 }
 
 [data-theme="light"] .close {
-  color: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.3);
 }
 
 [data-theme="light"] .close:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(0, 0, 0, 0.5);
-}
-
-[data-theme="light"] .icon {
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.6);
 }
 
 [data-theme="light"] .success .icon {
-  background: rgba(16, 185, 129, 0.1);
+  background: rgba(16, 185, 129, 0.12);
   color: #059669;
 }
 
 [data-theme="light"] .error .icon {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.12);
   color: #DC2626;
 }
 
 [data-theme="light"] .info .icon {
-  background: rgba(59, 130, 246, 0.1);
-  color: #2563EB;
+  background: rgba(99, 102, 241, 0.12);
+  color: #4F46E5;
+}
+
+[data-theme="light"] .success .progressBar {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+[data-theme="light"] .error .progressBar {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+[data-theme="light"] .info .progressBar {
+  background: rgba(99, 102, 241, 0.3);
 }

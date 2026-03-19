@@ -1318,7 +1318,13 @@ function registerIPC() {
   let resolvedShellEnv = null;
   function getShellEnv(shellPath) {
     if (resolvedShellEnv) return resolvedShellEnv;
-    resolvedShellEnv = { ...process.env, TERM: 'xterm-256color', COLORTERM: 'truecolor' };
+    resolvedShellEnv = {
+      ...process.env,
+      TERM: 'xterm-256color',
+      COLORTERM: 'truecolor',
+      TERM_PROGRAM: 'Foundry',
+      LANG: process.env.LANG || 'en_US.UTF-8',
+    };
     if (process.platform !== 'win32') {
       try {
         const output = execSync(`${shellPath} -l -i -c 'echo "___FOUNDRY_PATH___"; echo $PATH'`, {

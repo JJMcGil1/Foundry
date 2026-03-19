@@ -157,7 +157,13 @@ export default function ProjectControls({
                 ? `Sync — ${behind > 0 ? `${behind}\u2193 behind` : ''}${behind > 0 && ahead > 0 ? ' \u00B7 ' : ''}${ahead > 0 ? `${ahead}\u2191 ahead` : ''}`
                 : 'Sync'}
             >
-              <FiRefreshCw size={12} className={syncing ? styles.syncSpinning : ''} />
+              <motion.span
+                animate={syncing ? { rotate: 360 } : { rotate: 0 }}
+                transition={syncing ? { duration: 0.8, repeat: Infinity, ease: 'linear' } : { duration: 0 }}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', willChange: 'transform' }}
+              >
+                <FiRefreshCw size={12} />
+              </motion.span>
               {totalUpdates > 0 && !syncing && (
                 <span className={styles.syncDot} />
               )}

@@ -102,15 +102,7 @@
   color: var(--zinc-300);
 }
 
-.syncSpinning {
-  animation: syncSpin 0.8s linear infinite;
-  will-change: transform;
-}
-
-@keyframes syncSpin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
+/* syncSpinning handled by framer-motion in JSX */
 
 .syncDot {
   position: absolute;
