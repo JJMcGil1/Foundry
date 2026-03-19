@@ -239,8 +239,6 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
         console.error('Commit failed:', commitResult.error);
         hadError = true;
         addToast({ message: `Commit failed: ${commitResult.error.split('\n')[0]}`, type: 'error' });
-      } else {
-        addToast({ message: `Committed: ${commitMsg.length > 50 ? commitMsg.slice(0, 50) + '…' : commitMsg}`, type: 'success' });
       }
       markDone('commit');
 
@@ -255,8 +253,9 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       markDone('push');
 
       // Show push success toast
-      if (!pushResult?.error) {
-        let msg = 'Pushed to remote';
+      if (!pushResult?.error && !hadError) {
+        const truncated = commitMsg.length > 50 ? commitMsg.slice(0, 50) + '…' : commitMsg;
+        let msg = `Committed & pushed: ${truncated}`;
         if (pullInfo && !pullInfo.upToDate) {
           if (pullInfo.filesChanged != null) {
             msg += ` — pulled ${pullInfo.filesChanged} file${pullInfo.filesChanged !== 1 ? 's' : ''} changed`;

@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
 import { FiAlertCircle } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
 
@@ -10,12 +9,27 @@ import UserMessage from './chat/UserMessage';
 import AgentMessage from './chat/AgentMessage';
 import ChatInput from './chat/ChatInput';
 import ChatEmptyState from './chat/ChatEmptyState';
+import chatCompleteSound from '../../assets/sounds/chat-complete.mp3';
 
 let streamIdCounter = 0;
 
+// Singleton audio for chat-complete sound
+let _chatCompleteAudio = null;
+function playChatCompleteSound() {
+  try {
+    if (!_chatCompleteAudio) {
+      _chatCompleteAudio = new Audio(chatCompleteSound);
+      _chatCompleteAudio.volume = 0.45;
+    }
+    _chatCompleteAudio.currentTime = 0;
+    _chatCompleteAudio.play().catch(() => {});
+  } catch {
+    // silent fallback
+  }
+}
+
 // ---- Main ChatPanel Component ---- //
-export default function ChatPanel({ visible = true, width, onWidthChange, onOpenSettings, projectPath, onSplit, onClosePanel, panelCount = 1, isMultiPanel = false, startFresh = false }) {
-  const [isResizing, setIsResizing] = useState(false);
+export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClosePanel, panelCount = 1, startFresh = false }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [images, setImages] = useState([]);
@@ -30,6 +44,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const cleanupRef = useRef([]);
+  const lastUserMsgRef = useRef('');
 
   // ---- Thread state ---- //
   const [threads, setThreads] = useState([]);
@@ -74,6 +89,13 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     }).catch(err => {
       console.error('[Chat] Save chain error:', err);
     });
+  }, []);
+
+  // Request notification permission on mount
+  useEffect(() => {
+    if (Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
   }, []);
 
   // ---- Load threads on mount / when projectPath changes ---- //
@@ -378,6 +400,13 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
 
     const cleanupEnd = window.foundry?.onClaudeStreamEnd((streamId) => {
       if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) return;
+      playChatCompleteSound();
+      // Native OS notification when window is not focused
+      if (!document.hasFocus() && Notification.permission === 'granted') {
+        const userPrompt = lastUserMsgRef.current;
+        const body = userPrompt ? (userPrompt.length > 80 ? userPrompt.slice(0, 80) + '…' : userPrompt) : 'Response complete';
+        new Notification('Sage is done', { body, silent: true });
+      }
       setIsStreaming(false);
       setStreamId(null);
       const blocks = blocksRef.current.map(b => ({ ...b, streaming: false }));
@@ -453,6 +482,8 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
         setThreads(prev => prev.map(t => t.id === threadId ? { ...t, title } : t));
       } catch { /* silent */ }
     }
+
+    lastUserMsgRef.current = input.trim();
 
     // Capture current images and clear state
     const attachedImages = [...images];
@@ -601,29 +632,6 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
     }
   };
 
-  // ---- Resize ---- //
-  const handleResizeStart = useCallback((e) => {
-    e.preventDefault();
-    setIsResizing(true);
-    const startX = e.clientX;
-    const startWidth = width;
-    const handleMouseMove = (e) => {
-      const newWidth = Math.max(280, Math.min(600, startWidth - (e.clientX - startX)));
-      onWidthChange(newWidth);
-    };
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [width, onWidthChange]);
-
   // ---- Derived ---- //
   const currentThread = threads.find(t => t.id === currentThreadId);
   const currentThreadTitle = currentThread?.title || 'New Chat';
@@ -634,22 +642,7 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
   }, []);
 
   return (
-    <motion.div
-      className={`${styles.panel} ${isMultiPanel ? styles.panelMulti : ''}`}
-      style={{
-        width: isMultiPanel ? undefined : (isResizing ? width : undefined),
-        flex: isMultiPanel ? 1 : undefined,
-        pointerEvents: visible ? 'auto' : 'none',
-      }}
-      initial={false}
-      animate={isMultiPanel
-        ? { opacity: 1 }
-        : { width: visible ? width : 0, opacity: visible ? 1 : 0 }
-      }
-      transition={isResizing ? { duration: 0 } : { duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
-    >
-      {!isMultiPanel && <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />}
-
+    <div className={styles.panel}>
       <ChatHeader
         threads={threads}
         currentThreadId={currentThreadId}
@@ -710,6 +703,6 @@ export default function ChatPanel({ visible = true, width, onWidthChange, onOpen
         onModelSwitch={handleModelSwitch}
         modelSwitcherRef={modelSwitcherRef}
       />
-    </motion.div>
+    </div>
   );
 }

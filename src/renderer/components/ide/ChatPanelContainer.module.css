@@ -1,4 +1,6 @@
-/* ---- Multi-Panel Chat Container ---- */
+/* ---- Chat Panel Container ---- */
+/* Always a real DOM element — owns all width/resize logic.
+   ChatPanel children fill via flex:1. */
 .container {
   flex-shrink: 0;
   display: flex;
@@ -9,7 +11,7 @@
   background: var(--surface-1);
 }
 
-/* ---- Resize Handle (left edge of entire container) ---- */
+/* ---- Resize Handle (left edge) ---- */
 .resizeHandle {
   position: absolute;
   top: 0;
