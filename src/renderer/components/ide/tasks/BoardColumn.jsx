@@ -18,10 +18,11 @@ export default function BoardColumn({
   onDeleteTask,
 }) {
   const colTasks = tasks.filter(t => t.status === column.id);
+  const isDragTarget = dragOverCol === column.id;
 
   return (
     <div
-      className={`${styles.column} ${dragOverCol === column.id ? styles.columnDragOver : ''}`}
+      className={`${styles.column} ${isDragTarget ? styles.columnDragOver : ''}`}
       onDragOver={(e) => onDragOver(e, column.id)}
       onDragLeave={onDragLeave}
       onDrop={(e) => onDrop(e, column.id)}
@@ -32,9 +33,6 @@ export default function BoardColumn({
           <span className={styles.columnTitle}>{column.name}</span>
           <span className={styles.columnCount}>{colTasks.length}</span>
         </div>
-        <button className={styles.columnAddBtn} onClick={() => onAddTask(column.id)} title="Add task">
-          <FiPlus size={14} />
-        </button>
       </div>
 
       <div className={styles.cards}>
@@ -51,7 +49,14 @@ export default function BoardColumn({
         ))}
 
         {colTasks.length === 0 && (
-          <div className={styles.cardsEmpty}>No tasks</div>
+          <div className={styles.emptyColumn} onClick={() => onAddTask(column.id)} role="button" tabIndex={0}>
+            <div className={styles.emptyColumnInner}>
+              <div className={styles.emptyColumnIcon}>
+                <FiPlus size={16} />
+              </div>
+              <span className={styles.emptyColumnText}>No tasks yet</span>
+            </div>
+          </div>
         )}
       </div>
     </div>

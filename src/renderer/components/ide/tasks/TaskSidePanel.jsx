@@ -2,10 +2,16 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Image from '@tiptap/extension-image';
-import { FiX, FiImage, FiBold, FiItalic, FiList, FiCode } from 'react-icons/fi';
+import { FiX, FiImage, FiBold, FiItalic, FiList, FiCode, FiCheck } from 'react-icons/fi';
 import { PRIORITIES, COLORS } from './constants';
-import { priorityClass } from './utils';
 import styles from '../TasksPage.module.css';
+
+const PRIORITY_CONFIG = {
+  low: { label: 'Low', color: '#34d399' },
+  medium: { label: 'Medium', color: '#fbbf24' },
+  high: { label: 'High', color: '#f87171' },
+  urgent: { label: 'Urgent', color: '#f43f5e' },
+};
 
 function EditorToolbar({ editor }) {
   if (!editor) return null;
@@ -115,7 +121,7 @@ export default function TaskSidePanel({
 
   useEffect(() => {
     if (isNew && titleRef.current) {
-      titleRef.current.focus();
+      setTimeout(() => titleRef.current?.focus(), 100);
     }
   }, [isNew]);
 
@@ -143,11 +149,11 @@ export default function TaskSidePanel({
       </div>
 
       <div className={styles.sidePanelBody}>
-        <div className={styles.modalField}>
-          <label className={styles.modalLabel}>Title</label>
+        {/* Title */}
+        <div className={styles.panelSection}>
           <input
             ref={titleRef}
-            className={styles.modalInput}
+            className={styles.panelTitleInput}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Task title..."
@@ -155,43 +161,59 @@ export default function TaskSidePanel({
           />
         </div>
 
-        <div className={styles.modalField}>
-          <label className={styles.modalLabel}>Description</label>
+        {/* Description Editor */}
+        <div className={styles.panelSection}>
+          <label className={styles.panelLabel}>Description</label>
           <EditorToolbar editor={editor} />
           <div className={styles.editorWrapper}>
             <EditorContent editor={editor} />
           </div>
         </div>
 
-        <div className={styles.modalRow}>
-          <div className={styles.modalField} style={{ flex: 1 }}>
-            <label className={styles.modalLabel}>Status</label>
-            <select
-              className={styles.modalSelect}
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-            >
+        {/* Status & Priority side by side */}
+        <div className={styles.panelRow}>
+          <div className={styles.panelSection} style={{ flex: 1 }}>
+            <label className={styles.panelLabel}>Status</label>
+            <div className={styles.statusPicker}>
               {columns.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <button
+                  key={c.id}
+                  className={`${styles.statusOption} ${status === c.id ? styles.statusOptionActive : ''}`}
+                  onClick={() => setStatus(c.id)}
+                  style={status === c.id ? { borderColor: c.color, background: `${c.color}15` } : {}}
+                >
+                  <span className={styles.statusDot} style={{ background: c.color }} />
+                  {c.name}
+                </button>
               ))}
-            </select>
-          </div>
-          <div className={styles.modalField} style={{ flex: 1 }}>
-            <label className={styles.modalLabel}>Priority</label>
-            <select
-              className={styles.modalSelect}
-              value={priority}
-              onChange={(e) => setPriority(e.target.value)}
-            >
-              {PRIORITIES.map(p => (
-                <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-              ))}
-            </select>
+            </div>
           </div>
         </div>
 
-        <div className={styles.modalField}>
-          <label className={styles.modalLabel}>Color Label</label>
+        <div className={styles.panelSection}>
+          <label className={styles.panelLabel}>Priority</label>
+          <div className={styles.priorityPicker}>
+            {PRIORITIES.map(p => {
+              const cfg = PRIORITY_CONFIG[p];
+              const isActive = priority === p;
+              return (
+                <button
+                  key={p}
+                  className={`${styles.priorityOption} ${isActive ? styles.priorityOptionActive : ''}`}
+                  onClick={() => setPriority(p)}
+                  style={isActive ? { borderColor: cfg.color, background: `${cfg.color}15` } : {}}
+                >
+                  <span className={styles.priorityDotLg} style={{ background: cfg.color }} />
+                  {cfg.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Color Label */}
+        <div className={styles.panelSection}>
+          <label className={styles.panelLabel}>Color Label</label>
           <div className={styles.colorPicker}>
             <button
               className={`${styles.colorSwatch} ${styles.colorSwatchNone} ${color === null ? styles.colorSwatchActive : ''}`}
@@ -206,15 +228,18 @@ export default function TaskSidePanel({
                 className={`${styles.colorSwatch} ${color === c ? styles.colorSwatchActive : ''}`}
                 style={{ background: c }}
                 onClick={() => setColor(c)}
-              />
+              >
+                {color === c && <FiCheck size={10} style={{ color: '#fff' }} />}
+              </button>
             ))}
           </div>
         </div>
       </div>
 
       <div className={styles.sidePanelFooter}>
-        <button className={styles.modalCancelBtn} onClick={onClose}>Cancel</button>
-        <button className={styles.modalSaveBtn} onClick={handleSave}>
+        <button className={styles.panelCancelBtn} onClick={onClose}>Cancel</button>
+        <button className={styles.panelSaveBtn} onClick={handleSave}>
+          <FiCheck size={14} />
           {isNew ? 'Create Task' : 'Save Changes'}
         </button>
       </div>

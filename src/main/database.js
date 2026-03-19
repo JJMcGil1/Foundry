@@ -194,7 +194,6 @@ async function initDatabase() {
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, position)`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_workspace ON tasks(workspace_path, status)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_board ON tasks(board_id, status, position)`);
 
   // ---- Migration: add board_id to tasks if missing ---- //
   try {
@@ -204,7 +203,16 @@ async function initDatabase() {
       db.run("ALTER TABLE tasks ADD COLUMN board_id TEXT");
       console.log('[Foundry DB] Migrated: added board_id column to tasks');
     }
-  } catch (e) { /* column already exists */ }
+  } catch (e) {
+    console.warn('[Foundry DB] board_id migration note:', e.message);
+  }
+
+  // Create board index after migration ensures column exists
+  try {
+    db.run(`CREATE INDEX IF NOT EXISTS idx_tasks_board ON tasks(board_id, status, position)`);
+  } catch (e) {
+    console.warn('[Foundry DB] board index note:', e.message);
+  }
 
   // ---- Ensure default board exists for each workspace ---- //
   _ensureDefaultBoards();
