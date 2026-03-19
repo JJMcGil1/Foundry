@@ -4,11 +4,17 @@
 .pill {
   display: flex;
   align-items: stretch;
-  background: var(--surface-1);
-  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-  overflow: visible;
-  height: 30px;
+  overflow: hidden;
+  height: 28px;
+  gap: 0;
+}
+
+:global([data-theme="light"]) .pill {
+  background: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.18);
 }
 
 /* ── Shared segment button ── */
@@ -16,39 +22,64 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 0 10px;
   background: transparent;
   border: none;
-  color: var(--zinc-300);
+  border-radius: 0;
+  color: var(--zinc-400);
   font-size: 12px;
   font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
   outline: none;
   white-space: nowrap;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
+  letter-spacing: 0.01em;
 }
 
 .segment:hover {
-  background: var(--surface-2);
-  color: var(--zinc-100);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--zinc-200);
 }
 
 .segment:active {
-  background: var(--surface-3);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .segmentOpen {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.08);
   color: var(--zinc-100);
+}
+
+:global([data-theme="light"]) .segment {
+  color: var(--zinc-500);
+}
+
+:global([data-theme="light"]) .segment:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--zinc-700);
+}
+
+:global([data-theme="light"]) .segment:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:global([data-theme="light"]) .segmentOpen {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--zinc-800);
 }
 
 .segmentDivider {
   width: 1px;
   align-self: stretch;
-  background: var(--border);
+  margin: 6px 0;
+  background: rgba(255, 255, 255, 0.08);
   flex-shrink: 0;
+}
+
+:global([data-theme="light"]) .segmentDivider {
+  background: rgba(0, 0, 0, 0.16);
 }
 
 .segmentIcon {
@@ -56,6 +87,15 @@
   align-items: center;
   color: var(--zinc-500);
   flex-shrink: 0;
+  transition: color 0.18s ease;
+}
+
+.segment:hover .segmentIcon {
+  color: var(--zinc-300);
+}
+
+:global([data-theme="light"]) .segment:hover .segmentIcon {
+  color: var(--zinc-600);
 }
 
 .segmentName {
@@ -68,30 +108,44 @@
 .segmentChevron {
   display: flex;
   align-items: center;
-  color: var(--zinc-500);
+  color: var(--zinc-600);
   flex-shrink: 0;
+  transition: color 0.18s ease;
 }
 
-/* ── Sync icon (compact, inside branch segment) ── */
+.segment:hover .segmentChevron {
+  color: var(--zinc-400);
+}
+
+:global([data-theme="light"]) .segmentChevron {
+  color: var(--zinc-400);
+}
+
+/* ── Sync icon (compact, standalone) ── */
 .syncIcon {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
+  width: 28px;
+  height: 28px;
   background: transparent;
   border: none;
-  color: var(--zinc-400);
+  border-radius: 0;
+  color: var(--zinc-500);
   cursor: pointer;
   outline: none;
-  transition: color 0.15s ease, background 0.15s ease;
-  border-radius: 0 7px 7px 0;
+  transition: background 0.15s ease, color 0.15s ease;
   flex-shrink: 0;
 }
 
 .syncIcon:hover {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.06);
   color: var(--zinc-200);
+}
+
+.syncIcon:active {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .syncIcon:disabled {
@@ -100,6 +154,15 @@
 
 .syncIconActive {
   color: var(--zinc-300);
+}
+
+:global([data-theme="light"]) .syncIcon {
+  color: var(--zinc-400);
+}
+
+:global([data-theme="light"]) .syncIcon:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--zinc-700);
 }
 
 /* syncSpinning handled by framer-motion in JSX */
@@ -158,14 +221,56 @@
   width: 320px;
   max-height: 400px;
   background: var(--surface-1);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card, var(--border));
   border-radius: 10px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.07),
+    0 4px 8px rgba(0, 0, 0, 0.05),
+    0 12px 28px rgba(0, 0, 0, 0.09);
   z-index: 200;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   transform-origin: top left;
+}
+
+/* Light mode — darker surface, layered shadow */
+:global([data-theme="light"]) .dropdown {
+  background: #E8E8EB;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 8px 20px rgba(0, 0, 0, 0.10),
+    0 20px 44px -8px rgba(0, 0, 0, 0.13);
+}
+
+:global([data-theme="light"]) .searchInput {
+  color: var(--zinc-800, #27272a);
+}
+
+:global([data-theme="light"]) .searchInput::placeholder {
+  color: var(--zinc-500, #71717a);
+}
+
+:global([data-theme="light"]) .createInput {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: var(--zinc-800, #27272a);
+}
+
+:global([data-theme="light"]) .item,
+:global([data-theme="light"]) .branchItem {
+  color: var(--zinc-700, #3f3f46);
+}
+
+:global([data-theme="light"]) .itemName,
+:global([data-theme="light"]) .branchItemName {
+  color: var(--zinc-800, #27272a);
+}
+
+:global([data-theme="light"]) .sectionLabel {
+  color: var(--zinc-500, #71717a);
 }
 
 /* ── Search row (shared by both dropdowns) ── */

@@ -93,9 +93,9 @@
 }
 
 .optionBtnActive {
-  color: var(--accent);
-  border-color: var(--accent-dim);
-  background: var(--accent-glow);
+  color: var(--primary);
+  border-color: var(--primary);
+  background: rgba(249, 115, 22, 0.1);
 }
 
 /* ---- Overlay / Dropdown ---- */
@@ -113,26 +113,56 @@
   transform: translateX(-50%);
   z-index: 1000;
   width: 560px;
-  max-height: 420px;
+  max-height: 480px;
   background: var(--surface-1);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.07),
+    0 4px 8px rgba(0, 0, 0, 0.05),
+    0 12px 28px rgba(0, 0, 0, 0.09);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: dropdownIn 0.12s ease;
+  animation: dropdownIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Light mode — darker dropdown, warmer shadow */
+:global([data-theme="light"]) .dropdown {
+  background: #E8E8EB;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 2px 4px rgba(0, 0, 0, 0.06),
+    0 8px 20px rgba(0, 0, 0, 0.10),
+    0 20px 44px -8px rgba(0, 0, 0, 0.13);
 }
 
 @keyframes dropdownIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-6px);
+    transform: translateX(-50%) translateY(-8px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0);
+    transform: translateX(-50%) translateY(0) scale(1);
   }
+}
+
+@keyframes dropdownOut {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-8px) scale(0.97);
+  }
+}
+
+.dropdownClosing {
+  animation: dropdownOut 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
 }
 
 /* ---- Tabs ---- */
@@ -172,8 +202,38 @@
   left: 20%;
   right: 20%;
   height: 2px;
-  background: var(--accent);
+  background: var(--primary);
   border-radius: 1px;
+}
+
+/* ---- Filters row (include/exclude) ---- */
+.filtersRow {
+  display: flex;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.filterField {
+  flex: 1;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  color: var(--zinc-200);
+  font-size: 11.5px;
+  font-family: var(--font-sans);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.filterField:focus {
+  border-color: var(--primary);
+}
+
+.filterField::placeholder {
+  color: var(--zinc-600);
 }
 
 /* ---- Replace area inside dropdown ---- */
@@ -208,7 +268,7 @@
 }
 
 .replaceField:focus {
-  border-color: var(--accent-dim);
+  border-color: var(--primary);
 }
 
 .replaceField::placeholder {
@@ -217,7 +277,7 @@
 
 .replaceBtn {
   padding: 6px 12px;
-  background: var(--accent-dim);
+  background: var(--primary);
   color: #fff;
   border: none;
   border-radius: var(--radius-sm);
@@ -230,12 +290,75 @@
 }
 
 .replaceBtn:hover {
-  background: var(--accent);
+  background: var(--primary-hover);
 }
 
 .replaceBtn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* ---- Toolbar row (collapse all, clear, etc.) ---- */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.toolbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.toolbarBtn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--zinc-500);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.toolbarBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.toolbarInfo {
+  font-size: 11px;
+  color: var(--zinc-500);
+}
+
+.toggleFiltersBtn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--zinc-500);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.toggleFiltersBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.toggleFiltersBtnActive {
+  color: var(--primary);
 }
 
 /* ---- Results ---- */
@@ -297,10 +420,11 @@
 .resultMatchCount {
   flex-shrink: 0;
   font-size: 10px;
-  color: var(--zinc-500);
-  background: var(--surface-3);
+  color: var(--primary);
+  background: rgba(249, 115, 22, 0.1);
   padding: 2px 7px;
   border-radius: 10px;
+  font-weight: 500;
 }
 
 /* Content search file group */
@@ -322,6 +446,37 @@
 
 .fileGroupHeader:hover {
   background: var(--surface-2);
+}
+
+.fileGroupActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.fileGroupHeader:hover .fileGroupActions {
+  opacity: 1;
+}
+
+.fileGroupBtn {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--zinc-500);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.fileGroupBtn:hover {
+  color: var(--zinc-200);
+  background: var(--surface-3);
 }
 
 .matchLine {
@@ -355,6 +510,18 @@
   flex: 1;
 }
 
+.matchLineActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.matchLine:hover .matchLineActions {
+  opacity: 1;
+}
+
 /* ---- Status / empty ---- */
 .emptyState {
   display: flex;
@@ -383,10 +550,11 @@
 }
 
 .highlight {
-  background: rgba(167, 139, 250, 0.3);
+  background: rgba(249, 115, 22, 0.25);
   color: var(--zinc-100);
   border-radius: 2px;
   padding: 0 1px;
+  border-bottom: 1.5px solid var(--primary);
 }
 
 .replaceConfirm {
@@ -444,11 +612,97 @@
   width: 14px;
   height: 14px;
   border: 2px solid var(--zinc-700);
-  border-top-color: var(--accent);
+  border-top-color: var(--primary);
   border-radius: 50%;
   animation: spin 0.6s linear infinite;
 }
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+/* ---- Preserve case button ---- */
+.preserveCaseBtn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--zinc-600);
+  font-size: 10px;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.preserveCaseBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+.preserveCaseBtnActive {
+  color: var(--primary);
+  border-color: var(--primary);
+  background: rgba(249, 115, 22, 0.1);
+}
+
+/* ---- Light mode refinements for darker dropdown ---- */
+:global([data-theme="light"]) .tabs {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme="light"]) .tab:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme="light"]) .filterField {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme="light"]) .replaceField {
+  background: rgba(255, 255, 255, 0.5);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme="light"]) .toolbar {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme="light"]) .resultItem:hover,
+:global([data-theme="light"]) .resultItemActive {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme="light"]) .fileGroupHeader:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+:global([data-theme="light"]) .matchLine:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:global([data-theme="light"]) .fileGroup {
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+:global([data-theme="light"]) .replaceArea {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme="light"]) .filtersRow {
+  border-bottom-color: rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme="light"]) .statusBar {
+  border-top-color: rgba(0, 0, 0, 0.08);
+}
+
+:global([data-theme="light"]) .resultItem {
+  border-bottom-color: rgba(0, 0, 0, 0.05);
 }

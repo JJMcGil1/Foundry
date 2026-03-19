@@ -174,10 +174,14 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   }, []);
 
+  // Auto-resize whenever commitMsg changes (covers AI generation + typing)
+  useEffect(() => {
+    autoResize(commitInputRef.current);
+  }, [commitMsg, autoResize]);
+
   const handleCommitMsgChange = useCallback((e) => {
     setCommitMsg(e.target.value);
-    autoResize(e.target);
-  }, [autoResize]);
+  }, []);
 
   // AI commit message generation from diff
   const handleGenerateCommitMsg = async () => {
@@ -187,8 +191,6 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       const result = await window.foundry?.gitGenerateCommitMsg(projectPath);
       if (result && !result.error) {
         setCommitMsg(result.message);
-        // Trigger auto-resize after setting message
-        setTimeout(() => autoResize(commitInputRef.current), 0);
       }
     } catch (err) {
       console.error('AI commit message generation failed:', err);
@@ -369,12 +371,34 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleCommit(); } }}
             rows={2}
           />
+          <AnimatePresence mode="wait">
+            {aiLoading && (
+              <motion.div
+                className={styles.aiLoadingOverlay}
+                initial={{ opacity: 0, scale: 0.97, filter: 'blur(4px)' }}
+                animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
+                exit={{ opacity: 0, scale: 1.01, filter: 'blur(2px)' }}
+                transition={{
+                  enter: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] },
+                  exit: { duration: 0.3, ease: [0.55, 0, 1, 0.45] },
+                  default: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] },
+                }}
+              >
+                <div className={styles.aiLoadingDots}>
+                  <div className={styles.aiLoadingDot} />
+                  <div className={styles.aiLoadingDot} />
+                  <div className={styles.aiLoadingDot} />
+                </div>
+                <span>Generating…</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
           <button
             className={`${styles.aiBtn} ${aiLoading ? styles.aiBtnLoading : ''}`}
             onClick={handleGenerateCommitMsg}
             disabled={aiLoading}
           >
-            <IoSparkles size={13} className={aiLoading ? styles.spinning : ''} />
+            <IoSparkles size={13} />
           </button>
         </div>
         <button

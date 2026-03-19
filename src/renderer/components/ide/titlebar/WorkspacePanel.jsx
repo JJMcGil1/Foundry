@@ -71,10 +71,10 @@ export default function WorkspacePanel({ isOpen, onClose, dropdownPos, currentPr
           <motion.div
             className={styles.dropdown}
             style={{ top: dropdownPos.top, left: dropdownPos.left }}
-            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            initial={{ opacity: 0, scale: 0.98, y: -6 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -4 }}
-            transition={{ duration: 0.15, ease: [0.25, 0.1, 0.25, 1] }}
+            exit={{ opacity: 0, scale: 0.98, y: -6 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className={styles.search}>
               <FiSearch size={13} className={styles.searchIcon} />

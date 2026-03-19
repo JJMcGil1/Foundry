@@ -208,14 +208,6 @@ const ChatInput = forwardRef(function ChatInput({
         />
         <div className={styles.inputToolbar}>
           <div className={styles.toolbarLeft}>
-            <button
-              className={styles.attachBtn}
-              onClick={handleAttachClick}
-              title="Attach images"
-              disabled={hasProvider === false}
-            >
-              <FiPaperclip size={14} />
-            </button>
             <div className={styles.modelSwitcher} ref={modelSwitcherRef}>
               <button
                 className={styles.modelBadge}
@@ -256,6 +248,14 @@ const ChatInput = forwardRef(function ChatInput({
             </div>
           </div>
           <div className={styles.toolbarRight}>
+            <button
+              className={styles.attachBtn}
+              onClick={handleAttachClick}
+              title="Attach images"
+              disabled={hasProvider === false}
+            >
+              <FiPaperclip size={14} />
+            </button>
             {isStreaming ? (
               <button className={styles.stopBtn} onClick={onStop} title="Stop generating">
                 <FiSquare size={12} />
@@ -266,7 +266,7 @@ const ChatInput = forwardRef(function ChatInput({
                 onClick={onSend}
                 disabled={!hasContent || hasProvider === false}
               >
-                <SendIcon size={28} active={!!hasContent} />
+                <SendIcon size={30} active={!!hasContent} />
               </button>
             )}
           </div>

@@ -48,7 +48,7 @@ export default function ProjectControls({
     if (wsOpen) setWsOpen(false);
     if (!branchOpen && pillRef.current) {
       const pillRect = pillRef.current.getBoundingClientRect();
-      setBranchDropdownPos({ top: pillRect.bottom + 6, left: Math.max(8, pillRect.right - 320) });
+      setBranchDropdownPos({ top: pillRect.bottom + 6, left: pillRect.left });
     }
     setBranchOpen(v => !v);
   };
@@ -114,7 +114,6 @@ export default function ProjectControls({
           ref={wsRef}
           className={`${styles.segment} ${wsOpen ? styles.segmentOpen : ''}`}
           onClick={openWorkspaceDropdown}
-          style={{ borderRadius: !isRepo ? '7px' : '7px 0 0 7px' }}
         >
           <span className={styles.segmentIcon}><FiFolder size={13} /></span>
           <span className={styles.segmentName}>{displayName}</span>
@@ -135,7 +134,6 @@ export default function ProjectControls({
               ref={branchRef}
               className={`${styles.segment} ${branchOpen ? styles.segmentOpen : ''}`}
               onClick={openBranchDropdown}
-              style={{ paddingRight: '6px' }}
             >
               <span className={styles.segmentIcon}><FiGitBranch size={12} /></span>
               <span className={styles.segmentName}>{gitStatus.branch || 'HEAD'}</span>

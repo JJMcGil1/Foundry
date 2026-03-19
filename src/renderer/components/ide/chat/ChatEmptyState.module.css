@@ -4,12 +4,58 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 32px 20px;
-  text-align: center;
+  padding: 48px 24px;
   flex: 1;
+  gap: 32px;
 }
 
-/* ---- Shared Card ---- */
+/* ---- Hero Section ---- */
+.heroSection {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.sageIcon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(249, 115, 22, 0.08);
+  border: 1px solid rgba(249, 115, 22, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.greeting {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--zinc-100);
+  margin: 0;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--zinc-500);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ---- Sage Badge ---- */
+.sageBadge {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--primary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin: 8px 0 0;
+  opacity: 0.5;
+}
+
+/* ---- Shared Card (Provider CTA) ---- */
 .emptyCard {
   display: flex;
   flex-direction: column;
@@ -34,13 +80,6 @@
   gap: 6px;
   padding: 28px 24px 20px;
   width: 100%;
-}
-
-.emptyGreetingIcon {
-  font-size: 24px;
-  color: var(--zinc-500);
-  line-height: 1;
-  margin-bottom: 4px;
 }
 
 .emptyCardIcon {
@@ -68,58 +107,7 @@
   color: var(--zinc-500);
   line-height: 1.5;
   margin: 0;
-}
-
-/* ---- Quick Prompts ---- */
-.quickPrompts {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  border-top: 1px solid var(--border);
-}
-
-.quickPromptBtn {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  width: 100%;
-  padding: 11px 16px;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  color: var(--zinc-400);
-  cursor: pointer;
-  transition: all 0.12s ease;
-  text-align: left;
-}
-
-.quickPromptBtn:last-child {
-  border-bottom: none;
-}
-
-.quickPromptBtn:hover {
-  background: var(--surface-3);
-  color: var(--zinc-200);
-}
-
-.quickPromptLabel {
-  flex: 1;
-}
-
-.quickPromptArrow {
-  flex-shrink: 0;
-  opacity: 0;
-  transform: translateX(-4px);
-  transition: all 0.15s ease;
-  color: var(--zinc-500);
-}
-
-.quickPromptBtn:hover .quickPromptArrow {
-  opacity: 1;
-  transform: translateX(0);
+  text-align: center;
 }
 
 /* ---- Provider CTA Button ---- */

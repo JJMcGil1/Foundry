@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { FiSearch, FiFile, FiChevronRight } from 'react-icons/fi';
+import {
+  FiSearch, FiFile, FiChevronRight, FiChevronDown,
+  FiX, FiFilter, FiMinimize2, FiMaximize2,
+} from 'react-icons/fi';
 import styles from '../SearchBar.module.css';
 
 const TABS = [
@@ -16,6 +19,12 @@ export default function SearchBar({ projectPath, onOpenFile }) {
   const [caseSensitive, setCaseSensitive] = useState(false);
   const [wholeWord, setWholeWord] = useState(false);
   const [isRegex, setIsRegex] = useState(false);
+  const [preserveCase, setPreserveCase] = useState(false);
+
+  // Include/exclude filters
+  const [showFilters, setShowFilters] = useState(false);
+  const [includePattern, setIncludePattern] = useState('');
+  const [excludePattern, setExcludePattern] = useState('');
 
   const [fileResults, setFileResults] = useState([]);
   const [contentResults, setContentResults] = useState([]);
@@ -24,21 +33,38 @@ export default function SearchBar({ projectPath, onOpenFile }) {
   const [expandedFiles, setExpandedFiles] = useState(new Set());
   const [replaceConfirm, setReplaceConfirm] = useState(false);
   const [replaceResult, setReplaceResult] = useState(null);
+  const [dismissedFiles, setDismissedFiles] = useState(new Set());
+  const [closing, setClosing] = useState(false);
 
   const inputRef = useRef(null);
   const replaceInputRef = useRef(null);
   const debounceRef = useRef(null);
+  const containerRef = useRef(null);
+  const closingTimerRef = useRef(null);
 
   const close = useCallback(() => {
-    setOpen(false);
-    setQuery('');
-    setReplaceText('');
-    setFileResults([]);
-    setContentResults([]);
-    setActiveIndex(0);
-    setExpandedFiles(new Set());
-    setReplaceConfirm(false);
-    setReplaceResult(null);
+    if (!open || closing) return;
+    setClosing(true);
+    closingTimerRef.current = setTimeout(() => {
+      setOpen(false);
+      setClosing(false);
+      setQuery('');
+      setReplaceText('');
+      setFileResults([]);
+      setContentResults([]);
+      setActiveIndex(0);
+      setExpandedFiles(new Set());
+      setReplaceConfirm(false);
+      setReplaceResult(null);
+      setDismissedFiles(new Set());
+    }, 180);
+  }, [open, closing]);
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (closingTimerRef.current) clearTimeout(closingTimerRef.current);
+    };
   }, []);
 
   // Keyboard shortcuts
@@ -70,7 +96,18 @@ export default function SearchBar({ projectPath, onOpenFile }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [close]);
 
-  // When input gets typed into and dropdown isn't open, open it
+  // Close on click outside
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        close();
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown, true);
+    return () => document.removeEventListener('mousedown', handleMouseDown, true);
+  }, [open, close]);
+
   const handleInputChange = (e) => {
     const val = e.target.value;
     setQuery(val);
@@ -81,9 +118,8 @@ export default function SearchBar({ projectPath, onOpenFile }) {
     }
   };
 
-  // When input is focused, open dropdown
   const handleInputFocus = () => {
-    if (query.trim()) setOpen(true);
+    setOpen(true);
   };
 
   // Debounced search
@@ -98,6 +134,7 @@ export default function SearchBar({ projectPath, onOpenFile }) {
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
+      setDismissedFiles(new Set());
       try {
         if (activeTabId === 'files') {
           const results = await window.foundry?.searchFiles(projectPath, query);
@@ -108,10 +145,12 @@ export default function SearchBar({ projectPath, onOpenFile }) {
             caseSensitive,
             wholeWord,
             isRegex,
+            includePattern: includePattern.trim() || undefined,
+            excludePattern: excludePattern.trim() || undefined,
           });
           setContentResults(results || []);
           const expanded = new Set();
-          (results || []).slice(0, 3).forEach(r => expanded.add(r.path));
+          (results || []).slice(0, 5).forEach(r => expanded.add(r.path));
           setExpandedFiles(expanded);
           setActiveIndex(0);
         }
@@ -125,7 +164,7 @@ export default function SearchBar({ projectPath, onOpenFile }) {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [query, activeTabId, projectPath, caseSensitive, wholeWord, isRegex]);
+  }, [query, activeTabId, projectPath, caseSensitive, wholeWord, isRegex, includePattern, excludePattern]);
 
   // Reset results when switching tabs (keep query)
   useEffect(() => {
@@ -135,10 +174,20 @@ export default function SearchBar({ projectPath, onOpenFile }) {
     setExpandedFiles(new Set());
     setReplaceConfirm(false);
     setReplaceResult(null);
+    setDismissedFiles(new Set());
   }, [activeTabId]);
 
-  const handleSelectFile = useCallback((filePath) => {
-    if (onOpenFile) onOpenFile(filePath);
+  // Filter out dismissed files — must be before callbacks that reference it
+  const visibleContentResults = useMemo(() => {
+    return contentResults.filter(f => !dismissedFiles.has(f.path));
+  }, [contentResults, dismissedFiles]);
+
+  const totalMatches = useMemo(() => {
+    return visibleContentResults.reduce((sum, file) => sum + file.matches.length, 0);
+  }, [visibleContentResults]);
+
+  const handleSelectFile = useCallback((filePath, lineNumber) => {
+    if (onOpenFile) onOpenFile(filePath, lineNumber);
     close();
   }, [onOpenFile, close]);
 
@@ -159,9 +208,14 @@ export default function SearchBar({ projectPath, onOpenFile }) {
         handleSelectFile(fileResults[activeIndex].path);
       }
     } else if (e.key === 'Enter' && contentResults.length > 0) {
-      handleSelectFile(contentResults[0].path);
+      const visible = visibleContentResults;
+      if (visible.length > 0) {
+        const first = visible[0];
+        const line = first.matches?.[0]?.line;
+        handleSelectFile(first.path, line);
+      }
     }
-  }, [activeTabId, fileResults, contentResults, activeIndex, handleSelectFile, close]);
+  }, [activeTabId, fileResults, contentResults, visibleContentResults, activeIndex, handleSelectFile, close]);
 
   const toggleFileExpanded = (filePath) => {
     setExpandedFiles(prev => {
@@ -172,26 +226,78 @@ export default function SearchBar({ projectPath, onOpenFile }) {
     });
   };
 
+  const collapseAll = () => setExpandedFiles(new Set());
+
+  const expandAll = () => {
+    const all = new Set();
+    visibleContentResults.forEach(r => all.add(r.path));
+    setExpandedFiles(all);
+  };
+
+  const dismissFile = (filePath, e) => {
+    e.stopPropagation();
+    setDismissedFiles(prev => {
+      const next = new Set(prev);
+      next.add(filePath);
+      return next;
+    });
+  };
+
+  const handleReplaceInFile = async (filePath, e) => {
+    e.stopPropagation();
+    if (!projectPath || !query.trim()) return;
+    setLoading(true);
+    try {
+      await window.foundry?.replaceInFiles(projectPath, query, getReplacementText(), {
+        caseSensitive,
+        wholeWord,
+        isRegex,
+        filePaths: [filePath],
+      });
+      // Re-search to update results
+      const results = await window.foundry?.searchInFiles(projectPath, query, {
+        caseSensitive, wholeWord, isRegex,
+        includePattern: includePattern.trim() || undefined,
+        excludePattern: excludePattern.trim() || undefined,
+      });
+      setContentResults(results || []);
+    } catch (err) {
+      console.error('Replace in file error:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleReplaceAll = async () => {
     if (!projectPath || !query.trim()) return;
     setReplaceConfirm(true);
   };
 
+  const getReplacementText = useCallback(() => {
+    if (!preserveCase || !replaceText) return replaceText;
+    // Preserve case is handled per-match in the main process,
+    // for now just return the raw replacement text
+    return replaceText;
+  }, [preserveCase, replaceText]);
+
   const confirmReplace = async () => {
     setReplaceConfirm(false);
     setLoading(true);
     try {
-      const result = await window.foundry?.replaceInFiles(projectPath, query, replaceText, {
+      // Only replace in non-dismissed files
+      const filePaths = visibleContentResults.map(r => r.path);
+      const result = await window.foundry?.replaceInFiles(projectPath, query, getReplacementText(), {
         caseSensitive,
         wholeWord,
         isRegex,
+        filePaths: filePaths.length > 0 ? filePaths : undefined,
       });
       setReplaceResult(result);
       if (result?.success) {
         const results = await window.foundry?.searchInFiles(projectPath, query, {
-          caseSensitive,
-          wholeWord,
-          isRegex,
+          caseSensitive, wholeWord, isRegex,
+          includePattern: includePattern.trim() || undefined,
+          excludePattern: excludePattern.trim() || undefined,
         });
         setContentResults(results || []);
       }
@@ -201,10 +307,6 @@ export default function SearchBar({ projectPath, onOpenFile }) {
       setLoading(false);
     }
   };
-
-  const totalMatches = useMemo(() => {
-    return contentResults.reduce((sum, file) => sum + file.matches.length, 0);
-  }, [contentResults]);
 
   const highlightMatch = (text, searchQuery) => {
     if (!searchQuery.trim()) return text;
@@ -224,12 +326,12 @@ export default function SearchBar({ projectPath, onOpenFile }) {
   const isMac = navigator.platform?.includes('Mac');
   const modKey = isMac ? '\u2318' : 'Ctrl';
 
-  const hasResults = activeTabId === 'files' ? fileResults.length > 0 : contentResults.length > 0;
-  const showDropdown = open && (query.trim() || true); // always show when open
+  const showDropdown = open || closing;
+  const isContentTab = activeTabId === 'content' || activeTabId === 'replace';
 
   return (
-    <div className={styles.searchBarWrapper}>
-      {/* The titlebar input — this IS the search bar */}
+    <div className={styles.searchBarWrapper} ref={containerRef}>
+      {/* The titlebar input */}
       <div className={`${styles.searchInput} titlebar-no-drag`}>
         <FiSearch size={14} className={styles.searchInputIcon} />
         <input
@@ -242,26 +344,26 @@ export default function SearchBar({ projectPath, onOpenFile }) {
           onKeyDown={handleKeyNavigation}
           placeholder="Search workspace..."
         />
-        {(activeTabId === 'content' || activeTabId === 'replace') && open && (
+        {isContentTab && open && (
           <div className={styles.optionsRow}>
             <button
               className={`${styles.optionBtn} ${caseSensitive ? styles.optionBtnActive : ''}`}
               onClick={() => setCaseSensitive(v => !v)}
-              title="Match Case"
+              title="Match Case (Alt+C)"
             >
               Aa
             </button>
             <button
               className={`${styles.optionBtn} ${wholeWord ? styles.optionBtnActive : ''}`}
               onClick={() => setWholeWord(v => !v)}
-              title="Match Whole Word"
+              title="Match Whole Word (Alt+W)"
             >
               ab
             </button>
             <button
               className={`${styles.optionBtn} ${isRegex ? styles.optionBtnActive : ''}`}
               onClick={() => setIsRegex(v => !v)}
-              title="Use Regular Expression"
+              title="Use Regular Expression (Alt+R)"
             >
               .*
             </button>
@@ -272,11 +374,11 @@ export default function SearchBar({ projectPath, onOpenFile }) {
         )}
       </div>
 
-      {/* Dropdown — results only, no input */}
+      {/* Dropdown */}
       {showDropdown && (
         <>
           <div className={styles.overlay} onClick={close} />
-          <div className={styles.dropdown} onClick={(e) => e.stopPropagation()}>
+          <div className={`${styles.dropdown} ${closing ? styles.dropdownClosing : ''}`} onClick={(e) => e.stopPropagation()}>
             {/* Tabs */}
             <div className={styles.tabs}>
               {TABS.map(tab => (
@@ -290,7 +392,7 @@ export default function SearchBar({ projectPath, onOpenFile }) {
               ))}
             </div>
 
-            {/* Replace input row — only in replace tab */}
+            {/* Replace input row */}
             {activeTabId === 'replace' && (
               <div className={styles.replaceArea}>
                 <div className={styles.replaceRow}>
@@ -304,6 +406,13 @@ export default function SearchBar({ projectPath, onOpenFile }) {
                     placeholder="Replace with..."
                   />
                   <button
+                    className={`${styles.preserveCaseBtn} ${preserveCase ? styles.preserveCaseBtnActive : ''}`}
+                    onClick={() => setPreserveCase(v => !v)}
+                    title="Preserve Case"
+                  >
+                    AB
+                  </button>
+                  <button
                     className={styles.replaceBtn}
                     onClick={handleReplaceAll}
                     disabled={!query.trim() || !projectPath || loading}
@@ -311,6 +420,58 @@ export default function SearchBar({ projectPath, onOpenFile }) {
                     Replace All
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* Toolbar for content search */}
+            {isContentTab && query.trim() && !loading && visibleContentResults.length > 0 && (
+              <div className={styles.toolbar}>
+                <div className={styles.toolbarLeft}>
+                  <button
+                    className={styles.toolbarBtn}
+                    onClick={expandAll}
+                    title="Expand All"
+                  >
+                    <FiMaximize2 size={12} />
+                  </button>
+                  <button
+                    className={styles.toolbarBtn}
+                    onClick={collapseAll}
+                    title="Collapse All"
+                  >
+                    <FiMinimize2 size={12} />
+                  </button>
+                  <button
+                    className={`${styles.toggleFiltersBtn} ${showFilters ? styles.toggleFiltersBtnActive : ''}`}
+                    onClick={() => setShowFilters(v => !v)}
+                    title="Toggle File Filters"
+                  >
+                    <FiFilter size={12} />
+                  </button>
+                </div>
+                <span className={styles.toolbarInfo}>
+                  {totalMatches} result{totalMatches !== 1 ? 's' : ''} in {visibleContentResults.length} file{visibleContentResults.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+            )}
+
+            {/* Include/Exclude filters */}
+            {isContentTab && showFilters && (
+              <div className={styles.filtersRow}>
+                <input
+                  className={styles.filterField}
+                  type="text"
+                  value={includePattern}
+                  onChange={(e) => setIncludePattern(e.target.value)}
+                  placeholder="files to include (e.g. *.js, src/**)"
+                />
+                <input
+                  className={styles.filterField}
+                  type="text"
+                  value={excludePattern}
+                  onChange={(e) => setExcludePattern(e.target.value)}
+                  placeholder="files to exclude (e.g. *.min.js)"
+                />
               </div>
             )}
 
@@ -361,36 +522,53 @@ export default function SearchBar({ projectPath, onOpenFile }) {
               ))}
 
               {/* Content search results */}
-              {!loading && (activeTabId === 'content' || activeTabId === 'replace') && query.trim() && contentResults.length === 0 && (
+              {!loading && isContentTab && query.trim() && visibleContentResults.length === 0 && (
                 <div className={styles.emptyState}>
                   <span>No matches found</span>
                 </div>
               )}
 
-              {!loading && (activeTabId === 'content' || activeTabId === 'replace') && contentResults.map((file) => (
+              {!loading && isContentTab && visibleContentResults.map((file) => (
                 <div key={file.path} className={styles.fileGroup}>
                   <div
                     className={styles.fileGroupHeader}
                     onClick={() => toggleFileExpanded(file.path)}
                   >
-                    <FiChevronRight
-                      size={12}
-                      style={{
-                        transform: expandedFiles.has(file.path) ? 'rotate(90deg)' : 'none',
-                        transition: 'transform 0.15s ease',
-                      }}
-                    />
+                    {expandedFiles.has(file.path)
+                      ? <FiChevronDown size={12} />
+                      : <FiChevronRight size={12} />
+                    }
                     <FiFile size={13} className={styles.resultIcon} />
-                    <span style={{ flex: 1 }}>{file.relativePath}</span>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {file.relativePath}
+                    </span>
+                    <div className={styles.fileGroupActions}>
+                      {activeTabId === 'replace' && (
+                        <button
+                          className={styles.fileGroupBtn}
+                          onClick={(e) => handleReplaceInFile(file.path, e)}
+                          title="Replace all in this file"
+                        >
+                          <FiChevronRight size={12} />
+                        </button>
+                      )}
+                      <button
+                        className={styles.fileGroupBtn}
+                        onClick={(e) => dismissFile(file.path, e)}
+                        title="Dismiss"
+                      >
+                        <FiX size={12} />
+                      </button>
+                    </div>
                     <span className={styles.resultMatchCount}>
-                      {file.matches.length} match{file.matches.length !== 1 ? 'es' : ''}
+                      {file.matches.length}
                     </span>
                   </div>
                   {expandedFiles.has(file.path) && file.matches.map((match, mi) => (
                     <div
                       key={mi}
                       className={styles.matchLine}
-                      onClick={() => handleSelectFile(file.path)}
+                      onClick={() => handleSelectFile(file.path, match.line)}
                     >
                       <span className={styles.matchLineNumber}>{match.line}</span>
                       <span className={styles.matchLineText}>
@@ -406,7 +584,7 @@ export default function SearchBar({ projectPath, onOpenFile }) {
             {replaceConfirm && (
               <div className={styles.replaceConfirm}>
                 <span className={styles.replaceConfirmText}>
-                  Replace <strong>{totalMatches}</strong> occurrence{totalMatches !== 1 ? 's' : ''} across <strong>{contentResults.length}</strong> file{contentResults.length !== 1 ? 's' : ''}?
+                  Replace <strong>{totalMatches}</strong> occurrence{totalMatches !== 1 ? 's' : ''} across <strong>{visibleContentResults.length}</strong> file{visibleContentResults.length !== 1 ? 's' : ''}?
                 </span>
                 <button className={styles.replaceConfirmBtnCancel} onClick={() => setReplaceConfirm(false)}>
                   Cancel
@@ -436,7 +614,7 @@ export default function SearchBar({ projectPath, onOpenFile }) {
                 {activeTabId === 'files' ? (
                   <span>{fileResults.length} file{fileResults.length !== 1 ? 's' : ''} found</span>
                 ) : (
-                  <span>{totalMatches} match{totalMatches !== 1 ? 'es' : ''} in {contentResults.length} file{contentResults.length !== 1 ? 's' : ''}</span>
+                  <span>{totalMatches} match{totalMatches !== 1 ? 'es' : ''} in {visibleContentResults.length} file{visibleContentResults.length !== 1 ? 's' : ''}</span>
                 )}
                 <span style={{ fontSize: 10, color: 'var(--zinc-600)' }}>
                   Esc to close

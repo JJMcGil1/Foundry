@@ -6,6 +6,7 @@ import styles from '../ActivityBar.module.css';
 const panels = [
   { id: 'files',  icon: VscFiles,          label: 'Explorer' },
   { id: 'git',    icon: VscSourceControl,  label: 'Source Control' },
+  { id: 'tasks',  icon: MdTaskAlt,         label: 'Tasks', size: 22 },
 ];
 
 export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, showTasks, gitChangeCount = 0 }) {
@@ -19,8 +20,9 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
     <nav className={styles.bar}>
       <div className={styles.top}>
         {panels.map(p => {
-          const active = activePanel === p.id;
+          const active = p.id === 'tasks' ? showTasks : activePanel === p.id;
           const Icon = p.icon;
+          const iconSize = p.size || 24;
           return (
             <div key={p.id} className={styles.itemWrap}>
               <button
@@ -30,7 +32,7 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
                 onMouseLeave={() => setHoveredId(null)}
               >
                 <span className={p.id === 'git' ? styles.iconWrap : undefined}>
-                  <Icon size={24} />
+                  <Icon size={iconSize} />
                   {p.id === 'git' && gitChangeCount > 0 && (
                     <span className={styles.badge}>{gitChangeCount > 99 ? '99+' : gitChangeCount}</span>
                   )}
@@ -54,28 +56,6 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
 
       <div className={styles.bottom}>
         <div className={styles.divider} />
-
-        <div className={styles.itemWrap}>
-          <button
-            className={`${styles.item} ${showTasks ? styles.active : ''}`}
-            onClick={() => onPanelClick('tasks')}
-            onMouseEnter={() => setHoveredId('tasks')}
-            onMouseLeave={() => setHoveredId(null)}
-          >
-            <MdTaskAlt size={22} />
-            {showTasks && (
-              <span className={styles.indicator}>
-                <span className={styles.indicatorLine} />
-                <span className={styles.indicatorGlow} />
-              </span>
-            )}
-          </button>
-          {hoveredId === 'tasks' && (
-            <div className={styles.tooltip}>
-              <span className={styles.tooltipText}>Tasks</span>
-            </div>
-          )}
-        </div>
 
         <div className={styles.itemWrap}>
           <button

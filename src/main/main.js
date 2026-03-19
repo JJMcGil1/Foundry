@@ -276,6 +276,7 @@ function buildAppMenu() {
 
 // ---- File System Helpers ---- //
 const ignore = require('ignore');
+const { minimatch } = require('minimatch');
 
 // These are always hidden from the tree entirely (never useful to see)
 const HIDDEN = new Set([
@@ -1150,14 +1151,17 @@ function registerIPC() {
     if (!dirPath || !query) return [];
     const results = [];
     const lowerQuery = query.toLowerCase();
+    const ig = loadGitignore(dirPath);
     function walkDir(dir, depth = 0) {
       if (depth > 6 || results.length >= 50) return;
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
-          if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
+          if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
           const fullPath = path.join(dir, entry.name);
           const relativePath = path.relative(dirPath, fullPath);
+          const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+          if (ig.ignores(testPath)) continue;
           if (entry.isDirectory()) {
             walkDir(fullPath, depth + 1);
           } else {
@@ -1186,6 +1190,8 @@ function registerIPC() {
     const caseSensitive = options.caseSensitive || false;
     const isRegex = options.isRegex || false;
     const wholeWord = options.wholeWord || false;
+    const includePattern = options.includePattern || '';
+    const excludePattern = options.excludePattern || '';
     let pattern;
     try {
       let src = isRegex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1194,16 +1200,29 @@ function registerIPC() {
     } catch {
       return [];
     }
+    // Parse include/exclude glob patterns (comma-separated)
+    const includeGlobs = includePattern ? includePattern.split(',').map(s => s.trim()).filter(Boolean) : [];
+    const excludeGlobs = excludePattern ? excludePattern.split(',').map(s => s.trim()).filter(Boolean) : [];
+    function matchesGlobs(relPath, globs) {
+      return globs.some(g => minimatch(relPath, g, { matchBase: true, dot: false }));
+    }
+    const ig = loadGitignore(dirPath);
     function walkDir(dir, depth = 0) {
-      if (depth > 6 || results.length >= 200) return;
+      if (depth > 8 || results.length >= 200) return;
       try {
         const entries = fs.readdirSync(dir, { withFileTypes: true });
         for (const entry of entries) {
-          if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
+          if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
           const fullPath = path.join(dir, entry.name);
+          const relativePath = path.relative(dirPath, fullPath);
+          const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+          if (ig.ignores(testPath)) continue;
           if (entry.isDirectory()) {
             walkDir(fullPath, depth + 1);
           } else {
+            // Apply include/exclude filters
+            if (includeGlobs.length > 0 && !matchesGlobs(relativePath, includeGlobs)) continue;
+            if (excludeGlobs.length > 0 && matchesGlobs(relativePath, excludeGlobs)) continue;
             // Skip binary / large files
             try {
               const stats = fs.statSync(fullPath);
@@ -1217,13 +1236,13 @@ function registerIPC() {
                 pattern.lastIndex = 0;
                 if (pattern.test(lines[i])) {
                   fileMatches.push({ line: i + 1, text: lines[i].substring(0, 500) });
-                  if (fileMatches.length >= 20) break;
+                  if (fileMatches.length >= 50) break;
                 }
               }
               if (fileMatches.length > 0) {
                 results.push({
                   path: fullPath,
-                  relativePath: path.relative(dirPath, fullPath),
+                  relativePath,
                   name: path.basename(fullPath),
                   matches: fileMatches,
                 });
@@ -1274,13 +1293,17 @@ function registerIPC() {
     if (filePaths && filePaths.length > 0) {
       for (const fp of filePaths) processFile(fp);
     } else {
+      const ig = loadGitignore(dirPath);
       function walkDir(dir, depth = 0) {
         if (depth > 6) return;
         try {
           const entries = fs.readdirSync(dir, { withFileTypes: true });
           for (const entry of entries) {
-            if (IGNORED.has(entry.name) || entry.name.startsWith('.')) continue;
+            if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
             const fullPath = path.join(dir, entry.name);
+            const relativePath = path.relative(dirPath, fullPath);
+            const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+            if (ig.ignores(testPath)) continue;
             if (entry.isDirectory()) walkDir(fullPath, depth + 1);
             else processFile(fullPath);
           }

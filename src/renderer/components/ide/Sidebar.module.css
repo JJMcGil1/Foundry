@@ -453,7 +453,7 @@
 
 .aiBtn:hover {
   background: var(--surface-3);
-  color: #C678DD;
+  color: #FB923C;
 }
 
 .aiBtn:disabled {
@@ -461,37 +461,56 @@
 }
 
 .aiBtnLoading {
-  color: #C678DD;
+  color: #FB923C;
 }
 
-/* Smooth tooltip for AI button */
-.aiBtn::after {
-  content: 'Generate message';
+
+/* AI loading overlay inside commit textarea */
+.aiLoadingOverlay {
   position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  padding: 4px 8px;
-  background: var(--surface-3);
-  color: var(--zinc-200);
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
+  inset: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--surface-2);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  color: #FB923C;
+  font-size: 12px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  z-index: 2;
   pointer-events: none;
-  opacity: 0;
-  transform: translateY(-2px);
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  will-change: opacity, transform, filter;
+  transform-origin: center center;
+  backface-visibility: hidden;
 }
 
-.aiBtn:hover::after {
-  opacity: 1;
-  transform: translateY(0);
+.aiLoadingDots {
+  display: flex;
+  gap: 4px;
+  align-items: center;
 }
 
-.aiBtnLoading::after {
-  content: 'Generating…';
+.aiLoadingDot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #FB923C;
+  animation: aiDotPulse 1.4s ease-in-out infinite;
+}
+
+.aiLoadingDot:nth-child(2) {
+  animation-delay: 0.16s;
+}
+
+.aiLoadingDot:nth-child(3) {
+  animation-delay: 0.32s;
+}
+
+@keyframes aiDotPulse {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
 }
 
 .commitBtn {
