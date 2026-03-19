@@ -5,6 +5,7 @@
   background: var(--terminal-bg);
   overflow: hidden;
   height: 100%;
+  position: relative;
 }
 
 /* ── Header ── */
@@ -111,6 +112,25 @@
 
 .addBtn:hover {
   background: var(--primary-hover);
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: var(--surface-1);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.closeBtn:hover {
+  background: var(--surface-2);
+  color: var(--text-primary);
 }
 
 /* ── Board ── */

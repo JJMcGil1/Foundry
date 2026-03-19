@@ -3,6 +3,7 @@ import { FiFolder, FiChevronDown, FiGitBranch, FiRefreshCw } from 'react-icons/f
 import { motion } from 'framer-motion';
 import WorkspacePanel from './WorkspacePanel';
 import BranchPanel from './BranchPanel';
+import { useToast } from '../ToastProvider';
 import styles from '../ProjectControls.module.css';
 
 export default function ProjectControls({
@@ -13,6 +14,7 @@ export default function ProjectControls({
   projectPath,
   onRefresh,
 }) {
+  const addToast = useToast();
   const [wsOpen, setWsOpen] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const [syncing, setSyncing] = useState(false);
@@ -55,12 +57,45 @@ export default function ProjectControls({
     e.stopPropagation();
     if (syncing) return;
     setSyncing(true);
+    // Minimum spin duration so the animation is always visible (smooth UX)
+    const minSpin = new Promise(r => setTimeout(r, 600));
     try {
-      await window.foundry?.gitPull(projectPath);
-      await window.foundry?.gitPush(projectPath);
-      onRefresh?.();
+      // Run pull→push sequentially, but ensure spinner shows for at least 600ms
+      const syncWork = (async () => {
+        const pullResult = await window.foundry?.gitPull(projectPath);
+        const pushResult = await window.foundry?.gitPush(projectPath);
+        onRefresh?.();
+        return { pullResult, pushResult };
+      })();
+
+      const [{ pullResult, pushResult }] = await Promise.all([syncWork, minSpin]);
+
+      if (pullResult?.error && !(/no remote|no such remote|no tracking|does not have|no upstream/i.test(pullResult.error))) {
+        addToast({ message: `Pull failed: ${pullResult.error.split('\n')[0]}`, type: 'error' });
+      } else if (pushResult?.error) {
+        addToast({ message: `Push failed: ${pushResult.error.split('\n')[0]}`, type: 'error' });
+      } else {
+        const output = pullResult?.output || '';
+        if (output.includes('Already up to date')) {
+          addToast({ message: 'Synced — already up to date', type: 'success' });
+        } else {
+          const statsMatch = output.match(/(\d+)\s+files?\s+changed(?:,\s+(\d+)\s+insertions?\(\+\))?(?:,\s+(\d+)\s+deletions?\(-\))?/);
+          if (statsMatch) {
+            let msg = `Synced — pulled ${statsMatch[1]} file${statsMatch[1] !== '1' ? 's' : ''} changed`;
+            const parts = [];
+            if (statsMatch[2]) parts.push(`+${statsMatch[2]}`);
+            if (statsMatch[3]) parts.push(`-${statsMatch[3]}`);
+            if (parts.length) msg += ` (${parts.join(', ')})`;
+            addToast({ message: msg, type: 'success' });
+          } else {
+            addToast({ message: 'Synced successfully', type: 'success' });
+          }
+        }
+      }
     } catch (err) {
       console.error('Sync failed:', err);
+      await minSpin; // Still wait for min spin even on error
+      addToast({ message: `Sync failed: ${err.message || 'Unknown error'}`, type: 'error' });
     }
     setSyncing(false);
   };

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FiX } from 'react-icons/fi';
 import { SECTIONS } from './settingsUtils';
 import AccountSection from './AccountSection';
 import ProvidersSection from './ProvidersSection';
@@ -30,6 +31,11 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
 
   return (
     <div className={styles.root}>
+      {onClose && (
+        <button className={styles.closeBtn} onClick={onClose} title="Close Settings">
+          <FiX size={16} />
+        </button>
+      )}
       <div className={styles.layout}>
         <div className={styles.nav}>
           {SECTIONS.map(s => {

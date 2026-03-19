@@ -1,0 +1,143 @@
+/* ========================================
+   Foundry — Toast Notifications
+   ======================================== */
+
+.container {
+  position: fixed;
+  top: 40px;
+  right: 16px;
+  z-index: 99998;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 380px;
+}
+
+.toast {
+  pointer-events: all;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #1c1c1e;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25);
+  min-width: 260px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Type variants */
+.success {
+  border-color: rgba(52, 211, 153, 0.2);
+}
+
+.success .icon {
+  background: rgba(52, 211, 153, 0.12);
+  color: #34D399;
+}
+
+.error {
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.error .icon {
+  background: rgba(239, 68, 68, 0.12);
+  color: #EF4444;
+}
+
+.info {
+  border-color: rgba(96, 165, 250, 0.2);
+}
+
+.info .icon {
+  background: rgba(96, 165, 250, 0.12);
+  color: #60A5FA;
+}
+
+/* Icon pill */
+.icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+/* Message text */
+.message {
+  flex: 1;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.88);
+  line-height: 1.35;
+  min-width: 0;
+}
+
+/* Close button */
+.close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  border-radius: 5px;
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.close:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Light theme overrides */
+[data-theme="light"] .toast {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] .message {
+  color: rgba(0, 0, 0, 0.85);
+}
+
+[data-theme="light"] .close {
+  color: rgba(0, 0, 0, 0.25);
+}
+
+[data-theme="light"] .close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .icon {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.5);
+}
+
+[data-theme="light"] .success .icon {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+[data-theme="light"] .error .icon {
+  background: rgba(239, 68, 68, 0.1);
+  color: #DC2626;
+}
+
+[data-theme="light"] .info .icon {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563EB;
+}

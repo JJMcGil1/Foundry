@@ -28,6 +28,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [showTasks, setShowTasks] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState(null);
   const editorContainerRef = useRef(null);
+  const prePanelSidebarRef = useRef(null);
+  const prePanelTerminalRef = useRef(null);
 
   const [windowState, setWindowState] = useState({ isFullScreen: false, isMaximized: false });
 
@@ -204,17 +206,60 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); setSidebarVisible(v => !v); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); setChatVisible(v => !v); }
       if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); setTerminalVisible(v => !v); }
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setShowSettings(v => !v); }
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
+        e.preventDefault();
+        setShowSettings(v => {
+          if (!v) { enterFullPage(); setShowTasks(false); }
+          else { exitFullPage(); }
+          return !v;
+        });
+      }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTab, handleSaveFile]);
 
+  const isFullPage = showSettings || showTasks;
+
+  const enterFullPage = () => {
+    // Save current state before collapsing
+    prePanelSidebarRef.current = sidebarVisible;
+    prePanelTerminalRef.current = terminalVisible;
+    setSidebarVisible(false);
+    setTerminalVisible(false);
+  };
+
+  const exitFullPage = () => {
+    // Restore previous state
+    if (prePanelSidebarRef.current) setSidebarVisible(true);
+    if (prePanelTerminalRef.current) setTerminalVisible(true);
+    prePanelSidebarRef.current = null;
+    prePanelTerminalRef.current = null;
+  };
+
   const handleActivityClick = (panel) => {
-    if (panel === 'settings') { setShowSettings(v => !v); setShowTasks(false); return; }
-    if (panel === 'tasks') { setShowTasks(v => !v); setShowSettings(false); return; }
-    if (showSettings) setShowSettings(false);
-    if (showTasks) setShowTasks(false);
+    if (panel === 'settings') {
+      const wasOpen = showSettings;
+      setShowSettings(v => !v);
+      setShowTasks(false);
+      if (!wasOpen) enterFullPage();
+      else exitFullPage();
+      return;
+    }
+    if (panel === 'tasks') {
+      const wasOpen = showTasks;
+      setShowTasks(v => !v);
+      setShowSettings(false);
+      if (!wasOpen) enterFullPage();
+      else exitFullPage();
+      return;
+    }
+    // On a full page — just switch/toggle sidebar panel without closing the page
+    if (isFullPage) {
+      if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
+      else { setActivePanel(panel); setSidebarVisible(true); }
+      return;
+    }
     if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
     else { setActivePanel(panel); setSidebarVisible(true); }
   };
@@ -309,7 +354,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         </div>
         <div className={styles.main}>
           <AnimatePresence initial={false}>
-            {sidebarVisible && !showSettings && !showTasks && (
+            {sidebarVisible && (
               <Sidebar
                 key="sidebar"
                 panel={activePanel}
@@ -333,7 +378,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 <SettingsPage
                   profile={profile}
                   initialSection={settingsInitialSection}
-                  onClose={() => { setShowSettings(false); setSettingsInitialSection(null); }}
+                  onClose={() => { setShowSettings(false); setSettingsInitialSection(null); exitFullPage(); }}
                   onProfileChange={onProfileChange}
                   onCloneRepo={(result) => {
                     setProject({ path: result.path, name: result.name });
@@ -349,7 +394,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 />
               </div>
               <div style={{ display: showTasks ? 'contents' : 'none' }}>
-                <TasksPage workspacePath={project?.path} />
+                <TasksPage workspacePath={project?.path} onClose={() => { setShowTasks(false); exitFullPage(); }} />
               </div>
               <div style={{ display: (showSettings || showTasks) ? 'none' : 'contents' }}>
                 <EditorArea
@@ -364,7 +409,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               height={terminalMaximized ? maxTerminalHeight : terminalHeight}
               onHeightChange={setTerminalHeight}
               projectPath={project?.path}
-              visible={terminalVisible && !showSettings && !showTasks}
+              visible={terminalVisible}
               onClose={() => { setTerminalVisible(false); setTerminalMaximized(false); }}
               isMaximized={terminalMaximized}
               onToggleMaximize={() => {
@@ -382,13 +427,15 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             />
           </div>
           <ChatPanelContainer
-            visible={chatVisible && !showSettings && !showTasks}
+            visible={chatVisible}
             width={chatWidth}
             onWidthChange={setChatWidth}
             projectPath={project?.path}
             onOpenSettings={(section) => {
               setSettingsInitialSection(section || null);
+              if (!showSettings) enterFullPage();
               setShowSettings(true);
+              setShowTasks(false);
             }}
           />
         </div>

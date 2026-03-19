@@ -103,7 +103,8 @@
 }
 
 .syncSpinning {
-  animation: syncSpin 0.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: syncSpin 0.8s linear infinite;
+  will-change: transform;
 }
 
 @keyframes syncSpin {

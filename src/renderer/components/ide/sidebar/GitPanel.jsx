@@ -8,12 +8,35 @@ import { motion, AnimatePresence } from 'framer-motion';
 import ChangeItem from './ChangeItem';
 import CommitGraph from './CommitGraph';
 import { COMMITS_PAGE_SIZE, statusColor } from './gitUtils';
+import { useToast } from '../ToastProvider';
 import styles from '../Sidebar.module.css';
 
 const SYNC_STEPS = ['pull', 'stage', 'commit', 'push'];
 const STEP_LABELS = { pull: 'Pulling…', stage: 'Staging…', commit: 'Committing…', push: 'Pushing…' };
 
+// Parse git pull output to extract change summary
+function parsePullOutput(output) {
+  if (!output) return null;
+  if (output.includes('Already up to date')) return { upToDate: true };
+  // Match patterns like "3 files changed, 10 insertions(+), 2 deletions(-)"
+  const statsMatch = output.match(/(\d+)\s+files?\s+changed(?:,\s+(\d+)\s+insertions?\(\+\))?(?:,\s+(\d+)\s+deletions?\(-\))?/);
+  if (statsMatch) {
+    return {
+      upToDate: false,
+      filesChanged: parseInt(statsMatch[1], 10),
+      insertions: statsMatch[2] ? parseInt(statsMatch[2], 10) : 0,
+      deletions: statsMatch[3] ? parseInt(statsMatch[3], 10) : 0,
+    };
+  }
+  // Fast-forward or other pull that succeeded
+  if (output.includes('Fast-forward') || output.includes('Merge made')) {
+    return { upToDate: false, filesChanged: null };
+  }
+  return null;
+}
+
 export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile }) {
+  const addToast = useToast();
   const [commitMsg, setCommitMsg] = useState('');
   const [loading, setLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
@@ -181,6 +204,9 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     setSyncStep(null);
     setCompletedSteps(new Set());
 
+    let pullInfo = null;
+    let hadError = false;
+
     try {
       // Step 1: Pull
       setSyncStep('pull');
@@ -191,6 +217,8 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
         if (!isNoRemote) {
           console.error('Pull failed:', pullResult.error);
         }
+      } else if (pullResult?.output) {
+        pullInfo = parsePullOutput(pullResult.output);
       }
       markDone('pull');
 
@@ -209,6 +237,8 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       const commitResult = await window.foundry?.gitCommit(projectPath, commitMsg);
       if (commitResult?.error) {
         console.error('Commit failed:', commitResult.error);
+        hadError = true;
+        addToast({ message: `Commit failed: ${commitResult.error.split('\n')[0]}`, type: 'error' });
       }
       markDone('commit');
 
@@ -217,13 +247,37 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       const pushResult = await window.foundry?.gitPush(projectPath);
       if (pushResult?.error) {
         console.error('Push failed:', pushResult.error);
+        hadError = true;
+        addToast({ message: `Push failed: ${pushResult.error.split('\n')[0]}`, type: 'error' });
       }
       markDone('push');
+
+      // Show sync success toast
+      if (!hadError) {
+        let msg = 'Synced successfully';
+        if (pullInfo) {
+          if (pullInfo.upToDate) {
+            msg = 'Synced — already up to date';
+          } else if (pullInfo.filesChanged != null) {
+            msg = `Synced — pulled ${pullInfo.filesChanged} file${pullInfo.filesChanged !== 1 ? 's' : ''} changed`;
+            if (pullInfo.insertions || pullInfo.deletions) {
+              const parts = [];
+              if (pullInfo.insertions) parts.push(`+${pullInfo.insertions}`);
+              if (pullInfo.deletions) parts.push(`-${pullInfo.deletions}`);
+              msg += ` (${parts.join(', ')})`;
+            }
+          } else {
+            msg = 'Synced — pulled new changes';
+          }
+        }
+        addToast({ message: msg, type: 'success' });
+      }
 
       setCommitMsg('');
       refreshGit();
     } catch (err) {
       console.error('Sync failed:', err);
+      addToast({ message: `Sync failed: ${err.message || 'Unknown error'}`, type: 'error' });
     }
     setLoading(false);
     setSyncStep(null);

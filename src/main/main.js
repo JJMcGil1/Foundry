@@ -843,8 +843,10 @@ function registerIPC() {
 
   ipcMain.handle('git:pull', async (_event, dirPath) => {
     try {
-      execSync('git pull', { cwd: dirPath, timeout: 30000 });
-      return { success: true };
+      const { stdout, stderr } = await execAsync('git pull', { cwd: dirPath, timeout: 30000 });
+      // git pull outputs diffstat to stdout, but some info goes to stderr
+      const output = [stdout, stderr].filter(Boolean).join('\n').trim();
+      return { success: true, output };
     } catch (err) {
       return { error: err.message };
     }

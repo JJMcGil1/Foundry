@@ -19,7 +19,7 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
     <nav className={styles.bar}>
       <div className={styles.top}>
         {panels.map(p => {
-          const active = activePanel === p.id && !showSettings;
+          const active = activePanel === p.id;
           const Icon = p.icon;
           return (
             <div key={p.id} className={styles.itemWrap}>

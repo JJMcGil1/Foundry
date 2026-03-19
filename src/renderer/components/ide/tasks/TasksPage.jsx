@@ -25,7 +25,7 @@ function priorityClass(p) {
   return styles.priorityMedium;
 }
 
-export default function TasksPage({ workspacePath }) {
+export default function TasksPage({ workspacePath, onClose }) {
   const [tasks, setTasks] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [addingTo, setAddingTo] = useState(null); // column id
@@ -205,6 +205,11 @@ export default function TasksPage({ workspacePath }) {
               <FiPlus size={14} />
               Add Task
             </button>
+            {onClose && (
+              <button className={styles.closeBtn} onClick={onClose} title="Close Tasks">
+                <FiX size={16} />
+              </button>
+            )}
           </div>
         </div>
       </div>
