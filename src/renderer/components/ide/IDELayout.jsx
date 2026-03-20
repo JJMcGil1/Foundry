@@ -167,6 +167,10 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
 
   const handleSwitchWorkspace = useCallback(async (workspace) => {
     try {
+      // Kill all active agent streams before switching — prevents stale subprocesses
+      // from pumping IPC to the wrong workspace and consuming CPU/memory
+      await window.foundry?.claudeStopAllStreams?.();
+
       const tree = await window.foundry?.readDir(workspace.path);
       if (tree) {
         setProject({ path: workspace.path, name: workspace.name });

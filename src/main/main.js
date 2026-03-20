@@ -364,10 +364,10 @@ function getFileLanguage(filePath) {
   return map[ext] || 'plaintext';
 }
 
-function getGitSubmodules(dirPath) {
+async function getGitSubmodules(dirPath) {
   try {
-    const result = execSync('git submodule status --recursive', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-    const lines = result.split('\n').filter(Boolean);
+    const { stdout } = await execAsync('git submodule status --recursive', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const lines = stdout.split('\n').filter(Boolean);
     return lines.map(line => {
       // Format: " <hash> <path> (<describe>)" or "+<hash> <path> (<describe>)" or "-<hash> <path>"
       const match = line.match(/^[\s+-]?([0-9a-f]+)\s+(\S+)(?:\s+\((.+)\))?/);
@@ -388,10 +388,10 @@ function getGitSubmodules(dirPath) {
   }
 }
 
-function getGitRemotes(dirPath) {
+async function getGitRemotes(dirPath) {
   try {
-    const result = execSync('git remote -v', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-    const lines = result.split('\n').filter(Boolean);
+    const { stdout } = await execAsync('git remote -v', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const lines = stdout.split('\n').filter(Boolean);
     const remotes = {};
     for (const line of lines) {
       const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)/);
@@ -411,10 +411,14 @@ function getGitRemotes(dirPath) {
   }
 }
 
-function getGitStatus(dirPath) {
+async function getGitStatus(dirPath) {
   try {
-    const result = execSync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-    const branch = execSync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
+    const [statusResult, branchResult] = await Promise.all([
+      execAsync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
+      execAsync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
+    ]);
+    const result = statusResult.stdout;
+    const branch = branchResult.stdout.trim();
     const lines = result.split('\n').filter(Boolean);
     const staged = [];
     const unstaged = [];
@@ -439,8 +443,8 @@ function getGitStatus(dirPath) {
     // Get behind/ahead counts
     let behind = 0, ahead = 0;
     try {
-      const tracking = execSync('git rev-list --left-right --count @{u}...HEAD', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
-      const parts = tracking.split(/\s+/);
+      const { stdout: tracking } = await execAsync('git rev-list --left-right --count @{u}...HEAD', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+      const parts = tracking.trim().split(/\s+/);
       behind = parseInt(parts[0], 10) || 0;
       ahead = parseInt(parts[1], 10) || 0;
     } catch { /* no upstream or no remote */ }
@@ -450,19 +454,19 @@ function getGitStatus(dirPath) {
   }
 }
 
-function getGitLog(dirPath, count = 20, skip = 0, branch = null) {
+async function getGitLog(dirPath, count = 20, skip = 0, branch = null) {
   try {
     // Single git log call with numstat — uses @@@ as commit delimiter
     const SEP = '@@@COMMIT@@@';
     const skipArg = skip > 0 ? ` --skip=${skip}` : '';
     // If branch is specified, show only that branch's commits; otherwise show all
     const branchArg = branch && branch !== 'all' ? ` "${branch.replace(/"/g, '')}"` : ' --all';
-    const result = execSync(
+    const { stdout } = await execAsync(
       `git log${branchArg} --topo-order --pretty=format:"${SEP}%H|||%h|||%s|||%an|||%ae|||%ar|||%aI|||%P|||%D" --numstat -${count}${skipArg}`,
       { cwd: dirPath, encoding: 'utf8', timeout: 10000 }
     );
 
-    const blocks = result.split(SEP).filter(Boolean);
+    const blocks = stdout.split(SEP).filter(Boolean);
     return blocks.map(block => {
       const lines = block.split('\n');
       const headerLine = lines[0];
@@ -494,20 +498,20 @@ function getGitLog(dirPath, count = 20, skip = 0, branch = null) {
   }
 }
 
-function getGitCommitCount(dirPath, branch = null) {
+async function getGitCommitCount(dirPath, branch = null) {
   try {
     const branchArg = branch && branch !== 'all' ? ` "${branch.replace(/"/g, '')}"` : ' --all';
-    const result = execSync(`git rev-list --count${branchArg}`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-    return parseInt(result.trim(), 10) || 0;
+    const { stdout } = await execAsync(`git rev-list --count${branchArg}`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    return parseInt(stdout.trim(), 10) || 0;
   } catch {
     return 0;
   }
 }
 
-function getGitDiff(dirPath, filePath) {
+async function getGitDiff(dirPath, filePath) {
   try {
-    const result = execSync(`git diff -- "${filePath}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-    return result;
+    const { stdout } = await execAsync(`git diff -- "${filePath}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    return stdout;
   } catch {
     return '';
   }
@@ -671,7 +675,7 @@ function registerIPC() {
     // Inject token into HTTPS URL for auth
     const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
     try {
-      execSync(`git clone "${authedUrl}" "${destPath}"`, { timeout: 120000 });
+      await execAsync(`git clone "${authedUrl}" "${destPath}"`, { timeout: 120000 });
       return {
         success: true,
         path: destPath,
@@ -780,7 +784,8 @@ function registerIPC() {
 
   ipcMain.handle('git:remoteUrl', async (_event, dirPath) => {
     try {
-      const url = execSync('git config --get remote.origin.url', { cwd: dirPath, timeout: 5000 }).toString().trim();
+      const { stdout } = await execAsync('git config --get remote.origin.url', { cwd: dirPath, timeout: 5000 });
+      const url = stdout.trim();
       // Convert SSH URLs to HTTPS: git@github.com:user/repo.git → https://github.com/user/repo
       if (url.startsWith('git@')) {
         return url.replace(/^git@([^:]+):/, 'https://$1/').replace(/\.git$/, '');
@@ -793,7 +798,7 @@ function registerIPC() {
 
   ipcMain.handle('git:stage', async (_event, dirPath, filePath) => {
     try {
-      execSync(`git add "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      await execAsync(`git add "${filePath}"`, { cwd: dirPath, timeout: 5000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -802,7 +807,7 @@ function registerIPC() {
 
   ipcMain.handle('git:unstage', async (_event, dirPath, filePath) => {
     try {
-      execSync(`git reset HEAD "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      await execAsync(`git reset HEAD "${filePath}"`, { cwd: dirPath, timeout: 5000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -812,11 +817,11 @@ function registerIPC() {
   ipcMain.handle('git:discard', async (_event, dirPath, filePath) => {
     try {
       // For untracked files, remove them; for tracked files, restore them
-      const status = execSync(`git status --porcelain "${filePath}"`, { cwd: dirPath, timeout: 5000 }).toString().trim();
-      if (status.startsWith('??')) {
-        fs.unlinkSync(path.join(dirPath, filePath));
+      const { stdout } = await execAsync(`git status --porcelain "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      if (stdout.trim().startsWith('??')) {
+        await fs.promises.unlink(path.join(dirPath, filePath));
       } else {
-        execSync(`git checkout -- "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+        await execAsync(`git checkout -- "${filePath}"`, { cwd: dirPath, timeout: 5000 });
       }
       return { success: true };
     } catch (err) {
@@ -826,7 +831,7 @@ function registerIPC() {
 
   ipcMain.handle('git:commit', async (_event, dirPath, message) => {
     try {
-      execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
+      await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -835,7 +840,7 @@ function registerIPC() {
 
   ipcMain.handle('git:push', async (_event, dirPath) => {
     try {
-      execSync('git push', { cwd: dirPath, timeout: 30000 });
+      await execAsync('git push', { cwd: dirPath, timeout: 30000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -859,20 +864,20 @@ function registerIPC() {
       // Check if remote exists
       let hasRemote = false;
       try {
-        const remotes = execSync('git remote', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
-        hasRemote = remotes.length > 0;
+        const { stdout: remotes } = await execAsync('git remote', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        hasRemote = remotes.trim().length > 0;
       } catch { /* no remote */ }
 
       // Step 1: Pull remote changes first (if remote exists)
       if (hasRemote) {
         try {
-          execSync('git pull --rebase=false', { cwd: dirPath, encoding: 'utf8', timeout: 30000 });
+          await execAsync('git pull --rebase=false', { cwd: dirPath, encoding: 'utf8', timeout: 30000 });
         } catch (pullErr) {
           // Check if it's a merge conflict
-          const status = execSync('git status', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+          const { stdout: status } = await execAsync('git status', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
           if (status.includes('Unmerged') || status.includes('both modified') || status.includes('fix conflicts')) {
             // Abort the merge so we don't leave dirty state
-            try { execSync('git merge --abort', { cwd: dirPath, timeout: 5000 }); } catch { /* ignore */ }
+            try { await execAsync('git merge --abort', { cwd: dirPath, timeout: 5000 }); } catch { /* ignore */ }
             return { error: 'Merge conflicts detected when pulling remote changes. Please resolve conflicts manually before committing.' };
           }
           // If pull failed for other reasons (e.g. no tracking branch), continue with commit+push
@@ -880,17 +885,17 @@ function registerIPC() {
       }
 
       // Step 2: Commit (staging is handled on the renderer side already)
-      execSync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
+      await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
 
       // Step 3: Push (if remote exists)
       if (hasRemote) {
         try {
-          execSync('git push', { cwd: dirPath, timeout: 30000 });
+          await execAsync('git push', { cwd: dirPath, timeout: 30000 });
         } catch (pushErr) {
           // Commit succeeded but push failed — try setting upstream
           try {
-            const branch = execSync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
-            execSync(`git push --set-upstream origin ${branch}`, { cwd: dirPath, timeout: 30000 });
+            const { stdout: branchOut } = await execAsync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+            await execAsync(`git push --set-upstream origin ${branchOut.trim()}`, { cwd: dirPath, timeout: 30000 });
           } catch (upstreamErr) {
             return { success: true, warning: 'Commit succeeded but push failed: ' + pushErr.message };
           }
@@ -906,14 +911,15 @@ function registerIPC() {
   // Branch operations
   ipcMain.handle('git:listBranches', async (_event, dirPath) => {
     try {
-      const current = execSync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }).trim();
-
-      // Get local branches with last commit info in one shot
-      const localRaw = execSync(
-        'git branch --no-color --format="%(refname:short)|||%(objectname:short)|||%(authorname)|||%(committerdate:relative)|||%(subject)"',
-        { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
-      );
-      const localBranches = localRaw.split('\n').filter(Boolean).map(line => {
+      const [currentResult, localResult] = await Promise.all([
+        execAsync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
+        execAsync(
+          'git branch --no-color --format="%(refname:short)|||%(objectname:short)|||%(authorname)|||%(committerdate:relative)|||%(subject)"',
+          { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
+        ),
+      ]);
+      const current = currentResult.stdout.trim();
+      const localBranches = localResult.stdout.split('\n').filter(Boolean).map(line => {
         const [name, hash, author, date, message] = line.split('|||');
         return { name, current: name === current, remote: false, hash, author, date, message };
       });
@@ -921,7 +927,7 @@ function registerIPC() {
       // Get remote branches with last commit info
       let remoteBranches = [];
       try {
-        const remoteRaw = execSync(
+        const { stdout: remoteRaw } = await execAsync(
           'git branch -r --no-color --format="%(refname:short)|||%(objectname:short)|||%(authorname)|||%(committerdate:relative)|||%(subject)"',
           { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
         );
@@ -943,7 +949,7 @@ function registerIPC() {
 
   ipcMain.handle('git:checkout', async (_event, dirPath, branchName) => {
     try {
-      execSync(`git checkout "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      await execAsync(`git checkout "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -953,9 +959,9 @@ function registerIPC() {
   ipcMain.handle('git:createBranch', async (_event, dirPath, branchName, checkout = true) => {
     try {
       if (checkout) {
-        execSync(`git checkout -b "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+        await execAsync(`git checkout -b "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       } else {
-        execSync(`git branch "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+        await execAsync(`git branch "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       }
       return { success: true };
     } catch (err) {
@@ -966,7 +972,7 @@ function registerIPC() {
   ipcMain.handle('git:deleteBranch', async (_event, dirPath, branchName, force = false) => {
     try {
       const flag = force ? '-D' : '-d';
-      execSync(`git branch ${flag} "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      await execAsync(`git branch ${flag} "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -976,7 +982,7 @@ function registerIPC() {
   ipcMain.handle('git:checkoutRemoteBranch', async (_event, dirPath, remoteBranch) => {
     try {
       const localName = remoteBranch.replace(/^origin\//, '');
-      execSync(`git checkout -b "${localName}" "${remoteBranch}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      await execAsync(`git checkout -b "${localName}" "${remoteBranch}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -988,15 +994,18 @@ function registerIPC() {
       // Get diff — prefer staged, fall back to unstaged
       let diffStat = '';
       try {
-        diffStat = execSync('git diff --cached --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const r = await execAsync('git diff --cached --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        diffStat = r.stdout;
       } catch {}
       if (!diffStat.trim()) {
         try {
-          diffStat = execSync('git diff --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+          const r = await execAsync('git diff --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+          diffStat = r.stdout;
         } catch {}
       }
       if (!diffStat.trim()) {
-        diffStat = execSync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const r = await execAsync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        diffStat = r.stdout;
       }
 
       if (!diffStat.trim()) {
@@ -1006,9 +1015,11 @@ function registerIPC() {
       // Get the actual diff content for the AI
       let fullDiff = '';
       try {
-        fullDiff = execSync('git diff --cached', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+        const r = await execAsync('git diff --cached', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+        fullDiff = r.stdout;
         if (!fullDiff.trim()) {
-          fullDiff = execSync('git diff', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+          const r2 = await execAsync('git diff', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+          fullDiff = r2.stdout;
         }
       } catch {}
 
@@ -1139,7 +1150,7 @@ function registerIPC() {
 
   ipcMain.handle('git:clone', async (_event, url, destPath) => {
     try {
-      execSync(`git clone "${url}" "${destPath}"`, { timeout: 60000 });
+      await execAsync(`git clone "${url}" "${destPath}"`, { timeout: 60000 });
       return { success: true, path: destPath };
     } catch (err) {
       return { error: err.message };
@@ -1955,7 +1966,14 @@ function registerIPC() {
   }
 
   // Main chat handler — routes to CLI (subscription) or API (key) based on auth source
+  const MAX_CONCURRENT_STREAMS = 3; // Prevent unbounded subprocess spawning
+
   ipcMain.handle('claude:chat', async (event, { messages, images, model, streamId, workspacePath }) => {
+    // Enforce concurrency limit — reject if too many active streams
+    if (activeStreams.size >= MAX_CONCURRENT_STREAMS) {
+      return { error: `Too many active agent sessions (${activeStreams.size}). Please wait for one to finish or stop an existing session.` };
+    }
+
     const cred = await resolveClaudeCredential();
     if (!cred) {
       return { error: 'No Claude credentials found. Connect your Claude Code subscription or add an API key in Settings → Providers.' };
@@ -1984,6 +2002,21 @@ function registerIPC() {
     }
     activeStreams.delete(streamId);
     return { success: true };
+  });
+
+  // Kill ALL active streams — called on workspace switch to prevent stale processes
+  ipcMain.handle('claude:stopAllStreams', async () => {
+    let killed = 0;
+    for (const [streamId, active] of activeStreams) {
+      try {
+        if (active.abort) active.abort();
+        else if (active.kill) active.kill('SIGTERM');
+        killed++;
+      } catch { /* ignore */ }
+      activeStreams.delete(streamId);
+    }
+    console.log(`[Foundry] Killed ${killed} active streams on workspace switch`);
+    return { success: true, killed };
   });
 
   // Get/set selected model — stores the alias (sonnet/opus/haiku)

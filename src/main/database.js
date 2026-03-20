@@ -11,15 +11,30 @@ function getDbPath() {
   return path.join(userDataPath, 'foundry.db');
 }
 
+// Debounced async persistence — avoids blocking main thread and coalesces rapid writes
+let persistPending = false;
+let persistTimer = null;
+
 function persistDb() {
+  // Schedule async persist, coalescing multiple calls within 100ms
+  if (persistPending) return;
+  persistPending = true;
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    persistDbNow();
+    persistPending = false;
+  }, 100);
+}
+
+async function persistDbNow() {
   if (!db || !dbPath) return;
   try {
     const data = db.export();
     const buffer = Buffer.from(data);
     // Write to temp file first, then rename for atomic write (prevents corruption on crash)
     const tmpPath = dbPath + '.tmp';
-    fs.writeFileSync(tmpPath, buffer);
-    fs.renameSync(tmpPath, dbPath);
+    await fs.promises.writeFile(tmpPath, buffer);
+    await fs.promises.rename(tmpPath, dbPath);
   } catch (err) {
     console.error('[Foundry DB] Failed to persist:', err);
   }

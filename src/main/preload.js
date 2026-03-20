@@ -165,6 +165,7 @@ contextBridge.exposeInMainWorld('foundry', {
   claudeValidateKey: (apiKey) => ipcRenderer.invoke('claude:validateKey', apiKey),
   claudeChat: (params) => ipcRenderer.invoke('claude:chat', params),
   claudeStopStream: (streamId) => ipcRenderer.invoke('claude:stopStream', streamId),
+  claudeStopAllStreams: () => ipcRenderer.invoke('claude:stopAllStreams'),
   claudeGetModel: () => ipcRenderer.invoke('claude:getModel'),
   claudeSetModel: (model) => ipcRenderer.invoke('claude:setModel', model),
   claudeFetchModels: () => ipcRenderer.invoke('claude:fetchModels'),
