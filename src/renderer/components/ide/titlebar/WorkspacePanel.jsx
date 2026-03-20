@@ -106,10 +106,13 @@ export default function WorkspacePanel({ isOpen, onClose, dropdownPos, currentPr
                   {filtered.map((ws) => {
                     const isActive = currentProject?.path === ws.path;
                     return (
-                      <button
+                      <div
                         key={ws.id}
                         className={`${styles.item} ${isActive ? styles.itemActive : ''}`}
                         onClick={() => !isActive && handleSwitch(ws)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' && !isActive) handleSwitch(ws); }}
                       >
                         <span className={styles.itemIcon}><FiFolder size={14} /></span>
                         <div className={styles.itemContent}>
@@ -137,7 +140,7 @@ export default function WorkspacePanel({ isOpen, onClose, dropdownPos, currentPr
                             </button>
                           </>
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </>
