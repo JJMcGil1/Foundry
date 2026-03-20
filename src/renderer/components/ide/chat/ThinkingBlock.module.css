@@ -1,5 +1,7 @@
 .thinkingBlock {
   margin: 0;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .thinkingToggle {
@@ -16,6 +18,8 @@
   text-align: left;
   padding: 4px 0;
   transition: color 0.15s ease;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .thinkingToggle:hover {
@@ -38,7 +42,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 280px;
+  min-width: 0;
+  flex: 1;
 }
 
 .thinkingContent {
