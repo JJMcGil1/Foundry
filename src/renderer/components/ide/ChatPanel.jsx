@@ -335,9 +335,8 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
 
   // ---- Stream listeners ---- //
   useEffect(() => {
-    const cleanupStream = window.foundry?.onClaudeStream((streamId, data) => {
-      // Only process events for THIS panel's active stream
-      if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) return;
+    // Process a single stream event — extracted so both single and batch handlers use it
+    const processStreamEvent = (data) => {
       const { type } = data;
 
       if (type === 'content_block_start') {
@@ -352,7 +351,6 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         };
         blocksRef.current = [...blocksRef.current, block];
         activeBlockIdxRef.current = blocksRef.current.length - 1;
-        updateAssistantBlocks(blocksRef.current);
       }
 
       if (type === 'content_block_delta') {
@@ -363,7 +361,6 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
             const block = { type: 'text', content: delta.text, streaming: true };
             blocksRef.current = [...blocksRef.current, block];
             activeBlockIdxRef.current = blocksRef.current.length - 1;
-            updateAssistantBlocks(blocksRef.current);
           }
           return;
         }
@@ -382,7 +379,6 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
 
         blocks[idx] = current;
         blocksRef.current = blocks;
-        updateAssistantBlocks(blocks);
       }
 
       if (type === 'content_block_stop') {
@@ -398,7 +394,6 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
           }
 
           blocksRef.current = blocks;
-          updateAssistantBlocks(blocks);
 
           // Incremental save: persist assistant message after each completed block
           // so content survives crashes/disconnects
@@ -411,6 +406,26 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
           });
         }
         activeBlockIdxRef.current = -1;
+      }
+    };
+
+    const cleanupStream = window.foundry?.onClaudeStream((streamId, data) => {
+      // Only process events for THIS panel's active stream
+      if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) return;
+      processStreamEvent(data);
+      updateAssistantBlocks(blocksRef.current);
+    });
+
+    // Batched stream events — main process sends multiple events in one IPC call
+    const cleanupBatch = window.foundry?.onClaudeStreamBatch?.((batch) => {
+      let processed = false;
+      for (const [streamId, data] of batch) {
+        if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) continue;
+        processStreamEvent(data);
+        processed = true;
+      }
+      if (processed) {
+        updateAssistantBlocks(blocksRef.current);
       }
     });
 
@@ -476,7 +491,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
       });
     });
 
-    cleanupRef.current = [cleanupStream, cleanupEnd, cleanupError];
+    cleanupRef.current = [cleanupStream, cleanupBatch, cleanupEnd, cleanupError];
     return () => {
       cleanupRef.current.forEach(fn => fn?.());
       // Cancel any pending RAF update to prevent state updates after unmount

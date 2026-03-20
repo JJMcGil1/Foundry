@@ -13,6 +13,15 @@ const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 // ---- GitHub Avatar Resolution ---- //
 const avatarCache = new Map(); // key: "email||author" → url string | null
 const avatarPending = new Map(); // key → Promise
+const MAX_AVATAR_CACHE = 500; // Prevent unbounded growth
+function setAvatarCache(key, value) {
+  if (avatarCache.size >= MAX_AVATAR_CACHE) {
+    // Evict oldest entry
+    const firstKey = avatarCache.keys().next().value;
+    avatarCache.delete(firstKey);
+  }
+  setAvatarCache(key, value);
+}
 
 function probeGitHubAvatar(username) {
   return new Promise((resolve) => {
@@ -45,14 +54,14 @@ async function resolveAvatar(author, email) {
     const noreplyMatch = (email || '').match(/^(?:\d+\+)?([^@]+)@users\.noreply\.github\.com$/i);
     if (noreplyMatch) {
       const url = await probeGitHubAvatar(noreplyMatch[1]);
-      if (url) { avatarCache.set(key, url); avatarPending.delete(key); return url; }
+      if (url) { setAvatarCache(key, url); avatarPending.delete(key); return url; }
     }
 
     // Step 2: Try author name as GitHub username (strip spaces, lowercase)
     if (author) {
       const guess = author.replace(/\s+/g, '').toLowerCase();
       const url = await probeGitHubAvatar(guess);
-      if (url) { avatarCache.set(key, url); avatarPending.delete(key); return url; }
+      if (url) { setAvatarCache(key, url); avatarPending.delete(key); return url; }
     }
 
     // Step 3: Try email local part as username
@@ -60,12 +69,12 @@ async function resolveAvatar(author, email) {
       const localPart = email.split('@')[0];
       if (localPart && localPart !== author?.replace(/\s+/g, '').toLowerCase()) {
         const url = await probeGitHubAvatar(localPart);
-        if (url) { avatarCache.set(key, url); avatarPending.delete(key); return url; }
+        if (url) { setAvatarCache(key, url); avatarPending.delete(key); return url; }
       }
     }
 
     // All steps failed
-    avatarCache.set(key, null);
+    setAvatarCache(key, null);
     avatarPending.delete(key);
     return null;
   })();
@@ -98,6 +107,81 @@ async function resolveAvatarsBatch(authors) {
 
 // ---- Claude API Streaming ---- //
 const activeStreams = new Map(); // streamId → { process/controller, windowId }
+
+// ---- IPC Batching ---- //
+// Instead of sending one IPC message per stream event (hundreds/sec), batch them
+// and flush once per tick (~16ms). This prevents main process event loop saturation.
+const ipcBatchQueues = new Map(); // windowId → { events: [], timer: null }
+
+function queueStreamEvent(win, channel, ...args) {
+  if (!win || win.isDestroyed()) return;
+  const winId = win.id;
+  let batch = ipcBatchQueues.get(winId);
+  if (!batch) {
+    batch = { events: [], timer: null };
+    ipcBatchQueues.set(winId, batch);
+  }
+  batch.events.push({ channel, args });
+  if (!batch.timer) {
+    batch.timer = setTimeout(() => {
+      flushIpcBatch(winId);
+    }, 16); // ~1 frame
+  }
+}
+
+function flushIpcBatch(winId) {
+  const batch = ipcBatchQueues.get(winId);
+  if (!batch) return;
+  batch.timer = null;
+  const events = batch.events;
+  batch.events = [];
+  if (events.length === 0) return;
+
+  // Find the window
+  const win = BrowserWindow.getAllWindows().find(w => w.id === winId);
+  if (!win || win.isDestroyed()) {
+    ipcBatchQueues.delete(winId);
+    return;
+  }
+
+  // Send batched events as a single IPC message
+  if (events.length === 1) {
+    const e = events[0];
+    win.webContents.send(e.channel, ...e.args);
+  } else {
+    // Bundle multiple stream events into one IPC call
+    const streamEvents = [];
+    const otherEvents = [];
+    for (const e of events) {
+      if (e.channel === 'claude:stream') {
+        streamEvents.push(e);
+      } else {
+        otherEvents.push(e);
+      }
+    }
+    // Send batched stream events as array
+    if (streamEvents.length > 0) {
+      win.webContents.send('claude:streamBatch', streamEvents.map(e => e.args));
+    }
+    // Send non-stream events individually (these are rare — end/error)
+    for (const e of otherEvents) {
+      win.webContents.send(e.channel, ...e.args);
+    }
+  }
+}
+
+function flushAllBatchesForWindow(winId) {
+  const batch = ipcBatchQueues.get(winId);
+  if (batch) {
+    if (batch.timer) clearTimeout(batch.timer);
+    batch.timer = null;
+    // Flush remaining
+    if (batch.events.length > 0) {
+      flushIpcBatch(winId);
+    }
+    ipcBatchQueues.delete(winId);
+  }
+}
 
 const isDev = !app.isPackaged;
 
@@ -160,8 +244,11 @@ function createWindow(projectPath) {
     }
   });
 
+  const closedWinId = win.id;
   win.on('closed', () => {
     allWindows.delete(win);
+    // Clean up any pending IPC batch queue for this window
+    ipcBatchQueues.delete(closedWinId);
   });
 
   // Forward window state changes to renderer (per-window closure)
@@ -1819,9 +1906,7 @@ function registerIPC() {
                 'message_stop',
               ];
               if (passTypes.includes(evt.type)) {
-                if (win && !win.isDestroyed()) {
-                  win.webContents.send('claude:stream', streamId, evt);
-                }
+                queueStreamEvent(win, 'claude:stream', streamId, evt);
               }
             }
 
@@ -1838,8 +1923,12 @@ function registerIPC() {
       });
 
       let stderrOutput = '';
+      const MAX_STDERR = 64 * 1024; // 64KB cap — prevent unbounded growth
       proc.stderr.on('data', (chunk) => {
-        stderrOutput += chunk.toString();
+        if (stderrOutput.length < MAX_STDERR) {
+          stderrOutput += chunk.toString();
+          if (stderrOutput.length > MAX_STDERR) stderrOutput = stderrOutput.slice(0, MAX_STDERR);
+        }
       });
 
       proc.on('close', (code) => {
@@ -1848,7 +1937,9 @@ function registerIPC() {
         for (const tmpPath of tempImagePaths) {
           try { fs.unlinkSync(tmpPath); } catch { /* ignore */ }
         }
+        // Flush any pending batched events before sending end signal
         if (win && !win.isDestroyed()) {
+          flushAllBatchesForWindow(win.id);
           win.webContents.send('claude:streamEnd', streamId);
         }
         if (code !== 0 && stderrOutput.trim()) {
@@ -1936,9 +2027,7 @@ function registerIPC() {
               if (!jsonStr || jsonStr === '[DONE]') continue;
               try {
                 const parsed = JSON.parse(jsonStr);
-                if (win && !win.isDestroyed()) {
-                  win.webContents.send('claude:stream', streamId, parsed);
-                }
+                queueStreamEvent(win, 'claude:stream', streamId, parsed);
               } catch { /* skip */ }
             }
           }
@@ -1952,15 +2041,15 @@ function registerIPC() {
                 if (!jsonStr || jsonStr === '[DONE]') continue;
                 try {
                   const parsed = JSON.parse(jsonStr);
-                  if (win && !win.isDestroyed()) {
-                    win.webContents.send('claude:stream', streamId, parsed);
-                  }
+                  queueStreamEvent(win, 'claude:stream', streamId, parsed);
                 } catch { /* skip */ }
               }
             }
           }
           activeStreams.delete(streamId);
+          // Flush any pending batched events before sending end signal
           if (win && !win.isDestroyed()) {
+            flushAllBatchesForWindow(win.id);
             win.webContents.send('claude:streamEnd', streamId);
           }
           resolve({ success: true });
