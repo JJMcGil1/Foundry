@@ -69,67 +69,9 @@ jobs:
             release/*.zip
           if-no-files-found: error
 
-  # ── 3. Build Windows ──────────────────────────────────────
-  build-windows:
-    needs: check-version
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build renderer + electron-builder
-        run: npm run dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Windows artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-windows
-          path: release/*.exe
-          if-no-files-found: error
-
-  # ── 4. Build Linux ────────────────────────────────────────
-  build-linux:
-    needs: check-version
-    if: needs.check-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build renderer + electron-builder
-        run: npm run dist
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload Linux artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-linux
-          path: release/*.AppImage
-          if-no-files-found: error
-
-  # ── 5. Create Release ─────────────────────────────────────
+  # ── 3. Create Release ─────────────────────────────────────
   create-release:
-    needs: [check-version, build-macos, build-windows, build-linux]
+    needs: [check-version, build-macos]
     if: needs.check-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -144,7 +86,7 @@ jobs:
         run: |
           mkdir -p release
           # Flatten all artifacts into release/
-          find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" \) -exec cp {} release/ \;
+          find artifacts -type f \( -name "*.dmg" -o -name "*.zip" \) -exec cp {} release/ \;
           echo "=== Release files ==="
           ls -lh release/
 
@@ -153,26 +95,20 @@ jobs:
           VERSION="${{ needs.check-version.outputs.version }}"
           DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          # Compute hashes
-          MAC_FILE=$(ls release/*.dmg 2>/dev/null | head -1)
-          WIN_FILE=$(ls release/*.exe 2>/dev/null | head -1)
-          LINUX_FILE=$(ls release/*.AppImage 2>/dev/null | head -1)
+          # Compute hashes for mac artifacts
+          DMG_FILE=$(ls release/*.dmg 2>/dev/null | head -1)
+          ZIP_FILE=$(ls release/*.zip 2>/dev/null | head -1)
 
-          MAC_HASH="" ; MAC_SIZE=0
-          WIN_HASH="" ; WIN_SIZE=0
-          LINUX_HASH="" ; LINUX_SIZE=0
+          DMG_HASH="" ; DMG_SIZE=0
+          ZIP_HASH="" ; ZIP_SIZE=0
 
-          if [ -n "$MAC_FILE" ]; then
-            MAC_HASH=$(sha256sum "$MAC_FILE" | awk '{print $1}')
-            MAC_SIZE=$(stat --format=%s "$MAC_FILE" 2>/dev/null || stat -f%z "$MAC_FILE")
+          if [ -n "$DMG_FILE" ]; then
+            DMG_HASH=$(sha256sum "$DMG_FILE" | awk '{print $1}')
+            DMG_SIZE=$(stat --format=%s "$DMG_FILE" 2>/dev/null || stat -f%z "$DMG_FILE")
           fi
-          if [ -n "$WIN_FILE" ]; then
-            WIN_HASH=$(sha256sum "$WIN_FILE" | awk '{print $1}')
-            WIN_SIZE=$(stat --format=%s "$WIN_FILE" 2>/dev/null || stat -f%z "$WIN_FILE")
-          fi
-          if [ -n "$LINUX_FILE" ]; then
-            LINUX_HASH=$(sha256sum "$LINUX_FILE" | awk '{print $1}')
-            LINUX_SIZE=$(stat --format=%s "$LINUX_FILE" 2>/dev/null || stat -f%z "$LINUX_FILE")
+          if [ -n "$ZIP_FILE" ]; then
+            ZIP_HASH=$(sha256sum "$ZIP_FILE" | awk '{print $1}')
+            ZIP_SIZE=$(stat --format=%s "$ZIP_FILE" 2>/dev/null || stat -f%z "$ZIP_FILE")
           fi
 
           # Write latest.json
@@ -182,15 +118,14 @@ jobs:
             "releaseDate": "${DATE}",
             "releaseNotes": "Bug fixes and improvements.",
             "platforms": {
-              "mac":   { "sha256": "${MAC_HASH}", "size": ${MAC_SIZE} },
-              "win":   { "sha256": "${WIN_HASH}", "size": ${WIN_SIZE} },
-              "linux": { "sha256": "${LINUX_HASH}", "size": ${LINUX_SIZE} }
+              "mac-dmg": { "sha256": "${DMG_HASH}", "size": ${DMG_SIZE} },
+              "mac-zip": { "sha256": "${ZIP_HASH}", "size": ${ZIP_SIZE} }
             }
           }
           EOF
 
           # Write hashes.txt
-          cd release && sha256sum *.dmg *.exe *.AppImage 2>/dev/null > hashes.txt || true
+          cd release && sha256sum *.dmg *.zip 2>/dev/null > hashes.txt || true
           cd ..
 
           echo "=== latest.json ==="
@@ -208,9 +143,8 @@ jobs:
             ## Foundry v${{ needs.check-version.outputs.version }}
 
             ### Downloads
-            - **macOS:** `Foundry-*.dmg`
-            - **Windows:** `Foundry-*.exe`
-            - **Linux:** `Foundry-*.AppImage`
+            - **macOS (DMG):** `Foundry-*.dmg`
+            - **macOS (ZIP):** `Foundry-*.zip`
 
             ### Auto-Update
             Running instances of Foundry will detect this update automatically within 5 minutes.
@@ -220,8 +154,6 @@ jobs:
           files: |
             release/*.dmg
             release/*.zip
-            release/*.exe
-            release/*.AppImage
             release/latest.json
             release/hashes.txt
           draft: false
