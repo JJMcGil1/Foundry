@@ -1,0 +1,101 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #1a1a1e;
+  border: 1px solid #2a2a2e;
+  border-radius: 12px;
+  width: 380px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+}
+
+.header {
+  padding: 16px 20px 0;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f0f0;
+}
+
+.body {
+  padding: 10px 20px 0;
+}
+
+.message {
+  font-size: 13px;
+  color: #999;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #3a3a3e;
+  border-radius: 6px;
+  color: #999;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cancelBtn:hover {
+  background: #2a2a2e;
+  color: #ddd;
+  border-color: #555;
+}
+
+.confirmBtn {
+  padding: 8px 16px;
+  background: var(--primary);
+  border: none;
+  border-radius: 6px;
+  color: var(--primary-text);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.confirmBtn:hover {
+  filter: brightness(1.1);
+}
+
+.dangerBtn {
+  padding: 8px 16px;
+  background: #DC2626;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dangerBtn:hover {
+  background: #EF4444;
+}
