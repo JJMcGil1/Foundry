@@ -18,7 +18,14 @@ function sha256(filePath) {
 
 function findFile(dir, ext) {
   if (!fs.existsSync(dir)) return null;
-  return fs.readdirSync(dir).find(f => f.endsWith(ext));
+  // Match current version specifically to avoid picking up old builds
+  const versionMatch = fs.readdirSync(dir).find(f => f.includes(pkg.version) && f.endsWith(ext));
+  if (versionMatch) return versionMatch;
+  // Fallback: latest file by mtime
+  const candidates = fs.readdirSync(dir).filter(f => f.endsWith(ext));
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => fs.statSync(path.join(dir, b)).mtimeMs - fs.statSync(path.join(dir, a)).mtimeMs);
+  return candidates[0];
 }
 
 const platforms = {};

@@ -4,7 +4,7 @@
 
 .overlay {
   position: fixed;
-  bottom: 24px;
+  top: 24px;
   right: 24px;
   z-index: 99999;
   pointer-events: none;
@@ -28,7 +28,7 @@
 @keyframes toast-slide-in {
   from {
     opacity: 0;
-    transform: translateY(12px) scale(0.97);
+    transform: translateY(-12px) scale(0.97);
   }
   to {
     opacity: 1;
@@ -183,4 +183,74 @@
 @keyframes spin {
   from { transform: rotate(0deg); }
   to   { transform: rotate(360deg); }
+}
+
+/* ── Light Theme ── */
+
+:global([data-theme="light"]) .toast {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+:global([data-theme="light"]) .toastError {
+  border-color: rgba(239, 68, 68, 0.3);
+}
+
+:global([data-theme="light"]) .icon {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+:global([data-theme="light"]) .toastError .icon {
+  background: rgba(239, 68, 68, 0.08);
+  color: #DC2626;
+}
+
+:global([data-theme="light"]) .title {
+  color: rgba(0, 0, 0, 0.88);
+}
+
+:global([data-theme="light"]) .close {
+  color: rgba(0, 0, 0, 0.3);
+}
+
+:global([data-theme="light"]) .close:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+:global([data-theme="light"]) .progressTrack {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:global([data-theme="light"]) .progressBar {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+:global([data-theme="light"]) .progressText {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+:global([data-theme="light"]) .errorBody {
+  color: #DC2626;
+}
+
+:global([data-theme="light"]) .btnSecondary {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.6);
+}
+
+:global([data-theme="light"]) .btnSecondary:hover {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.85);
+}
+
+:global([data-theme="light"]) .btnPrimary {
+  background: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.88);
+}
+
+:global([data-theme="light"]) .btnPrimary:hover {
+  background: rgba(0, 0, 0, 0.12);
 }
