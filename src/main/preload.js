@@ -175,6 +175,11 @@ contextBridge.exposeInMainWorld('foundry', {
     ipcRenderer.on('claude:stream', handler);
     return () => ipcRenderer.removeListener('claude:stream', handler);
   },
+  onClaudeStreamBatch: (callback) => {
+    const handler = (_event, batch) => callback(batch);
+    ipcRenderer.on('claude:streamBatch', handler);
+    return () => ipcRenderer.removeListener('claude:streamBatch', handler);
+  },
   onClaudeStreamEnd: (callback) => {
     const handler = (_event, streamId) => callback(streamId);
     ipcRenderer.on('claude:streamEnd', handler);
