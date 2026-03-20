@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
+import React, { memo, useMemo, useState, useRef, useEffect } from 'react';
 import { FiUser, FiChevronDown, FiChevronUp } from 'react-icons/fi';
 import styles from './UserMessage.module.css';
 import MediaPreview from './MediaPreview';
@@ -19,7 +19,7 @@ function loadProfile() {
   return profilePromise;
 }
 
-export default function UserMessage({ msg }) {
+function UserMessage({ msg }) {
   const [expanded, setExpanded] = useState(false);
   const [needsTruncation, setNeedsTruncation] = useState(false);
   const [profile, setProfile] = useState(cachedProfile);
@@ -110,3 +110,5 @@ export default function UserMessage({ msg }) {
     </div>
   );
 }
+
+export default memo(UserMessage);

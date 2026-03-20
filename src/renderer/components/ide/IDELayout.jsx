@@ -190,14 +190,22 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (status) setGitStatus(status);
   }, [project]);
 
-  // Poll git status for real-time updates
+  // Poll git status for real-time updates (guards against overlapping calls)
   useEffect(() => {
     if (!project) return;
+    let running = false;
+    let cancelled = false;
     const interval = setInterval(async () => {
-      const status = await window.foundry?.gitStatus(project.path);
-      if (status) setGitStatus(status);
+      if (running) return; // Skip if previous poll is still in-flight
+      running = true;
+      try {
+        const status = await window.foundry?.gitStatus(project.path);
+        if (!cancelled && status) setGitStatus(status);
+      } finally {
+        running = false;
+      }
     }, 3000);
-    return () => clearInterval(interval);
+    return () => { cancelled = true; clearInterval(interval); };
   }, [project]);
 
   useEffect(() => {

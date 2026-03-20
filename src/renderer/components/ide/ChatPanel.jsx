@@ -57,6 +57,10 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
   const activeBlockIdxRef = useRef(-1);
   const currentStreamIdRef = useRef(null);
 
+  // Throttle streaming UI updates to prevent UI freeze
+  const rafRef = useRef(null);
+  const pendingBlocksRef = useRef(null);
+
   // Keep ref in sync so stream listeners can filter by panel
   const setStreamId = useCallback((id) => {
     currentStreamIdRef.current = id;
@@ -205,6 +209,35 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
 
   // ---- Check provider ---- //
   const reconnectRef = useRef(null);
+  const reconnectAttemptsRef = useRef(0);
+  const MAX_RECONNECT_ATTEMPTS = 20; // Stop after ~60s of retries
+
+  const startReconnectLoop = useCallback(() => {
+    if (reconnectRef.current) return; // Already running
+    reconnectAttemptsRef.current = 0;
+    reconnectRef.current = setInterval(async () => {
+      reconnectAttemptsRef.current++;
+      if (reconnectAttemptsRef.current > MAX_RECONNECT_ATTEMPTS) {
+        clearInterval(reconnectRef.current);
+        reconnectRef.current = null;
+        return;
+      }
+      try {
+        const retry = await window.foundry?.claudeGetToken();
+        if (retry?.token) {
+          setHasProvider(true);
+          clearInterval(reconnectRef.current);
+          reconnectRef.current = null;
+          const m = await window.foundry?.claudeGetModel();
+          if (m) {
+            const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
+            setModelLabel(labels[m] || m);
+            setModelKey(m);
+          }
+        }
+      } catch { /* keep retrying until max attempts */ }
+    }, 3000);
+  }, []);
 
   const checkProvider = useCallback(async () => {
     try {
@@ -219,48 +252,18 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         setModelLabel(labels[modelResult] || modelResult);
         setModelKey(modelResult);
       }
-      // If we reconnected, stop the retry loop
       if (connected && reconnectRef.current) {
         clearInterval(reconnectRef.current);
         reconnectRef.current = null;
       }
-      // If disconnected, start a retry loop to auto-reconnect
-      if (!connected && !reconnectRef.current) {
-        reconnectRef.current = setInterval(async () => {
-          try {
-            const retry = await window.foundry?.claudeGetToken();
-            if (retry?.token) {
-              setHasProvider(true);
-              clearInterval(reconnectRef.current);
-              reconnectRef.current = null;
-              // Also refresh model info
-              const m = await window.foundry?.claudeGetModel();
-              if (m) {
-                const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
-                setModelLabel(labels[m] || m);
-                setModelKey(m);
-              }
-            }
-          } catch { /* keep retrying */ }
-        }, 3000); // retry every 3s when disconnected
+      if (!connected) {
+        startReconnectLoop();
       }
     } catch {
       setHasProvider(false);
-      // Start retry loop on error too
-      if (!reconnectRef.current) {
-        reconnectRef.current = setInterval(async () => {
-          try {
-            const retry = await window.foundry?.claudeGetToken();
-            if (retry?.token) {
-              setHasProvider(true);
-              clearInterval(reconnectRef.current);
-              reconnectRef.current = null;
-            }
-          } catch { /* keep retrying */ }
-        }, 3000);
-      }
+      startReconnectLoop();
     }
-  }, []);
+  }, [startReconnectLoop]);
 
   useEffect(() => {
     checkProvider();
@@ -306,7 +309,12 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
   };
 
   // ---- Streaming helpers ---- //
-  const updateAssistantBlocks = useCallback((blocks) => {
+  // Flush pending blocks to React state (called via RAF throttle)
+  const flushBlocks = useCallback(() => {
+    rafRef.current = null;
+    const blocks = pendingBlocksRef.current;
+    if (!blocks) return;
+    pendingBlocksRef.current = null;
     setMessages(prev => {
       const updated = [...prev];
       const lastIdx = updated.length - 1;
@@ -316,6 +324,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
       return updated;
     });
   }, []);
+
+  // Throttled update: batches streaming deltas to one React render per animation frame
+  const updateAssistantBlocks = useCallback((blocks) => {
+    pendingBlocksRef.current = blocks;
+    if (!rafRef.current) {
+      rafRef.current = requestAnimationFrame(flushBlocks);
+    }
+  }, [flushBlocks]);
 
   // ---- Stream listeners ---- //
   useEffect(() => {
@@ -400,6 +416,12 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
 
     const cleanupEnd = window.foundry?.onClaudeStreamEnd((streamId) => {
       if (!currentStreamIdRef.current || streamId !== currentStreamIdRef.current) return;
+      // Flush any pending throttled update before finalizing
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+        pendingBlocksRef.current = null;
+      }
       playChatCompleteSound();
       // Native OS notification when window is not focused
       if (!document.hasFocus() && Notification.permission === 'granted') {
@@ -457,12 +479,26 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
     cleanupRef.current = [cleanupStream, cleanupEnd, cleanupError];
     return () => {
       cleanupRef.current.forEach(fn => fn?.());
+      // Cancel any pending RAF update to prevent state updates after unmount
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
     };
   }, [updateAssistantBlocks, saveMessageToDb, checkProvider]);
 
+  // Throttled auto-scroll: avoids layout thrash during streaming
+  const scrollRafRef = useRef(null);
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    scrollRafRef.current = requestAnimationFrame(() => {
+      scrollRafRef.current = null;
+      messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
+    });
+    return () => {
+      if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
+    };
+  }, [messages, isStreaming]);
 
   // ---- Send message ---- //
   const handleSend = async () => {

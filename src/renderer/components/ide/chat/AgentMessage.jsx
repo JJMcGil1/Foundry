@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { FiCpu } from 'react-icons/fi';
 import { renderMarkdown } from './Markdown';
 import ThinkingBlock from './ThinkingBlock';
 import ToolUseBlock from './ToolUseBlock';
 import styles from './AgentMessage.module.css';
 
-export default function AgentMessage({ msg, isStreaming, isLastMsg }) {
+function AgentMessage({ msg, isStreaming, isLastMsg }) {
   return (
     <div className={styles.message}>
       <div className={styles.header}>
@@ -75,3 +75,5 @@ function AgentContent({ msg, isStreaming, isLastMsg }) {
     </div>
   );
 }
+
+export default memo(AgentMessage);
