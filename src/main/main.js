@@ -512,7 +512,7 @@ async function getGitRemotes(dirPath) {
 async function getGitStatus(dirPath) {
   try {
     const [statusResult, branchResult] = await Promise.all([
-      execAsync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
+      execAsync('git status --porcelain -u', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
       execAsync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
     ]);
     const result = statusResult.stdout;
