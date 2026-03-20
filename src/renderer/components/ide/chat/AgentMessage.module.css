@@ -4,6 +4,7 @@
   flex-direction: column;
   gap: 8px;
   min-width: 0;
+  overflow: visible;
 }
 
 .header {
@@ -30,6 +31,31 @@
   color: var(--zinc-300);
 }
 
+.copyBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--zinc-500);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease, color 0.15s ease;
+  padding: 0;
+}
+
+.message:hover .copyBtn {
+  opacity: 1;
+}
+
+.copyBtn:hover {
+  background: var(--surface-3);
+  color: var(--zinc-300);
+}
+
 .time {
   font-size: 10px;
   color: var(--zinc-600);
@@ -47,6 +73,9 @@
   min-width: 0;
   overflow-wrap: break-word;
   word-break: break-word;
+  overflow-x: hidden;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 /* ---- Text Block ---- */

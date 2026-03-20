@@ -1,5 +1,5 @@
 import React, { memo, useMemo, useState, useRef, useEffect } from 'react';
-import { FiUser, FiChevronDown, FiChevronUp } from 'react-icons/fi';
+import { FiUser, FiChevronDown, FiChevronUp, FiCopy, FiCheck } from 'react-icons/fi';
 import styles from './UserMessage.module.css';
 import MediaPreview from './MediaPreview';
 
@@ -52,6 +52,16 @@ function UserMessage({ msg }) {
     ? `${(profile.first_name || '')[0] || ''}${(profile.last_name || '')[0] || ''}`.toUpperCase()
     : '';
 
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = (e) => {
+    e.stopPropagation();
+    const text = msg.content || '';
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className={styles.message}>
       <div className={styles.header}>
@@ -65,6 +75,9 @@ function UserMessage({ msg }) {
           )}
         </div>
         <span className={styles.role}>You</span>
+        <button className={styles.copyBtn} onClick={handleCopy} title="Copy message">
+          {copied ? <FiCheck size={12} /> : <FiCopy size={12} />}
+        </button>
         {msg.timestamp && (
           <span className={styles.time}>{msg.timestamp}</span>
         )}
