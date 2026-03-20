@@ -1,0 +1,221 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #1a1a1e;
+  border: 1px solid #2a2a2e;
+  border-radius: 12px;
+  width: 520px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+}
+
+.header {
+  padding: 16px 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #f0f0f0;
+}
+
+.statusBadge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 20px;
+}
+
+.statusRunning {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+
+.statusStopped {
+  background: rgba(113, 113, 122, 0.15);
+  color: #a1a1aa;
+}
+
+.runningDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+
+.body {
+  padding: 14px 20px 0;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #999;
+  margin-bottom: 6px;
+}
+
+.commandInput {
+  width: 100%;
+  padding: 10px 12px;
+  background: #111113;
+  border: 1px solid #2a2a2e;
+  border-radius: 8px;
+  color: #f0f0f0;
+  font-size: 13px;
+  font-family: var(--font-mono);
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.commandInput:focus {
+  border-color: var(--primary);
+}
+
+.commandInput:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.output {
+  margin-top: 12px;
+  background: #111113;
+  border: 1px solid #2a2a2e;
+  border-radius: 8px;
+  height: 200px;
+  overflow-y: auto;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #ccc;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.output::-webkit-scrollbar {
+  width: 6px;
+}
+
+.output::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.output::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+.outputPlaceholder {
+  color: #555;
+  font-style: italic;
+}
+
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 16px 20px;
+}
+
+.closeBtn {
+  padding: 8px 16px;
+  background: transparent;
+  border: 1px solid #3a3a3e;
+  border-radius: 6px;
+  color: #999;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.closeBtn:hover {
+  background: #2a2a2e;
+  color: #ddd;
+  border-color: #555;
+}
+
+.startBtn {
+  padding: 8px 16px;
+  background: #22c55e;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.startBtn:hover {
+  background: #16a34a;
+}
+
+.startBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.stopBtn {
+  padding: 8px 16px;
+  background: #DC2626;
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stopBtn:hover {
+  background: #EF4444;
+}
+
+/* Titlebar start button styles */
+.startTitlebarBtn {
+  position: relative;
+}
+
+.runningIndicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #4ade80;
+  animation: pulse 1.5s ease-in-out infinite;
+}

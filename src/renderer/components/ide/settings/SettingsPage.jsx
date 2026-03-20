@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { FiX } from 'react-icons/fi';
 import { SECTIONS } from './settingsUtils';
 import AccountSection from './AccountSection';
+import WorkspaceSection from './WorkspaceSection';
 import ProvidersSection from './ProvidersSection';
 import GitHubSection from './GitHubSection';
 import AppearanceSection from './AppearanceSection';
 import AboutSection from './AboutSection';
 import styles from '../SettingsPage.module.css';
 
-export default function SettingsPage({ profile, onClose, onProfileChange, onCloneRepo, initialSection }) {
+export default function SettingsPage({ profile, onClose, onProfileChange, onCloneRepo, initialSection, projectPath }) {
   const [activeSection, setActiveSection] = useState(initialSection || 'account');
 
   // When initialSection changes (e.g. navigating from "Open Provider Settings"), update active section
@@ -56,6 +57,10 @@ export default function SettingsPage({ profile, onClose, onProfileChange, onClon
         <div className={styles.content}>
           {activeSection === 'account' && (
             <AccountSection profile={profile} onProfileChange={onProfileChange} />
+          )}
+
+          {activeSection === 'workspace' && (
+            <WorkspaceSection projectPath={projectPath} />
           )}
 
           {activeSection === 'providers' && (

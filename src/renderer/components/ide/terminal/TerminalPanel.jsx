@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useImperativeHandle, forwardRef } from 'react';
 import { motion } from 'framer-motion';
 import { FiPlus, FiX, FiMaximize2, FiMinimize2 } from 'react-icons/fi';
 import { Terminal } from '@xterm/xterm';
@@ -10,7 +10,7 @@ import { getTerminalTheme } from './terminalTheme';
 import TerminalTab from './TerminalTab';
 import styles from '../TerminalPanel.module.css';
 
-export default function TerminalPanel({ height, onHeightChange, projectPath, visible = true, onClose, isMaximized, onToggleMaximize }) {
+const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange, projectPath, visible = true, onClose, isMaximized, onToggleMaximize }, ref) {
   const [isResizing, setIsResizing] = useState(false);
   const [terminals, setTerminals] = useState([]);
   const [activeTermId, setActiveTermId] = useState(null);
@@ -264,6 +264,95 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
     document.addEventListener('mouseup', handleMouseUp);
   }, [height, onHeightChange]);
 
+  // Expose methods for parent to run/kill commands in terminal tabs
+  useImperativeHandle(ref, () => ({
+    // Create a new tab, run a command in it, return the ptyId
+    async runCommand(cmd) {
+      const cwd = projectPath || undefined;
+      let result;
+      try {
+        result = await window.foundry?.terminalCreate(cwd);
+      } catch (err) {
+        console.error('Failed to create terminal for command:', err);
+        return null;
+      }
+      if (!result) return null;
+
+      const ptyId = result.id;
+      const id = `term-${ptyId}`;
+      counterRef.current += 1;
+
+      const xterm = new Terminal({
+        fontSize: 13,
+        fontFamily: "'JetBrains Mono', 'SF Mono', 'Fira Code', 'Menlo', 'Consolas', monospace",
+        lineHeight: 1.0,
+        letterSpacing: 0,
+        cursorBlink: true,
+        cursorStyle: 'block',
+        theme: getTerminalTheme(),
+        scrollback: 5000,
+        drawBoldTextInBrightColors: true,
+        allowTransparency: false,
+        minimumContrastRatio: 1,
+      });
+
+      const fitAddon = new FitAddon();
+      xterm.loadAddon(fitAddon);
+      xterm.loadAddon(new WebLinksAddon());
+
+      xterm.onData((data) => {
+        window.foundry?.terminalWrite(ptyId, data);
+      });
+
+      const applyCursorStyle = () => {
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        const cursorHex = isDark ? '#E4E4E7' : '#27272A';
+        xterm.write(`\x1b]12;${cursorHex}\x07`);
+        xterm.write('\x1b[2 q');
+        xterm.options.cursorStyle = 'block';
+        xterm.options.cursorBlink = true;
+      };
+
+      setTimeout(applyCursorStyle, 200);
+      setTimeout(applyCursorStyle, 600);
+      setTimeout(applyCursorStyle, 1500);
+
+      terminalsRef.current.set(id, { xterm, fitAddon, ptyId, applyCursorStyle });
+      setTerminals(prev => [...prev, { id, label: cmd.split(' ')[0], ptyId }]);
+      setActiveTermId(id);
+
+      // Wait for shell prompt before sending command
+      await new Promise((resolve) => {
+        let resolved = false;
+        const cleanup = window.foundry?.onTerminalData((dataId, data) => {
+          if (dataId === ptyId && !resolved) {
+            resolved = true;
+            cleanup?.();
+            resolve();
+          }
+        });
+        setTimeout(() => {
+          if (!resolved) { resolved = true; cleanup?.(); resolve(); }
+        }, 2000);
+      });
+
+      window.foundry?.terminalWrite(ptyId, cmd + '\n');
+      return ptyId;
+    },
+
+    // Kill a specific terminal by ptyId
+    killByPtyId(ptyId) {
+      for (const [id, entry] of terminalsRef.current) {
+        if (entry.ptyId === ptyId) {
+          window.foundry?.terminalKill(entry.ptyId);
+          // Don't remove the tab — let the exit listener show [Process exited]
+          return true;
+        }
+      }
+      return false;
+    },
+  }), [projectPath]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -324,4 +413,6 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
       </div>
     </motion.div>
   );
-}
+});
+
+export default TerminalPanel;

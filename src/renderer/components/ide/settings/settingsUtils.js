@@ -1,7 +1,8 @@
-import { FiUser, FiMoon, FiGithub, FiGlobe, FiCpu } from 'react-icons/fi';
+import { FiUser, FiMoon, FiGithub, FiGlobe, FiCpu, FiFolder } from 'react-icons/fi';
 
 export const SECTIONS = [
   { id: 'account', label: 'Account', icon: FiUser },
+  { id: 'workspace', label: 'Workspace', icon: FiFolder },
   { id: 'providers', label: 'Providers', icon: FiCpu },
   { id: 'github', label: 'GitHub', icon: FiGithub },
   { id: 'appearance', label: 'Appearance', icon: FiMoon },

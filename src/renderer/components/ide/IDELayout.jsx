@@ -2,6 +2,8 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { TbLayoutBottombar, TbLayoutBottombarFilled, TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled } from 'react-icons/tb';
 import { FiSun, FiMoon } from 'react-icons/fi';
+import { VscPlay, VscDebugStop } from 'react-icons/vsc';
+import { useToast } from './ToastProvider';
 import { ActivityBar, Sidebar } from './sidebar';
 import { EditorArea } from './editor';
 import ChatPanelContainer from './ChatPanelContainer';
@@ -30,6 +32,13 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const editorContainerRef = useRef(null);
   const prePanelSidebarRef = useRef(null);
   const prePanelTerminalRef = useRef(null);
+
+  // Start command state
+  const [startCommand, setStartCommand] = useState('');
+  const [startRunning, setStartRunning] = useState(false);
+  const startPtyIdRef = useRef(null);
+  const terminalPanelRef = useRef(null);
+  const addToast = useToast();
 
   const [windowState, setWindowState] = useState({ isFullScreen: false, isMaximized: false });
 
@@ -281,6 +290,87 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     else { setActivePanel(panel); setSidebarVisible(true); }
   };
 
+  // Load saved start command when project changes
+  useEffect(() => {
+    if (!project?.path) return;
+    const key = `start_command_${project.path}`;
+    window.foundry?.getSetting(key).then((cmd) => {
+      if (cmd) setStartCommand(cmd);
+      else setStartCommand('');
+    }).catch(() => {});
+    // Cleanup running process if project switches
+    return () => {
+      if (startPtyIdRef.current) {
+        terminalPanelRef.current?.killByPtyId(startPtyIdRef.current);
+        startPtyIdRef.current = null;
+        setStartRunning(false);
+      }
+    };
+  }, [project?.path]);
+
+  const handleStartCommand = useCallback(async (cmdOverride) => {
+    const cmd = (cmdOverride || startCommand).trim();
+    if (!cmd || !project?.path) return;
+
+    setStartRunning(true);
+
+    const ptyId = await terminalPanelRef.current?.runCommand(cmd);
+    if (!ptyId) {
+      setStartRunning(false);
+      addToast({ message: 'Failed to start process', type: 'error', sound: false });
+      return;
+    }
+    startPtyIdRef.current = ptyId;
+
+    // Listen for exit to update running state
+    const cleanupExit = window.foundry?.onTerminalExit((id) => {
+      if (id === ptyId) {
+        setStartRunning(false);
+        startPtyIdRef.current = null;
+        cleanupExit?.();
+      }
+    });
+
+    addToast({ message: `Started: ${cmd}`, type: 'success', sound: false });
+  }, [startCommand, project?.path, addToast]);
+
+  const handleStopCommand = useCallback(() => {
+    if (startPtyIdRef.current) {
+      terminalPanelRef.current?.killByPtyId(startPtyIdRef.current);
+      startPtyIdRef.current = null;
+      setStartRunning(false);
+      addToast({ message: 'Process stopped', type: 'info', sound: false });
+    }
+  }, [addToast]);
+
+  const handleStartButtonClick = useCallback(async () => {
+    if (startRunning) {
+      handleStopCommand();
+      return;
+    }
+    // Always re-read the command fresh from settings to avoid stale state
+    let cmd = startCommand;
+    if (project?.path) {
+      try {
+        const saved = await window.foundry?.getSetting(`start_command_${project.path}`);
+        if (saved !== undefined) {
+          cmd = saved || '';
+          setStartCommand(cmd);
+        }
+      } catch {}
+    }
+    if (!cmd.trim()) {
+      addToast({ message: 'No start command configured. Set one in Workspace settings.', type: 'error' });
+      setSettingsInitialSection('workspace');
+      if (!showSettings) enterFullPage();
+      setShowSettings(true);
+      setShowTasks(false);
+      return;
+    }
+    // Pass fresh command directly to avoid stale closure
+    handleStartCommand(cmd);
+  }, [startRunning, startCommand, project?.path, handleStopCommand, handleStartCommand, addToast, showSettings]);
+
   return (
     <div className={styles.root}>
       <div className={styles.activityColumn}>
@@ -323,6 +413,24 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               projectPath={project?.path}
               onRefresh={refreshTree}
             />
+            <button
+              className={`${styles.startBtn} ${startRunning ? styles.startBtnRunning : ''}`}
+              onClick={handleStartButtonClick}
+              title={startRunning ? 'Stop process' : (startCommand ? `Run: ${startCommand}` : 'Set start command')}
+            >
+              {startRunning ? (
+                <>
+                  <VscDebugStop size={13} />
+                  <span className={styles.startBtnLabel}>Stop</span>
+                  <span className={styles.startBtnDot} />
+                </>
+              ) : (
+                <>
+                  <VscPlay size={13} />
+                  <span className={styles.startBtnLabel}>Start</span>
+                </>
+              )}
+            </button>
           </div>
           <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
@@ -395,7 +503,18 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 <SettingsPage
                   profile={profile}
                   initialSection={settingsInitialSection}
-                  onClose={() => { setShowSettings(false); setSettingsInitialSection(null); exitFullPage(); }}
+                  projectPath={project?.path}
+                  onClose={() => {
+                    setShowSettings(false);
+                    setSettingsInitialSection(null);
+                    exitFullPage();
+                    // Re-read start command in case it was changed in workspace settings
+                    if (project?.path) {
+                      window.foundry?.getSetting(`start_command_${project.path}`).then((cmd) => {
+                        if (cmd !== undefined) setStartCommand(cmd || '');
+                      }).catch(() => {});
+                    }
+                  }}
                   onProfileChange={onProfileChange}
                   onCloneRepo={(result) => {
                     setProject({ path: result.path, name: result.name });
@@ -423,6 +542,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               </div>
             </div>
             <TerminalPanel
+              ref={terminalPanelRef}
               height={terminalMaximized ? maxTerminalHeight : terminalHeight}
               onHeightChange={setTerminalHeight}
               projectPath={project?.path}
