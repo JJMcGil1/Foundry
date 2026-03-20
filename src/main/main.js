@@ -20,7 +20,7 @@ function setAvatarCache(key, value) {
     const firstKey = avatarCache.keys().next().value;
     avatarCache.delete(firstKey);
   }
-  setAvatarCache(key, value);
+  avatarCache.set(key, value);
 }
 
 function probeGitHubAvatar(username) {
@@ -896,7 +896,10 @@ function registerIPC() {
 
   ipcMain.handle('git:stage', async (_event, dirPath, filePath) => {
     try {
-      await execAsync(`git add "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      // Accept a single path string or an array of paths
+      const paths = Array.isArray(filePath) ? filePath : [filePath];
+      const quoted = paths.map(p => `"${p}"`).join(' ');
+      await execAsync(`git add -- ${quoted}`, { cwd: dirPath, timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -905,7 +908,10 @@ function registerIPC() {
 
   ipcMain.handle('git:unstage', async (_event, dirPath, filePath) => {
     try {
-      await execAsync(`git reset HEAD "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      // Accept a single path string or an array of paths
+      const paths = Array.isArray(filePath) ? filePath : [filePath];
+      const quoted = paths.map(p => `"${p}"`).join(' ');
+      await execAsync(`git reset HEAD -- ${quoted}`, { cwd: dirPath, timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -914,10 +920,16 @@ function registerIPC() {
 
   ipcMain.handle('git:discard', async (_event, dirPath, filePath) => {
     try {
-      // For untracked files, remove them; for tracked files, restore them
+      // For untracked files/dirs, remove them; for tracked files, restore them
       const { stdout } = await execAsync(`git status --porcelain "${filePath}"`, { cwd: dirPath, timeout: 5000 });
       if (stdout.trim().startsWith('??')) {
-        await fs.promises.unlink(path.join(dirPath, filePath));
+        const fullPath = path.join(dirPath, filePath);
+        const stat = await fs.promises.stat(fullPath);
+        if (stat.isDirectory()) {
+          await fs.promises.rm(fullPath, { recursive: true, force: true });
+        } else {
+          await fs.promises.unlink(fullPath);
+        }
       } else {
         await execAsync(`git checkout -- "${filePath}"`, { cwd: dirPath, timeout: 5000 });
       }
@@ -1121,13 +1133,40 @@ function registerIPC() {
         }
       } catch {}
 
-      // Truncate diff to ~8K chars to stay within reasonable token limits
-      const maxDiffLen = 8000;
-      const truncatedDiff = fullDiff.length > maxDiffLen
-        ? fullDiff.slice(0, maxDiffLen) + '\n... (diff truncated)'
-        : fullDiff;
+      // Also capture untracked files content so new files are reflected in the commit message
+      let untrackedDiff = '';
+      try {
+        const statusResult = await execAsync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const untrackedFiles = statusResult.stdout.split('\n').filter(l => l.startsWith('??')).map(l => l.slice(3).trim());
+        for (const uf of untrackedFiles.slice(0, 20)) {
+          try {
+            const content = await execAsync(`git diff --no-index /dev/null "${uf}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000, maxBuffer: 256 * 1024 }).catch(e => ({ stdout: e.stdout || '' }));
+            untrackedDiff += content.stdout + '\n';
+          } catch {}
+        }
+      } catch {}
 
-      const commitPrompt = `You are a commit message generator. Given the following git diff, write a single concise commit message. Follow conventional commit style (e.g. "feat: ...", "fix: ...", "refactor: ...", "chore: ...", "docs: ...", "style: ...", "test: ..."). The message should be one line, under 72 characters, lowercase after the prefix, no period at the end. Only output the commit message, nothing else.\n\nGit diff stat:\n${diffStat.trim()}\n\n${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
+      // Combine all diffs
+      const combinedDiff = (fullDiff + '\n' + untrackedDiff).trim();
+
+      // Truncate diff to ~16K chars to stay within reasonable token limits
+      const maxDiffLen = 16000;
+      const truncatedDiff = combinedDiff.length > maxDiffLen
+        ? combinedDiff.slice(0, maxDiffLen) + '\n... (diff truncated)'
+        : combinedDiff;
+
+      const commitPrompt = `You are a commit message generator. Given the following git diff, write a detailed commit message. Follow conventional commit style (e.g. "feat: ...", "fix: ...", "refactor: ...", "chore: ...", "docs: ...", "style: ...", "test: ...").
+
+Rules:
+- First line: a conventional commit subject line (under 72 characters, lowercase after the prefix, no period)
+- Then a blank line
+- Then a bullet-point body that describes ALL meaningful changes across every file in the diff. Each bullet should start with "- " and briefly explain what changed and why it matters. Group related changes together. Do not omit any files or significant changes.
+- Only output the commit message, nothing else.
+
+Git diff stat:
+${diffStat.trim()}
+
+${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
       // Try AI-powered generation using the user's selected model + credentials
       const cred = await resolveClaudeCredential();
@@ -1173,9 +1212,11 @@ function registerIPC() {
           });
 
           if (aiMessage) {
-            let cleaned = aiMessage.replace(/^["']|["']$/g, '').replace(/\.$/, '').trim();
-            // Take only first line in case CLI outputs extras
-            cleaned = cleaned.split('\n')[0].trim();
+            let cleaned = aiMessage.replace(/^["']|["']$/g, '').trim();
+            // Remove trailing period from subject line only
+            const lines = cleaned.split('\n');
+            lines[0] = lines[0].replace(/\.$/, '');
+            cleaned = lines.join('\n').trim();
             return { message: cleaned };
           }
         }
@@ -1184,7 +1225,7 @@ function registerIPC() {
         const resolvedModel = ALIAS_TO_MODEL[modelAlias] || modelAlias || 'claude-sonnet-4-6';
         const postData = JSON.stringify({
           model: resolvedModel,
-          max_tokens: 256,
+          max_tokens: 1024,
           messages: [{ role: 'user', content: commitPrompt }],
         });
 

@@ -9,6 +9,7 @@ import ChangeItem from './ChangeItem';
 import CommitGraph from './CommitGraph';
 import { COMMITS_PAGE_SIZE, statusColor } from './gitUtils';
 import { useToast } from '../ToastProvider';
+import ConfirmationModal from '../ConfirmationModal';
 import styles from '../Sidebar.module.css';
 
 const SYNC_STEPS = ['pull', 'stage', 'commit', 'push'];
@@ -47,6 +48,10 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   // Optimistic staging state — files mid-transition
   const [optimisticStaged, setOptimisticStaged] = useState(new Set());   // paths being staged
   const [optimisticUnstaged, setOptimisticUnstaged] = useState(new Set()); // paths being unstaged
+  // Discard confirmation modal state
+  const [discardConfirm, setDiscardConfirm] = useState(null); // null | { type: 'file', path: string } | { type: 'all', files: array }
+  // Serialize git index operations to prevent index.lock races
+  const gitQueueRef = useRef(Promise.resolve());
 
   // Reactive cleanup: clear optimistic state only once gitStatus confirms the real move.
   // This prevents the flicker caused by clearing optimistic eagerly (before gitStatus arrives).
@@ -145,20 +150,36 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     setLoadingMore(false);
   }, [loadingMore, hasMoreCommits, effectivePath, commits.length, effectiveBranch]);
 
-  const handleStageFile = async (filePath) => {
+  const handleStageFile = (filePath) => {
     setOptimisticStaged(prev => new Set(prev).add(filePath));
-    await window.foundry?.gitStage(projectPath, filePath);
-    refreshGit(); // effect below clears optimistic once gitStatus confirms the move
+    gitQueueRef.current = gitQueueRef.current
+      .then(() => window.foundry?.gitStage(projectPath, filePath))
+      .then(() => refreshGit())
+      .catch(() => refreshGit());
   };
 
-  const handleUnstageFile = async (filePath) => {
+  const handleUnstageFile = (filePath) => {
     setOptimisticUnstaged(prev => new Set(prev).add(filePath));
-    await window.foundry?.gitUnstage(projectPath, filePath);
-    refreshGit(); // effect below clears optimistic once gitStatus confirms the move
+    gitQueueRef.current = gitQueueRef.current
+      .then(() => window.foundry?.gitUnstage(projectPath, filePath))
+      .then(() => refreshGit())
+      .catch(() => refreshGit());
   };
 
-  const handleDiscardFile = async (filePath) => {
-    await window.foundry?.gitDiscard(projectPath, filePath);
+  const handleDiscardFile = (filePath) => {
+    setDiscardConfirm({ type: 'file', path: filePath });
+  };
+
+  const executeDiscard = async () => {
+    if (!discardConfirm) return;
+    if (discardConfirm.type === 'file') {
+      await window.foundry?.gitDiscard(projectPath, discardConfirm.path);
+    } else if (discardConfirm.type === 'all') {
+      for (const f of discardConfirm.files) {
+        await window.foundry?.gitDiscard(projectPath, f.path);
+      }
+    }
+    setDiscardConfirm(null);
     refreshGit();
   };
 
@@ -171,7 +192,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   const autoResize = useCallback((el) => {
     if (!el) return;
     el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    el.style.height = Math.min(el.scrollHeight, 240) + 'px';
   }, []);
 
   // Auto-resize whenever commitMsg changes (covers AI generation + typing)
@@ -226,10 +247,11 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
 
       // Step 2: Stage (if nothing staged, stage everything)
       setSyncStep('stage');
-      const staged = gitStatus.staged || [];
-      if (staged.length === 0) {
-        for (const f of (gitStatus.files || [])) {
-          await window.foundry?.gitStage(projectPath, f.path);
+      const currentStaged = gitStatus.staged || [];
+      if (currentStaged.length === 0) {
+        const allPaths = (gitStatus.files || []).map(f => f.path);
+        if (allPaths.length > 0) {
+          await window.foundry?.gitStage(projectPath, allPaths);
         }
       }
       markDone('stage');
@@ -285,25 +307,22 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     setCompletedSteps(new Set());
   };
 
-  const handleDiscardAll = async (files) => {
-    for (const f of files) {
-      await window.foundry?.gitDiscard(projectPath, f.path);
-    }
-    refreshGit();
+  const handleDiscardAll = (files) => {
+    setDiscardConfirm({ type: 'all', files });
   };
 
   const handleStageAll = async (files) => {
     const paths = files.map(f => f.path);
     setOptimisticStaged(prev => { const next = new Set(prev); paths.forEach(p => next.add(p)); return next; });
-    await Promise.all(files.map(f => window.foundry?.gitStage(projectPath, f.path)));
-    refreshGit(); // effect below clears optimistic once gitStatus confirms
+    await window.foundry?.gitStage(projectPath, paths);
+    refreshGit();
   };
 
   const handleUnstageAll = async (files) => {
     const paths = files.map(f => f.path);
     setOptimisticUnstaged(prev => { const next = new Set(prev); paths.forEach(p => next.add(p)); return next; });
-    await Promise.all(files.map(f => window.foundry?.gitUnstage(projectPath, f.path)));
-    refreshGit(); // effect below clears optimistic once gitStatus confirms
+    await window.foundry?.gitUnstage(projectPath, paths);
+    refreshGit();
   };
 
   if (!gitStatus.isRepo) {
@@ -546,6 +565,22 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
         hasMore={hasMoreCommits}
         loadingMore={loadingMore}
         totalCommits={totalCommits}
+      />
+
+      <ConfirmationModal
+        open={!!discardConfirm}
+        title="Discard Changes"
+        message={
+          discardConfirm?.type === 'all'
+            ? `Are you sure you want to discard all changes in ${discardConfirm.files.length} file${discardConfirm.files.length !== 1 ? 's' : ''}? This cannot be undone.`
+            : discardConfirm?.path
+              ? `Are you sure you want to discard changes in "${discardConfirm.path.split('/').pop()}"? This cannot be undone.`
+              : ''
+        }
+        confirmLabel="Discard"
+        danger
+        onConfirm={executeDiscard}
+        onCancel={() => setDiscardConfirm(null)}
       />
     </div>
   );
