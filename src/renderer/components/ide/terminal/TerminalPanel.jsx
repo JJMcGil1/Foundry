@@ -18,7 +18,6 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
   const terminalsRef = useRef(new Map());
   const resizeObserverRef = useRef(null);
   const counterRef = useRef(0);
-  const initializedRef = useRef(false);
 
   // Create a new terminal instance
   const createTerminal = useCallback(async () => {
@@ -200,13 +199,12 @@ export default function TerminalPanel({ height, onHeightChange, projectPath, vis
     return () => resizeObserverRef.current?.disconnect();
   }, [activeTermId]);
 
-  // Auto-create first terminal when panel becomes visible for the first time
+  // Auto-create a terminal when panel becomes visible and none exist
   useEffect(() => {
-    if (visible && !initializedRef.current) {
-      initializedRef.current = true;
+    if (visible && terminals.length === 0) {
       createTerminal();
     }
-  }, [visible, createTerminal]);
+  }, [visible, createTerminal, terminals.length]);
 
   const handleClose = useCallback((id) => {
     const entry = terminalsRef.current.get(id);

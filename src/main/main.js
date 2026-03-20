@@ -462,9 +462,45 @@ function getFileLanguage(filePath) {
   return map[ext] || 'plaintext';
 }
 
+// Resolve the user's real shell PATH so git hooks (husky, lint-staged, etc.)
+// can find node/npm/npx. Electron apps launched from Dock/Finder inherit a
+// minimal PATH that lacks Homebrew, nvm, etc. We reuse the same login-shell
+// resolution that the integrated terminal uses.
+let _cachedGitEnv = null;
+function getGitEnv() {
+  if (_cachedGitEnv) return _cachedGitEnv;
+  const env = { ...process.env };
+  if (process.platform !== 'win32') {
+    try {
+      const candidates = [process.env.SHELL, '/bin/zsh', '/bin/bash', '/bin/sh'].filter(Boolean);
+      const shellPath = candidates.find(s => { try { return fs.statSync(s).isFile(); } catch { return false; } }) || '/bin/sh';
+      const output = execSync(`${shellPath} -l -i -c 'echo "___FOUNDRY_PATH___"; echo $PATH'`, {
+        timeout: 5000,
+        encoding: 'utf8',
+        env: { ...process.env, HOME: os.homedir() },
+      });
+      const lines = output.trim().split('\n');
+      const markerIdx = lines.lastIndexOf('___FOUNDRY_PATH___');
+      const resolvedPath = markerIdx >= 0 && lines[markerIdx + 1] ? lines[markerIdx + 1] : null;
+      if (resolvedPath && resolvedPath.includes('/')) {
+        env.PATH = resolvedPath;
+      }
+    } catch {
+      // Fall through with Electron's inherited PATH
+    }
+  }
+  _cachedGitEnv = env;
+  return _cachedGitEnv;
+}
+
+// Wrapper for execAsync that injects the resolved shell environment
+function gitExec(cmd, opts = {}) {
+  return execAsync(cmd, { ...opts, env: { ...getGitEnv(), ...opts.env } });
+}
+
 async function getGitSubmodules(dirPath) {
   try {
-    const { stdout } = await execAsync('git submodule status --recursive', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const { stdout } = await gitExec('git submodule status --recursive', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
     const lines = stdout.split('\n').filter(Boolean);
     return lines.map(line => {
       // Format: " <hash> <path> (<describe>)" or "+<hash> <path> (<describe>)" or "-<hash> <path>"
@@ -488,7 +524,7 @@ async function getGitSubmodules(dirPath) {
 
 async function getGitRemotes(dirPath) {
   try {
-    const { stdout } = await execAsync('git remote -v', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const { stdout } = await gitExec('git remote -v', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
     const lines = stdout.split('\n').filter(Boolean);
     const remotes = {};
     for (const line of lines) {
@@ -512,8 +548,8 @@ async function getGitRemotes(dirPath) {
 async function getGitStatus(dirPath) {
   try {
     const [statusResult, branchResult] = await Promise.all([
-      execAsync('git status --porcelain -u', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
-      execAsync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
+      gitExec('git status --porcelain -u', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
+      gitExec('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
     ]);
     const result = statusResult.stdout;
     const branch = branchResult.stdout.trim();
@@ -541,7 +577,7 @@ async function getGitStatus(dirPath) {
     // Get behind/ahead counts
     let behind = 0, ahead = 0;
     try {
-      const { stdout: tracking } = await execAsync('git rev-list --left-right --count @{u}...HEAD', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+      const { stdout: tracking } = await gitExec('git rev-list --left-right --count @{u}...HEAD', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
       const parts = tracking.trim().split(/\s+/);
       behind = parseInt(parts[0], 10) || 0;
       ahead = parseInt(parts[1], 10) || 0;
@@ -559,7 +595,7 @@ async function getGitLog(dirPath, count = 20, skip = 0, branch = null) {
     const skipArg = skip > 0 ? ` --skip=${skip}` : '';
     // If branch is specified, show only that branch's commits; otherwise show all
     const branchArg = branch && branch !== 'all' ? ` "${branch.replace(/"/g, '')}"` : ' --all';
-    const { stdout } = await execAsync(
+    const { stdout } = await gitExec(
       `git log${branchArg} --topo-order --pretty=format:"${SEP}%H|||%h|||%s|||%an|||%ae|||%ar|||%aI|||%P|||%D" --numstat -${count}${skipArg}`,
       { cwd: dirPath, encoding: 'utf8', timeout: 10000 }
     );
@@ -599,7 +635,7 @@ async function getGitLog(dirPath, count = 20, skip = 0, branch = null) {
 async function getGitCommitCount(dirPath, branch = null) {
   try {
     const branchArg = branch && branch !== 'all' ? ` "${branch.replace(/"/g, '')}"` : ' --all';
-    const { stdout } = await execAsync(`git rev-list --count${branchArg}`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const { stdout } = await gitExec(`git rev-list --count${branchArg}`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
     return parseInt(stdout.trim(), 10) || 0;
   } catch {
     return 0;
@@ -608,7 +644,7 @@ async function getGitCommitCount(dirPath, branch = null) {
 
 async function getGitDiff(dirPath, filePath) {
   try {
-    const { stdout } = await execAsync(`git diff -- "${filePath}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+    const { stdout } = await gitExec(`git diff -- "${filePath}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
     return stdout;
   } catch {
     return '';
@@ -773,7 +809,7 @@ function registerIPC() {
     // Inject token into HTTPS URL for auth
     const authedUrl = cloneUrl.replace('https://', `https://x-access-token:${token}@`);
     try {
-      await execAsync(`git clone "${authedUrl}" "${destPath}"`, { timeout: 120000 });
+      await gitExec(`git clone "${authedUrl}" "${destPath}"`, { timeout: 120000 });
       return {
         success: true,
         path: destPath,
@@ -882,7 +918,7 @@ function registerIPC() {
 
   ipcMain.handle('git:remoteUrl', async (_event, dirPath) => {
     try {
-      const { stdout } = await execAsync('git config --get remote.origin.url', { cwd: dirPath, timeout: 5000 });
+      const { stdout } = await gitExec('git config --get remote.origin.url', { cwd: dirPath, timeout: 5000 });
       const url = stdout.trim();
       // Convert SSH URLs to HTTPS: git@github.com:user/repo.git → https://github.com/user/repo
       if (url.startsWith('git@')) {
@@ -899,7 +935,7 @@ function registerIPC() {
       // Accept a single path string or an array of paths
       const paths = Array.isArray(filePath) ? filePath : [filePath];
       const quoted = paths.map(p => `"${p}"`).join(' ');
-      await execAsync(`git add -- ${quoted}`, { cwd: dirPath, timeout: 10000 });
+      await gitExec(`git add -- ${quoted}`, { cwd: dirPath, timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -911,7 +947,7 @@ function registerIPC() {
       // Accept a single path string or an array of paths
       const paths = Array.isArray(filePath) ? filePath : [filePath];
       const quoted = paths.map(p => `"${p}"`).join(' ');
-      await execAsync(`git reset HEAD -- ${quoted}`, { cwd: dirPath, timeout: 10000 });
+      await gitExec(`git reset HEAD -- ${quoted}`, { cwd: dirPath, timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -921,7 +957,7 @@ function registerIPC() {
   ipcMain.handle('git:discard', async (_event, dirPath, filePath) => {
     try {
       // For untracked files/dirs, remove them; for tracked files, restore them
-      const { stdout } = await execAsync(`git status --porcelain "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+      const { stdout } = await gitExec(`git status --porcelain "${filePath}"`, { cwd: dirPath, timeout: 5000 });
       if (stdout.trim().startsWith('??')) {
         const fullPath = path.join(dirPath, filePath);
         const stat = await fs.promises.stat(fullPath);
@@ -931,7 +967,7 @@ function registerIPC() {
           await fs.promises.unlink(fullPath);
         }
       } else {
-        await execAsync(`git checkout -- "${filePath}"`, { cwd: dirPath, timeout: 5000 });
+        await gitExec(`git checkout -- "${filePath}"`, { cwd: dirPath, timeout: 5000 });
       }
       return { success: true };
     } catch (err) {
@@ -941,7 +977,7 @@ function registerIPC() {
 
   ipcMain.handle('git:commit', async (_event, dirPath, message) => {
     try {
-      await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
+      await gitExec(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -950,16 +986,25 @@ function registerIPC() {
 
   ipcMain.handle('git:push', async (_event, dirPath) => {
     try {
-      await execAsync('git push', { cwd: dirPath, timeout: 30000 });
+      await gitExec('git push', { cwd: dirPath, timeout: 30000 });
       return { success: true };
     } catch (err) {
+      // If push failed, try setting upstream for new branches
+      try {
+        const { stdout: branchOut } = await gitExec('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const branch = branchOut.trim();
+        if (branch) {
+          await gitExec(`git push --set-upstream origin ${branch}`, { cwd: dirPath, timeout: 30000 });
+          return { success: true };
+        }
+      } catch { /* upstream push also failed */ }
       return { error: err.message };
     }
   });
 
   ipcMain.handle('git:pull', async (_event, dirPath) => {
     try {
-      const { stdout, stderr } = await execAsync('git pull', { cwd: dirPath, timeout: 30000 });
+      const { stdout, stderr } = await gitExec('git pull', { cwd: dirPath, timeout: 30000 });
       // git pull outputs diffstat to stdout, but some info goes to stderr
       const output = [stdout, stderr].filter(Boolean).join('\n').trim();
       return { success: true, output };
@@ -974,20 +1019,20 @@ function registerIPC() {
       // Check if remote exists
       let hasRemote = false;
       try {
-        const { stdout: remotes } = await execAsync('git remote', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const { stdout: remotes } = await gitExec('git remote', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
         hasRemote = remotes.trim().length > 0;
       } catch { /* no remote */ }
 
       // Step 1: Pull remote changes first (if remote exists)
       if (hasRemote) {
         try {
-          await execAsync('git pull --rebase=false', { cwd: dirPath, encoding: 'utf8', timeout: 30000 });
+          await gitExec('git pull --rebase=false', { cwd: dirPath, encoding: 'utf8', timeout: 30000 });
         } catch (pullErr) {
           // Check if it's a merge conflict
-          const { stdout: status } = await execAsync('git status', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+          const { stdout: status } = await gitExec('git status', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
           if (status.includes('Unmerged') || status.includes('both modified') || status.includes('fix conflicts')) {
             // Abort the merge so we don't leave dirty state
-            try { await execAsync('git merge --abort', { cwd: dirPath, timeout: 5000 }); } catch { /* ignore */ }
+            try { await gitExec('git merge --abort', { cwd: dirPath, timeout: 5000 }); } catch { /* ignore */ }
             return { error: 'Merge conflicts detected when pulling remote changes. Please resolve conflicts manually before committing.' };
           }
           // If pull failed for other reasons (e.g. no tracking branch), continue with commit+push
@@ -995,17 +1040,17 @@ function registerIPC() {
       }
 
       // Step 2: Commit (staging is handled on the renderer side already)
-      await execAsync(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
+      await gitExec(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
 
       // Step 3: Push (if remote exists)
       if (hasRemote) {
         try {
-          await execAsync('git push', { cwd: dirPath, timeout: 30000 });
+          await gitExec('git push', { cwd: dirPath, timeout: 30000 });
         } catch (pushErr) {
           // Commit succeeded but push failed — try setting upstream
           try {
-            const { stdout: branchOut } = await execAsync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
-            await execAsync(`git push --set-upstream origin ${branchOut.trim()}`, { cwd: dirPath, timeout: 30000 });
+            const { stdout: branchOut } = await gitExec('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+            await gitExec(`git push --set-upstream origin ${branchOut.trim()}`, { cwd: dirPath, timeout: 30000 });
           } catch (upstreamErr) {
             return { success: true, warning: 'Commit succeeded but push failed: ' + pushErr.message };
           }
@@ -1022,8 +1067,8 @@ function registerIPC() {
   ipcMain.handle('git:listBranches', async (_event, dirPath) => {
     try {
       const [currentResult, localResult] = await Promise.all([
-        execAsync('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
-        execAsync(
+        gitExec('git branch --show-current', { cwd: dirPath, encoding: 'utf8', timeout: 5000 }),
+        gitExec(
           'git branch --no-color --format="%(refname:short)|||%(objectname:short)|||%(authorname)|||%(committerdate:relative)|||%(subject)"',
           { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
         ),
@@ -1037,7 +1082,7 @@ function registerIPC() {
       // Get remote branches with last commit info
       let remoteBranches = [];
       try {
-        const { stdout: remoteRaw } = await execAsync(
+        const { stdout: remoteRaw } = await gitExec(
           'git branch -r --no-color --format="%(refname:short)|||%(objectname:short)|||%(authorname)|||%(committerdate:relative)|||%(subject)"',
           { cwd: dirPath, encoding: 'utf8', timeout: 5000 }
         );
@@ -1059,7 +1104,7 @@ function registerIPC() {
 
   ipcMain.handle('git:checkout', async (_event, dirPath, branchName) => {
     try {
-      await execAsync(`git checkout "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      await gitExec(`git checkout "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -1069,9 +1114,9 @@ function registerIPC() {
   ipcMain.handle('git:createBranch', async (_event, dirPath, branchName, checkout = true) => {
     try {
       if (checkout) {
-        await execAsync(`git checkout -b "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+        await gitExec(`git checkout -b "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       } else {
-        await execAsync(`git branch "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+        await gitExec(`git branch "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       }
       return { success: true };
     } catch (err) {
@@ -1082,7 +1127,7 @@ function registerIPC() {
   ipcMain.handle('git:deleteBranch', async (_event, dirPath, branchName, force = false) => {
     try {
       const flag = force ? '-D' : '-d';
-      await execAsync(`git branch ${flag} "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      await gitExec(`git branch ${flag} "${branchName}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -1092,7 +1137,7 @@ function registerIPC() {
   ipcMain.handle('git:checkoutRemoteBranch', async (_event, dirPath, remoteBranch) => {
     try {
       const localName = remoteBranch.replace(/^origin\//, '');
-      await execAsync(`git checkout -b "${localName}" "${remoteBranch}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
+      await gitExec(`git checkout -b "${localName}" "${remoteBranch}"`, { cwd: dirPath, encoding: 'utf8', timeout: 10000 });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -1104,17 +1149,17 @@ function registerIPC() {
       // Get diff — prefer staged, fall back to unstaged
       let diffStat = '';
       try {
-        const r = await execAsync('git diff --cached --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const r = await gitExec('git diff --cached --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
         diffStat = r.stdout;
       } catch {}
       if (!diffStat.trim()) {
         try {
-          const r = await execAsync('git diff --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+          const r = await gitExec('git diff --stat', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
           diffStat = r.stdout;
         } catch {}
       }
       if (!diffStat.trim()) {
-        const r = await execAsync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const r = await gitExec('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
         diffStat = r.stdout;
       }
 
@@ -1125,10 +1170,10 @@ function registerIPC() {
       // Get the actual diff content for the AI
       let fullDiff = '';
       try {
-        const r = await execAsync('git diff --cached', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+        const r = await gitExec('git diff --cached', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
         fullDiff = r.stdout;
         if (!fullDiff.trim()) {
-          const r2 = await execAsync('git diff', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
+          const r2 = await gitExec('git diff', { cwd: dirPath, encoding: 'utf8', timeout: 10000, maxBuffer: 1024 * 1024 });
           fullDiff = r2.stdout;
         }
       } catch {}
@@ -1136,11 +1181,11 @@ function registerIPC() {
       // Also capture untracked files content so new files are reflected in the commit message
       let untrackedDiff = '';
       try {
-        const statusResult = await execAsync('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
+        const statusResult = await gitExec('git status --porcelain', { cwd: dirPath, encoding: 'utf8', timeout: 5000 });
         const untrackedFiles = statusResult.stdout.split('\n').filter(l => l.startsWith('??')).map(l => l.slice(3).trim());
         for (const uf of untrackedFiles.slice(0, 20)) {
           try {
-            const content = await execAsync(`git diff --no-index /dev/null "${uf}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000, maxBuffer: 256 * 1024 }).catch(e => ({ stdout: e.stdout || '' }));
+            const content = await gitExec(`git diff --no-index /dev/null "${uf}"`, { cwd: dirPath, encoding: 'utf8', timeout: 5000, maxBuffer: 256 * 1024 }).catch(e => ({ stdout: e.stdout || '' }));
             untrackedDiff += content.stdout + '\n';
           } catch {}
         }
@@ -1289,7 +1334,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
   ipcMain.handle('git:clone', async (_event, url, destPath) => {
     try {
-      await execAsync(`git clone "${url}" "${destPath}"`, { timeout: 60000 });
+      await gitExec(`git clone "${url}" "${destPath}"`, { timeout: 60000 });
       return { success: true, path: destPath };
     } catch (err) {
       return { error: err.message };
@@ -1496,33 +1541,18 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
   // Tools installed via Homebrew, nvm, pyenv, etc. won't be found.
   // We fix this by running a login shell once to capture the real PATH.
   let resolvedShellEnv = null;
-  function getShellEnv(shellPath) {
+  function getShellEnv(_shellPath) {
     if (resolvedShellEnv) return resolvedShellEnv;
+    // Reuse the already-resolved PATH from getGitEnv() to avoid running
+    // the login shell twice.
+    const gitEnv = getGitEnv();
     resolvedShellEnv = {
-      ...process.env,
+      ...gitEnv,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
       TERM_PROGRAM: 'Foundry',
       LANG: process.env.LANG || 'en_US.UTF-8',
     };
-    if (process.platform !== 'win32') {
-      try {
-        const output = execSync(`${shellPath} -l -i -c 'echo "___FOUNDRY_PATH___"; echo $PATH'`, {
-          timeout: 5000,
-          encoding: 'utf8',
-          env: { ...process.env, HOME: os.homedir() },
-        });
-        // Extract PATH after our marker to avoid profile greeting messages
-        const lines = output.trim().split('\n');
-        const markerIdx = lines.lastIndexOf('___FOUNDRY_PATH___');
-        const resolvedPath = markerIdx >= 0 && lines[markerIdx + 1] ? lines[markerIdx + 1] : null;
-        if (resolvedPath && resolvedPath.includes('/')) {
-          resolvedShellEnv.PATH = resolvedPath;
-        }
-      } catch {
-        // Fall through with Electron's inherited PATH
-      }
-    }
     return resolvedShellEnv;
   }
 
