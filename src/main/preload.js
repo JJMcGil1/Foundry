@@ -143,6 +143,7 @@ contextBridge.exposeInMainWorld('foundry', {
 
   // Window
   newWindow: (projectPath) => ipcRenderer.invoke('window:new', projectPath),
+  setWindowTitle: (title) => ipcRenderer.invoke('window:setTitle', title),
   getWindowState: () => ipcRenderer.invoke('window:isFullScreen'),
   onWindowStateChange: (callback) => {
     const handler = (_event, state) => callback(state);
