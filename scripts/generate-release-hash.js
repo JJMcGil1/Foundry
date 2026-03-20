@@ -32,21 +32,14 @@ if (macFile) {
   hashes.push(`${hash}  ${macFile}`);
 }
 
-const winFile = findFile(releaseDir, '.exe');
-if (winFile) {
-  const fp = path.join(releaseDir, winFile);
+const zipFile = findFile(releaseDir, '.zip');
+if (zipFile) {
+  const fp = path.join(releaseDir, zipFile);
   const hash = sha256(fp);
-  platforms.win = { sha256: hash, size: fs.statSync(fp).size };
-  hashes.push(`${hash}  ${winFile}`);
+  platforms.macZip = { sha256: hash, size: fs.statSync(fp).size };
+  hashes.push(`${hash}  ${zipFile}`);
 }
 
-const linuxFile = findFile(releaseDir, '.AppImage');
-if (linuxFile) {
-  const fp = path.join(releaseDir, linuxFile);
-  const hash = sha256(fp);
-  platforms.linux = { sha256: hash, size: fs.statSync(fp).size };
-  hashes.push(`${hash}  ${linuxFile}`);
-}
 
 const latestJson = {
   version: pkg.version,

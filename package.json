@@ -40,15 +40,6 @@
         "zip"
       ]
     },
-    "win": {
-      "target": "nsis",
-      "icon": "build/icon.ico"
-    },
-    "linux": {
-      "target": "AppImage",
-      "icon": "build/icon.png",
-      "category": "Development"
-    },
     "directories": {
       "output": "release"
     },
