@@ -86,6 +86,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     restoreProject();
   }, []);
 
+  // Set window title to workspace name
+  useEffect(() => {
+    window.foundry?.setWindowTitle?.(project?.name || '');
+  }, [project]);
+
   // Derive current effective theme (reactive via state)
   const [currentTheme, setCurrentTheme] = useState(
     () => document.documentElement.getAttribute('data-theme') || 'dark'

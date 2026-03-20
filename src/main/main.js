@@ -97,7 +97,7 @@ async function resolveAvatarsBatch(authors) {
 }
 
 // ---- Claude API Streaming ---- //
-const activeStreams = new Map(); // streamId → AbortController
+const activeStreams = new Map(); // streamId → { process/controller, windowId }
 
 const isDev = !app.isPackaged;
 
@@ -109,7 +109,7 @@ const iconPath = isDev
 const allWindows = new Set();
 
 // ---- PTY Terminal Management ---- //
-const ptyProcesses = new Map();
+const ptyProcesses = new Map(); // ptyId → { process, windowId }
 let ptyIdCounter = 0;
 
 function createWindow(projectPath) {
@@ -140,13 +140,24 @@ function createWindow(projectPath) {
   });
 
   win.on('close', () => {
-    // Kill all PTY processes before the window is destroyed to prevent
-    // "Object has been destroyed" errors from onData callbacks firing
-    // after webContents is gone.
-    for (const [id, p] of ptyProcesses) {
-      try { p.kill(); } catch {}
+    const winId = win.id;
+    // Kill only PTY processes belonging to THIS window
+    for (const [id, entry] of ptyProcesses) {
+      if (entry.windowId === winId) {
+        try { entry.process.kill(); } catch {}
+        ptyProcesses.delete(id);
+      }
     }
-    ptyProcesses.clear();
+    // Kill only streams belonging to THIS window
+    for (const [streamId, entry] of activeStreams) {
+      if (entry.windowId === winId) {
+        try {
+          if (entry.abort) entry.abort();
+          else if (entry.kill) entry.kill('SIGTERM');
+        } catch {}
+        activeStreams.delete(streamId);
+      }
+    }
   });
 
   win.on('closed', () => {
@@ -1337,6 +1348,13 @@ function registerIPC() {
     return true;
   });
 
+  ipcMain.handle('window:setTitle', async (event, title) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win && !win.isDestroyed()) {
+      win.setTitle(title || 'Foundry');
+    }
+  });
+
   // Shell open
   ipcMain.handle('shell:openExternal', async (_event, url) => {
     shell.openExternal(url);
@@ -1405,7 +1423,8 @@ function registerIPC() {
       env: getShellEnv(shellPath),
     });
 
-    ptyProcesses.set(id, ptyProcess);
+    const ownerWin = BrowserWindow.fromWebContents(event.sender);
+    ptyProcesses.set(id, { process: ptyProcess, windowId: ownerWin?.id });
 
     ptyProcess.onData((data) => {
       try {
@@ -1433,21 +1452,21 @@ function registerIPC() {
   });
 
   ipcMain.on('terminal:write', (_event, id, data) => {
-    const p = ptyProcesses.get(id);
-    if (p) p.write(data);
+    const entry = ptyProcesses.get(id);
+    if (entry) entry.process.write(data);
   });
 
   ipcMain.on('terminal:resize', (_event, id, cols, rows) => {
-    const p = ptyProcesses.get(id);
-    if (p) {
-      try { p.resize(cols, rows); } catch {}
+    const entry = ptyProcesses.get(id);
+    if (entry) {
+      try { entry.process.resize(cols, rows); } catch {}
     }
   });
 
   ipcMain.on('terminal:kill', (_event, id) => {
-    const p = ptyProcesses.get(id);
-    if (p) {
-      p.kill();
+    const entry = ptyProcesses.get(id);
+    if (entry) {
+      entry.process.kill();
       ptyProcesses.delete(id);
     }
   });
@@ -1773,10 +1792,10 @@ function registerIPC() {
         ...(effectiveCwd && { cwd: effectiveCwd }),
       });
 
-      activeStreams.set(streamId, proc);
+      const win = BrowserWindow.fromWebContents(event.sender);
+      activeStreams.set(streamId, { kill: (sig) => proc.kill(sig), windowId: win?.id });
 
       let buffer = '';
-      const win = BrowserWindow.fromWebContents(event.sender);
 
       proc.stdout.on('data', (chunk) => {
         buffer += chunk.toString();
@@ -1854,7 +1873,8 @@ function registerIPC() {
    */
   function streamViaAPI(event, messages, model, streamId, apiKey) {
     const abortController = new AbortController();
-    activeStreams.set(streamId, abortController);
+    const win = BrowserWindow.fromWebContents(event.sender);
+    activeStreams.set(streamId, { abort: () => abortController.abort(), windowId: win?.id });
 
     // Resolve aliases for the Anthropic API (it doesn't accept short aliases)
     const resolvedModel = ALIAS_TO_MODEL[model] || model || 'claude-sonnet-4-6';
@@ -1969,9 +1989,12 @@ function registerIPC() {
   const MAX_CONCURRENT_STREAMS = 3; // Prevent unbounded subprocess spawning
 
   ipcMain.handle('claude:chat', async (event, { messages, images, model, streamId, workspacePath }) => {
-    // Enforce concurrency limit — reject if too many active streams
-    if (activeStreams.size >= MAX_CONCURRENT_STREAMS) {
-      return { error: `Too many active agent sessions (${activeStreams.size}). Please wait for one to finish or stop an existing session.` };
+    // Enforce per-window concurrency limit
+    const callingWin = BrowserWindow.fromWebContents(event.sender);
+    const callingWinId = callingWin?.id;
+    const windowStreamCount = [...activeStreams.values()].filter(e => e.windowId === callingWinId).length;
+    if (windowStreamCount >= MAX_CONCURRENT_STREAMS) {
+      return { error: `Too many active agent sessions (${windowStreamCount}). Please wait for one to finish or stop an existing session.` };
     }
 
     const cred = await resolveClaudeCredential();
@@ -1990,32 +2013,33 @@ function registerIPC() {
 
   // Stop active stream — handles both CLI process and API AbortController
   ipcMain.handle('claude:stopStream', async (_event, streamId) => {
-    const active = activeStreams.get(streamId);
-    if (!active) return { success: false };
+    const entry = activeStreams.get(streamId);
+    if (!entry) return { success: false };
 
-    if (active.abort) {
-      // AbortController (API key path)
-      active.abort();
-    } else if (active.kill) {
-      // Child process (CLI path)
-      active.kill('SIGTERM');
-    }
+    try {
+      if (entry.abort) entry.abort();
+      else if (entry.kill) entry.kill('SIGTERM');
+    } catch {}
     activeStreams.delete(streamId);
     return { success: true };
   });
 
-  // Kill ALL active streams — called on workspace switch to prevent stale processes
-  ipcMain.handle('claude:stopAllStreams', async () => {
+  // Kill streams for the CALLING window only — prevents cross-window interference
+  ipcMain.handle('claude:stopAllStreams', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const winId = win?.id;
     let killed = 0;
-    for (const [streamId, active] of activeStreams) {
-      try {
-        if (active.abort) active.abort();
-        else if (active.kill) active.kill('SIGTERM');
-        killed++;
-      } catch { /* ignore */ }
-      activeStreams.delete(streamId);
+    for (const [streamId, entry] of activeStreams) {
+      if (entry.windowId === winId) {
+        try {
+          if (entry.abort) entry.abort();
+          else if (entry.kill) entry.kill('SIGTERM');
+          killed++;
+        } catch {}
+        activeStreams.delete(streamId);
+      }
     }
-    console.log(`[Foundry] Killed ${killed} active streams on workspace switch`);
+    console.log(`[Foundry] Killed ${killed} active streams for window ${winId}`);
     return { success: true, killed };
   });
 
@@ -2199,10 +2223,18 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   destroyAutoUpdater();
   // Kill all PTY processes
-  for (const [id, p] of ptyProcesses) {
-    try { p.kill(); } catch {}
+  for (const [id, entry] of ptyProcesses) {
+    try { entry.process.kill(); } catch {}
   }
   ptyProcesses.clear();
+  // Kill all active streams
+  for (const [streamId, entry] of activeStreams) {
+    try {
+      if (entry.abort) entry.abort();
+      else if (entry.kill) entry.kill('SIGTERM');
+    } catch {}
+  }
+  activeStreams.clear();
   closeDatabase();
 });
 
