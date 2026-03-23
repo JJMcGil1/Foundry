@@ -59,6 +59,10 @@ const ChatInput = forwardRef(function ChatInput({
   onStop,
   onModelSwitch,
   modelSwitcherRef,
+  queueSize = 0,
+  queuedMessages = [],
+  onRemoveQueued,
+  onClearQueue,
 }, inputRef) {
   const fileInputRef = useRef(null);
   const dropTargetRef = useRef(null);
@@ -163,6 +167,31 @@ const ChatInput = forwardRef(function ChatInput({
 
   return (
     <div className={styles.inputArea}>
+      {queueSize > 0 && (
+        <div className={styles.queueStrip}>
+          <div className={styles.queueStripHeader}>
+            <span className={styles.queueStripLabel}>{queueSize} queued</span>
+            <button className={styles.queueClearBtn} onClick={onClearQueue} title="Clear queue">
+              <FiX size={12} />
+              <span>Clear</span>
+            </button>
+          </div>
+          <div className={styles.queueStripItems}>
+            {queuedMessages.map((qMsg, i) => (
+              <div key={i} className={styles.queueStripItem}>
+                <span className={styles.queueStripItemText}>{qMsg.content}</span>
+                <button
+                  className={styles.queueStripItemRemove}
+                  onClick={() => onRemoveQueued(i)}
+                  title="Remove from queue"
+                >
+                  <FiX size={10} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div
         className={styles.inputWrapper}
         ref={dropTargetRef}
@@ -190,7 +219,7 @@ const ChatInput = forwardRef(function ChatInput({
         <textarea
           ref={inputRef}
           className={styles.input}
-          placeholder={hasProvider === false ? 'Connect a provider to start...' : 'Message Sage...'}
+          placeholder={hasProvider === false ? 'Connect a provider to start...' : isStreaming ? 'Queue a message...' : 'Message Sage...'}
           value={input}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
@@ -256,19 +285,24 @@ const ChatInput = forwardRef(function ChatInput({
             >
               <FiPaperclip size={14} />
             </button>
-            {isStreaming ? (
+            {isStreaming && (
               <button className={styles.stopBtn} onClick={onStop} title="Stop generating">
                 <FiSquare size={12} />
               </button>
-            ) : (
+            )}
+            <div className={styles.sendBtnWrapper}>
               <button
                 className={`${styles.sendBtn} ${hasContent ? styles.sendBtnActive : ''}`}
                 onClick={onSend}
                 disabled={!hasContent || hasProvider === false}
+                title={isStreaming ? 'Queue message' : 'Send message'}
               >
                 <SendIcon size={30} active={!!hasContent} />
               </button>
-            )}
+              {queueSize > 0 && (
+                <span className={styles.queueBadge}>{queueSize}</span>
+              )}
+            </div>
           </div>
         </div>
       </div>

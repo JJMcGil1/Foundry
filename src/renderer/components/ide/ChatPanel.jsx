@@ -52,6 +52,12 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
   const [showThreadList, setShowThreadList] = useState(false);
   const threadListRef = useRef(null);
 
+  // Message queue — stores messages to send after current stream finishes
+  const messageQueueRef = useRef([]);
+  const [queueSize, setQueueSize] = useState(0);
+  const processNextQueuedRef = useRef(null);
+  const handleSendDirectRef = useRef(null);
+
   // Content block tracking for streaming
   const blocksRef = useRef([]);
   const activeBlockIdxRef = useRef(-1);
@@ -149,6 +155,9 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
       setMessages(loadedMessages);
       setCurrentThreadId(threadId);
       setShowThreadList(false);
+      // Clear message queue when switching threads
+      messageQueueRef.current = [];
+      setQueueSize(0);
       await window.foundry?.setSetting('last_chat_thread_id', threadId);
     } catch (err) {
       console.error('[Chat] Failed to load messages for thread:', threadId, err);
@@ -204,6 +213,9 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
     await saveLockRef.current;
     setCurrentThreadId(null);
     setMessages([]);
+    // Clear message queue on new chat
+    messageQueueRef.current = [];
+    setQueueSize(0);
     if (closeDropdown) setShowThreadList(false);
   }, []);
 
@@ -437,12 +449,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         rafRef.current = null;
         pendingBlocksRef.current = null;
       }
-      playChatCompleteSound();
-      // Native OS notification when window is not focused
-      if (!document.hasFocus() && Notification.permission === 'granted') {
-        const userPrompt = lastUserMsgRef.current;
-        const body = userPrompt ? (userPrompt.length > 80 ? userPrompt.slice(0, 80) + '…' : userPrompt) : 'Response complete';
-        new Notification('Sage is done', { body, silent: true });
+      // Only play sound/notify if no more queued messages
+      if (messageQueueRef.current.length === 0) {
+        playChatCompleteSound();
+        if (!document.hasFocus() && Notification.permission === 'granted') {
+          const userPrompt = lastUserMsgRef.current;
+          const body = userPrompt ? (userPrompt.length > 80 ? userPrompt.slice(0, 80) + '…' : userPrompt) : 'Response complete';
+          new Notification('Sage is done', { body, silent: true });
+        }
       }
       setIsStreaming(false);
       setStreamId(null);
@@ -462,6 +476,10 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         }
         return updated;
       });
+      // Process next queued message if any
+      if (messageQueueRef.current.length > 0) {
+        processNextQueuedRef.current?.();
+      }
     });
 
     const cleanupError = window.foundry?.onClaudeStreamError((streamId, error) => {
@@ -489,6 +507,9 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         }
         return updated;
       });
+      // Clear queue on error — don't keep sending if something went wrong
+      messageQueueRef.current = [];
+      setQueueSize(0);
     });
 
     cleanupRef.current = [cleanupStream, cleanupBatch, cleanupEnd, cleanupError];
@@ -515,34 +536,32 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
     };
   }, [messages, isStreaming]);
 
-  // ---- Send message ---- //
-  const handleSend = async () => {
-    const hasContent = input.trim() || images.length > 0;
-    if (!hasContent || isStreaming) return;
+  // ---- Core send logic (takes explicit content + images) ---- //
+  const handleSendDirect = async (contentText, contentImages) => {
     setError(null);
 
-    let threadId = currentThreadId;
+    let threadId = currentThreadIdRef.current;
     if (!threadId) {
-      const title = (input.trim() || 'Image message').slice(0, 50);
+      const title = (contentText || 'Image message').slice(0, 50);
       threadId = await createNewThread(title);
       if (!threadId) return;
     } else if (messages.length === 0) {
-      const title = (input.trim() || 'Image message').slice(0, 50);
+      const title = (contentText || 'Image message').slice(0, 50);
       try {
         await window.foundry?.chatUpdateThread(threadId, { title });
         setThreads(prev => prev.map(t => t.id === threadId ? { ...t, title } : t));
       } catch { /* silent */ }
     }
 
-    lastUserMsgRef.current = input.trim();
+    lastUserMsgRef.current = contentText;
 
-    // Capture current images and clear state
-    const attachedImages = [...images];
+    // Capture images
+    const attachedImages = [...contentImages];
 
     const userMsg = {
       id: generateId(),
       role: 'user',
-      content: input.trim(),
+      content: contentText,
       images: attachedImages.length > 0 ? attachedImages.map(img => ({
         id: img.id,
         name: img.name,
@@ -596,11 +615,8 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
     };
 
     setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
-    setInput('');
-    setImages([]);
-    // Revoke object URLs
+    // Revoke object URLs for images that had previews
     attachedImages.forEach(img => { if (img.preview) URL.revokeObjectURL(img.preview); });
-    if (inputRef.current) inputRef.current.style.height = 'auto';
     setIsStreaming(true);
 
     blocksRef.current = [];
@@ -652,6 +668,46 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
       });
     }
   };
+  handleSendDirectRef.current = handleSendDirect;
+
+  // ---- Public send handler (queues if streaming) ---- //
+  const handleSend = async () => {
+    const hasContent = input.trim() || images.length > 0;
+    if (!hasContent) return;
+
+    if (isStreaming) {
+      // Queue the message for sending after current stream completes
+      messageQueueRef.current.push({
+        content: input.trim(),
+        images: images.length > 0 ? [...images] : [],
+      });
+      setQueueSize(messageQueueRef.current.length);
+      setInput('');
+      setImages([]);
+      if (inputRef.current) inputRef.current.style.height = 'auto';
+      return;
+    }
+
+    // Send immediately
+    const contentText = input.trim();
+    const contentImages = [...images];
+    setInput('');
+    setImages([]);
+    if (inputRef.current) inputRef.current.style.height = 'auto';
+    await handleSendDirect(contentText, contentImages);
+  };
+
+  // ---- Process next queued message ---- //
+  const processNextQueued = useCallback(() => {
+    if (messageQueueRef.current.length === 0) return;
+    const next = messageQueueRef.current.shift();
+    setQueueSize(messageQueueRef.current.length);
+    // Small delay to let stream-end state settle, then send via ref for fresh closure
+    setTimeout(() => {
+      handleSendDirectRef.current?.(next.content, next.images || []);
+    }, 100);
+  }, []);
+  processNextQueuedRef.current = processNextQueued;
 
   // ---- Stop streaming ---- //
   const handleStop = async () => {
@@ -680,6 +736,9 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         }
         return updated;
       });
+      // Clear queue when user manually stops
+      messageQueueRef.current = [];
+      setQueueSize(0);
     }
   };
 
@@ -753,6 +812,16 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         onStop={handleStop}
         onModelSwitch={handleModelSwitch}
         modelSwitcherRef={modelSwitcherRef}
+        queueSize={queueSize}
+        queuedMessages={messageQueueRef.current}
+        onRemoveQueued={(index) => {
+          messageQueueRef.current.splice(index, 1);
+          setQueueSize(messageQueueRef.current.length);
+        }}
+        onClearQueue={() => {
+          messageQueueRef.current = [];
+          setQueueSize(0);
+        }}
       />
     </div>
   );
