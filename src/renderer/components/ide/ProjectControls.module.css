@@ -261,12 +261,24 @@
 
 :global([data-theme="light"]) .item,
 :global([data-theme="light"]) .branchItem {
-  color: var(--zinc-700, #3f3f46);
+  color: var(--zinc-300, #3f3f46);
 }
 
 :global([data-theme="light"]) .itemName,
 :global([data-theme="light"]) .branchItemName {
-  color: var(--zinc-800, #27272a);
+  color: var(--zinc-200, #27272a);
+}
+
+:global([data-theme="light"]) .itemPath {
+  color: var(--zinc-400, #52525b);
+}
+
+:global([data-theme="light"]) .branchItemMeta {
+  color: var(--zinc-400, #52525b);
+}
+
+:global([data-theme="light"]) .branchItemDate {
+  color: var(--zinc-400, #52525b);
 }
 
 :global([data-theme="light"]) .sectionLabel {

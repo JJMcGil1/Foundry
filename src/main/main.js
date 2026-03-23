@@ -1919,7 +1919,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       '--verbose',
       '--include-partial-messages',
       '--model', modelAlias,
-      '--max-turns', '50',
+      '--max-turns', '200',
       '--no-session-persistence',
     ];
 
