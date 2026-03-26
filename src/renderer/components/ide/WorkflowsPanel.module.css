@@ -154,6 +154,13 @@
   max-width: 120px;
 }
 
+.runDuration {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--zinc-500);
+  white-space: nowrap;
+}
+
 .runTime {
   color: var(--zinc-600);
   white-space: nowrap;

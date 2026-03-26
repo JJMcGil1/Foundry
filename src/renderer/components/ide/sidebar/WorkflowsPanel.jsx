@@ -224,6 +224,11 @@ export default function WorkflowsPanel({ projectPath }) {
                   <span className={wfStyles.runName}>{run.name}</span>
                   <span className={wfStyles.runMeta}>
                     {run.head_branch && <span className={wfStyles.runBranch}>{run.head_branch}</span>}
+                    {run.run_started_at && (
+                      <span className={wfStyles.runDuration}>
+                        {durationStr(run.run_started_at, run.status === 'in_progress' ? null : run.updated_at)}
+                      </span>
+                    )}
                     <span className={wfStyles.runTime}>{timeAgo(run.updated_at)}</span>
                   </span>
                 </div>
