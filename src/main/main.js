@@ -474,19 +474,56 @@ function getGitEnv() {
     try {
       const candidates = [process.env.SHELL, '/bin/zsh', '/bin/bash', '/bin/sh'].filter(Boolean);
       const shellPath = candidates.find(s => { try { return fs.statSync(s).isFile(); } catch { return false; } }) || '/bin/sh';
-      const output = execSync(`${shellPath} -l -i -c 'echo "___FOUNDRY_PATH___"; echo $PATH'`, {
-        timeout: 5000,
+      // Capture the FULL shell environment (not just PATH) from a login shell.
+      // This mirrors what VS Code does — tools like gh, brew, nvm, etc. depend on
+      // env vars beyond PATH (HOMEBREW_PREFIX, NVM_DIR, etc.). Without the full env,
+      // tools appear "uninstalled" in Foundry terminals even though they work in VS Code.
+      const marker = '___FOUNDRY_ENV_START___';
+      const output = execSync(`${shellPath} -l -i -c 'echo "${marker}"; env -0'`, {
+        timeout: 10000,
         encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
         env: { ...process.env, HOME: os.homedir() },
       });
-      const lines = output.trim().split('\n');
-      const markerIdx = lines.lastIndexOf('___FOUNDRY_PATH___');
-      const resolvedPath = markerIdx >= 0 && lines[markerIdx + 1] ? lines[markerIdx + 1] : null;
-      if (resolvedPath && resolvedPath.includes('/')) {
-        env.PATH = resolvedPath;
+      const markerIdx = output.indexOf(marker);
+      if (markerIdx >= 0) {
+        const envBlock = output.slice(markerIdx + marker.length).trim();
+        const entries = envBlock.split('\0').filter(Boolean);
+        for (const entry of entries) {
+          const eqIdx = entry.indexOf('=');
+          if (eqIdx > 0) {
+            const key = entry.slice(0, eqIdx);
+            const val = entry.slice(eqIdx + 1);
+            // Skip shell-internal vars that shouldn't be inherited
+            if (!key.startsWith('_') && key !== 'SHLVL' && key !== 'PWD' && key !== 'OLDPWD') {
+              env[key] = val;
+            }
+          }
+        }
+      }
+      // Fallback: ensure common tool paths are on PATH even if resolution missed them
+      const fallbackPaths = [
+        '/opt/homebrew/bin', '/opt/homebrew/sbin',
+        '/usr/local/bin', '/usr/local/sbin',
+        `${os.homedir()}/.local/bin`,
+      ];
+      const currentPath = env.PATH || '';
+      const missingPaths = fallbackPaths.filter(p => !currentPath.includes(p) && fs.existsSync(p));
+      if (missingPaths.length > 0) {
+        env.PATH = [...missingPaths, currentPath].join(':');
       }
     } catch {
-      // Fall through with Electron's inherited PATH
+      // Fall through with Electron's inherited PATH, but still add common tool paths
+      const fallbackPaths = [
+        '/opt/homebrew/bin', '/opt/homebrew/sbin',
+        '/usr/local/bin', '/usr/local/sbin',
+        `${os.homedir()}/.local/bin`,
+      ];
+      const currentPath = env.PATH || '';
+      const missingPaths = fallbackPaths.filter(p => !currentPath.includes(p) && fs.existsSync(p));
+      if (missingPaths.length > 0) {
+        env.PATH = [...missingPaths, currentPath].join(':');
+      }
     }
   }
   _cachedGitEnv = env;
