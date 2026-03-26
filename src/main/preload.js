@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('foundry', {
   validateGithubToken: (token) => ipcRenderer.invoke('github:validateToken', token),
   listGithubRepos: (token, page, perPage) => ipcRenderer.invoke('github:listRepos', token, page, perPage),
   cloneGithubRepo: (token, cloneUrl, repoName) => ipcRenderer.invoke('github:cloneRepo', token, cloneUrl, repoName),
+  githubWorkflowRuns: (token, owner, repo) => ipcRenderer.invoke('github:workflowRuns', token, owner, repo),
+  githubWorkflowJobs: (token, owner, repo, runId) => ipcRenderer.invoke('github:workflowJobs', token, owner, repo, runId),
 
   // File system
   openFolder: () => ipcRenderer.invoke('fs:openFolder'),

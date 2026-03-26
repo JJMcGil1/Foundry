@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MiniTooltipBtn from './MiniTooltipBtn';
 import FileTreeItem from './FileTree';
 import GitPanel from './GitPanel';
+import WorkflowsPanel from './WorkflowsPanel';
 import styles from '../Sidebar.module.css';
 
 const TREE_STATE_KEY = 'file_tree_expanded_paths';
@@ -144,6 +145,8 @@ export default function Sidebar({
             )}
 
             {panel === 'git' && <GitPanel gitStatus={gitStatus} projectPath={projectPath} onOpenFile={onOpenFile} onRefreshGit={onRefresh} activeFile={activeFile} />}
+
+            {panel === 'workflows' && <WorkflowsPanel projectPath={projectPath} />}
           </motion.div>
         </AnimatePresence>
       </div>

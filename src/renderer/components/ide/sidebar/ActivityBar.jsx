@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
 import { MdTaskAlt } from 'react-icons/md';
+import { FiGithub } from 'react-icons/fi';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
@@ -56,6 +57,28 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
 
       <div className={styles.bottom}>
         <div className={styles.divider} />
+
+        <div className={styles.itemWrap}>
+          <button
+            className={`${styles.item} ${activePanel === 'workflows' ? styles.active : ''}`}
+            onClick={() => onPanelClick('workflows')}
+            onMouseEnter={() => setHoveredId('workflows')}
+            onMouseLeave={() => setHoveredId(null)}
+          >
+            <FiGithub size={21} />
+            {activePanel === 'workflows' && (
+              <span className={styles.indicator}>
+                <span className={styles.indicatorLine} />
+                <span className={styles.indicatorGlow} />
+              </span>
+            )}
+          </button>
+          {hoveredId === 'workflows' && (
+            <div className={styles.tooltip}>
+              <span className={styles.tooltipText}>Workflows</span>
+            </div>
+          )}
+        </div>
 
         <div className={styles.itemWrap}>
           <button

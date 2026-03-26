@@ -821,6 +821,72 @@ function registerIPC() {
     }
   });
 
+  // GitHub: fetch workflow runs for a repository
+  ipcMain.handle('github:workflowRuns', async (_event, token, owner, repo) => {
+    if (!owner || !repo) return { runs: [], error: 'missing_params' };
+    try {
+      const headers = { Accept: 'application/vnd.github+json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(
+        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs?per_page=100`,
+        { headers }
+      );
+      if (res.status === 404) return { runs: [], error: 'Repo not found or no access' };
+      if (res.status === 401 || res.status === 403) {
+        const body = await res.json().catch(() => ({}));
+        return { runs: [], error: body.message || `GitHub API error: ${res.status}` };
+      }
+      if (!res.ok) return { runs: [], error: `GitHub API error: ${res.status}` };
+      const data = await res.json();
+      return {
+        runs: (data.workflow_runs || []).map(r => ({
+          id: r.id,
+          name: r.name,
+          status: r.status,
+          conclusion: r.conclusion,
+          head_branch: r.head_branch,
+          head_sha: r.head_sha?.slice(0, 7),
+          html_url: r.html_url,
+          created_at: r.created_at,
+          updated_at: r.updated_at,
+          run_started_at: r.run_started_at,
+          event: r.event,
+          run_number: r.run_number,
+        })),
+      };
+    } catch (err) {
+      return { runs: [], error: err.message || 'fetch_failed' };
+    }
+  });
+
+  // GitHub: fetch jobs for a specific workflow run
+  ipcMain.handle('github:workflowJobs', async (_event, token, owner, repo, runId) => {
+    if (!owner || !repo || !runId) return { jobs: [] };
+    try {
+      const headers = { Accept: 'application/vnd.github+json' };
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const res = await fetch(
+        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/actions/runs/${runId}/jobs`,
+        { headers }
+      );
+      if (!res.ok) return { jobs: [] };
+      const data = await res.json();
+      return {
+        jobs: (data.jobs || []).map(j => ({
+          id: j.id,
+          name: j.name,
+          status: j.status,
+          conclusion: j.conclusion,
+          started_at: j.started_at,
+          completed_at: j.completed_at,
+          html_url: j.html_url,
+        })),
+      };
+    } catch {
+      return { jobs: [] };
+    }
+  });
+
   // File system
   ipcMain.handle('fs:openFolder', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);

@@ -1,0 +1,292 @@
+/* ── Workflows Panel ── */
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.scrollArea {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
+}
+
+.scrollArea::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.scrollArea::-webkit-scrollbar-thumb {
+  background: var(--zinc-700);
+  border-radius: 3px;
+}
+
+.scrollArea::-webkit-scrollbar-thumb:hover {
+  background: var(--zinc-600);
+}
+
+/* ── States ── */
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  gap: 6px;
+}
+
+.emptyText {
+  font-size: 12px;
+  color: var(--zinc-400);
+  font-weight: 500;
+}
+
+.emptySubtext {
+  font-size: 11px;
+  color: var(--zinc-600);
+  text-align: center;
+  line-height: 1.4;
+}
+
+.loadingState {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 32px 16px;
+  color: var(--zinc-500);
+  font-size: 12px;
+}
+
+.errorState {
+  padding: 12px 14px;
+}
+
+.errorText {
+  font-size: 12px;
+  color: #E06C75;
+}
+
+/* ── Runs List ── */
+.runsList {
+  display: flex;
+  flex-direction: column;
+}
+
+.runItem {
+  border-bottom: 1px solid var(--border);
+}
+
+.runHeader {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+  font-family: var(--font-sans);
+  transition: background 0.1s ease;
+  position: relative;
+}
+
+.runHeader:hover {
+  background: var(--tree-hover);
+}
+
+.runHeaderActive {
+  background: var(--surface-2);
+}
+
+.runChevron {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  color: var(--zinc-500);
+  transition: transform 0.15s ease;
+}
+
+.runInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.runName {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--zinc-200);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.runMeta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--zinc-500);
+}
+
+.runBranch {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 1px 5px;
+  background: var(--surface-3);
+  border-radius: 3px;
+  color: var(--zinc-400);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.runTime {
+  color: var(--zinc-600);
+  white-space: nowrap;
+}
+
+.externalBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: none;
+  border: none;
+  color: var(--zinc-600);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  outline: none;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s ease, color 0.1s ease, background 0.1s ease;
+}
+
+.runHeader:hover .externalBtn {
+  opacity: 1;
+}
+
+.externalBtn:hover {
+  color: var(--zinc-300);
+  background: var(--surface-3);
+}
+
+/* ── Jobs List ── */
+.jobsList {
+  overflow: hidden;
+  background: var(--surface-0);
+}
+
+.jobItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 32px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  cursor: pointer;
+  text-align: left;
+  outline: none;
+  font-family: var(--font-sans);
+  transition: background 0.1s ease;
+}
+
+.jobItem:hover {
+  background: var(--tree-hover);
+}
+
+.jobName {
+  flex: 1;
+  font-size: 12px;
+  color: var(--zinc-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jobDuration {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--zinc-600);
+  flex-shrink: 0;
+}
+
+.jobLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 11px;
+  color: var(--zinc-500);
+}
+
+/* ── Status Icons ── */
+.statusSuccess {
+  color: #98C379;
+  flex-shrink: 0;
+}
+
+.statusFailure {
+  color: #E06C75;
+  flex-shrink: 0;
+}
+
+.statusRunning {
+  color: #E5C07B;
+  flex-shrink: 0;
+}
+
+.statusQueued {
+  color: var(--zinc-500);
+  flex-shrink: 0;
+}
+
+.statusCancelled {
+  color: var(--zinc-500);
+  flex-shrink: 0;
+}
+
+.statusSkipped {
+  color: var(--zinc-600);
+  flex-shrink: 0;
+}
+
+/* ── Spinning animation ── */
+@keyframes wfSpin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spinning {
+  animation: wfSpin 1s linear infinite;
+}
+
+/* ── Repo Footer ── */
+.repoFooter {
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.repoName {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--zinc-600);
+  font-family: var(--font-mono);
+}
