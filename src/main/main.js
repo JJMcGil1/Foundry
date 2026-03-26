@@ -2,9 +2,10 @@ const { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog, shell } = requir
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { execSync, exec, spawn } = require('child_process');
+const { execSync, exec, execFile, spawn } = require('child_process');
 const { promisify } = require('util');
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 const pty = require('node-pty');
 const https = require('https');
 const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages, getBoards, createBoard, updateBoard, deleteBoard, getBoardColumns, createBoardColumn, updateBoardColumn, deleteBoardColumn, reorderBoardColumns, getTasks, createTask, updateTask, deleteTask, reorderTasks } = require('./database');
@@ -1080,7 +1081,7 @@ function registerIPC() {
 
   ipcMain.handle('git:commit', async (_event, dirPath, message) => {
     try {
-      await gitExec(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
+      await execFileAsync('git', ['commit', '-m', message], { cwd: dirPath, timeout: 10000, env: { ...getGitEnv() } });
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -1143,7 +1144,7 @@ function registerIPC() {
       }
 
       // Step 2: Commit (staging is handled on the renderer side already)
-      await gitExec(`git commit -m "${message.replace(/"/g, '\\"')}"`, { cwd: dirPath, timeout: 10000 });
+      await execFileAsync('git', ['commit', '-m', message], { cwd: dirPath, timeout: 10000, env: { ...getGitEnv() } });
 
       // Step 3: Push (if remote exists)
       if (hasRemote) {

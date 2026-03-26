@@ -13,7 +13,7 @@ const SINGLE_MAX = 600;
 const MULTI_MIN = 400;
 const MULTI_MAX_VW = 0.65; // never exceed 65% of viewport
 
-export default function ChatPanelContainer({ visible, width, onWidthChange, onOpenSettings, projectPath }) {
+export default function ChatPanelContainer({ visible, width, onWidthChange, onOpenSettings, projectPath, side = 'right' }) {
   const [panels, setPanels] = useState(() => [{ id: `chat-panel-${++panelIdCounter}`, startFresh: false }]);
   const [isResizing, setIsResizing] = useState(false);
 
@@ -36,13 +36,9 @@ export default function ChatPanelContainer({ visible, width, onWidthChange, onOp
   const handleSplit = useCallback(() => {
     setPanels(prev => {
       if (prev.length >= 4) return prev;
-      const next = [...prev, { id: `chat-panel-${++panelIdCounter}`, startFresh: true }];
-      // Widen to give new panel room
-      const minForNew = next.length * SINGLE_MIN;
-      onWidthChange(Math.max(width, minForNew));
-      return next;
+      return [...prev, { id: `chat-panel-${++panelIdCounter}`, startFresh: true }];
     });
-  }, [width, onWidthChange]);
+  }, []);
 
   const handleClosePanel = useCallback((panelId) => {
     setPanels(prev => {
@@ -60,7 +56,10 @@ export default function ChatPanelContainer({ visible, width, onWidthChange, onOp
       const maxPx = Math.floor(window.innerWidth * MULTI_MAX_VW);
       const min = isMultiPanel ? Math.max(MULTI_MIN, panelCount * SINGLE_MIN) : SINGLE_MIN;
       const max = isMultiPanel ? maxPx : SINGLE_MAX;
-      const newWidth = Math.max(min, Math.min(max, startWidth - (ev.clientX - startX)));
+      const delta = side === 'left'
+        ? ev.clientX - startX   // dragging right = wider for left panel
+        : startX - ev.clientX;  // dragging left = wider for right panel
+      const newWidth = Math.max(min, Math.min(max, startWidth + delta));
       onWidthChange(newWidth);
     };
     const handleMouseUp = () => {
@@ -74,13 +73,13 @@ export default function ChatPanelContainer({ visible, width, onWidthChange, onOp
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
-  }, [width, onWidthChange, isMultiPanel, panelCount]);
+  }, [width, onWidthChange, isMultiPanel, panelCount, side]);
 
   // Container always renders as a real DOM element — no display:contents hack.
   // ChatPanel fills its parent; the container owns all width control.
   return (
     <motion.div
-      className={styles.container}
+      className={`${styles.container} ${side === 'left' ? styles.containerLeft : ''}`}
       style={{
         width: isResizing ? width : undefined,
         pointerEvents: visible ? 'auto' : 'none',
@@ -92,7 +91,7 @@ export default function ChatPanelContainer({ visible, width, onWidthChange, onOp
         : { duration: 0.25, ease: easeOut }
       }
     >
-      <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
+      <div className={`${styles.resizeHandle} ${side === 'left' ? styles.resizeHandleRight : ''}`} onMouseDown={handleResizeStart} />
       {panels.map((panel, idx) => (
         <React.Fragment key={panel.id}>
           {idx > 0 && <div className={styles.panelDivider} />}

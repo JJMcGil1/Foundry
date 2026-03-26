@@ -13,8 +13,9 @@ let persistTimer = null;
 export default function Sidebar({
   panel, width, project, fileTree, gitStatus,
   onOpenFile, onOpenFolder, onRefresh, projectPath,
-  onWidthChange, activeFile
+  onWidthChange, activeFile, side = 'left', onFocus, isActive
 }) {
+  const isRight = side === 'right';
   const [isResizing, setIsResizing] = useState(false);
   const [expandedPaths, setExpandedPaths] = useState(new Set());
   const [treeStateLoaded, setTreeStateLoaded] = useState(false);
@@ -70,7 +71,8 @@ export default function Sidebar({
     setIsResizing(true);
 
     const handleMouseMove = (e) => {
-      const newWidth = Math.max(200, Math.min(480, startWidth + (e.clientX - startX)));
+      const delta = isRight ? (startX - e.clientX) : (e.clientX - startX);
+      const newWidth = Math.max(200, Math.min(480, startWidth + delta));
       onWidthChange(newWidth);
     };
     const handleMouseUp = () => {
@@ -89,17 +91,18 @@ export default function Sidebar({
   return (
     <motion.div
       ref={sidebarRef}
-      className={styles.sidebar}
+      className={`${styles.sidebar} ${isRight ? styles.sidebarRight : ''}`}
       style={{ width }}
       initial={{ width: 0, opacity: 0 }}
       animate={{ width, opacity: 1 }}
       exit={{ width: 0, opacity: 0 }}
       transition={isResizing ? { duration: 0 } : { duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+      onMouseDown={() => onFocus?.()}
     >
       <div className={styles.inner}>
         {panel === 'files' && (
           <div className={styles.explorerHeader}>
-            <span className={styles.gitPanelTitle}>Explorer</span>
+            <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>{isRight ? (project?.name || 'Explorer') : 'Explorer'}</span>
             <div className={styles.headerActions}>
               <MiniTooltipBtn icon={FiFilePlus} label="New File" onClick={() => window.foundry?.createFile?.(projectPath)} />
               <MiniTooltipBtn icon={FiFolderPlus} label="New Folder" onClick={() => window.foundry?.createFolder?.(projectPath)} />
@@ -144,13 +147,13 @@ export default function Sidebar({
               )
             )}
 
-            {panel === 'git' && <GitPanel gitStatus={gitStatus} projectPath={projectPath} onOpenFile={onOpenFile} onRefreshGit={onRefresh} activeFile={activeFile} />}
+            {panel === 'git' && <GitPanel gitStatus={gitStatus} projectPath={projectPath} onOpenFile={onOpenFile} onRefreshGit={onRefresh} activeFile={activeFile} isActive={isActive} />}
 
-            {panel === 'workflows' && <WorkflowsPanel projectPath={projectPath} />}
+            {panel === 'workflows' && <WorkflowsPanel projectPath={projectPath} isActive={isActive} />}
           </motion.div>
         </AnimatePresence>
       </div>
-      <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />
+      <div className={isRight ? styles.resizeHandleLeft : styles.resizeHandle} onMouseDown={handleResizeStart} />
     </motion.div>
   );
 }

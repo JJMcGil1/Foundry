@@ -221,9 +221,7 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
     setTerminals(prev => {
       const next = prev.filter(t => t.id !== id);
       if (next.length === 0) {
-        // Last terminal closed — auto-hide the panel
         setActiveTermId(null);
-        onClose?.();
         return next;
       }
       if (activeTermId === id) {
@@ -231,7 +229,14 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
       }
       return next;
     });
-  }, [activeTermId, onClose]);
+  }, [activeTermId]);
+
+  // Auto-close panel when all terminals are removed
+  useEffect(() => {
+    if (terminals.length === 0 && visible) {
+      onClose?.();
+    }
+  }, [terminals.length, visible, onClose]);
 
   const handleClear = useCallback(() => {
     if (!activeTermId) return;
@@ -377,9 +382,7 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
       transition={
         isResizing
           ? { duration: 0 }
-          : visible
-            ? { duration: 0.35, ease: [0.25, 0.1, 0.25, 1] }
-            : { height: { duration: 0 }, opacity: { duration: 0.15 }, y: { duration: 0.15 } }
+          : { duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }
       }
     >
       <div style={{ display: visible ? 'flex' : 'none', height: '100%', flexDirection: 'column' }}>

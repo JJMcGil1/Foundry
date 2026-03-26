@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { TbLayoutBottombar, TbLayoutBottombarFilled, TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled } from 'react-icons/tb';
+import { TbLayoutBottombar, TbLayoutBottombarFilled, TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled, TbLayoutSidebarRightExpand, TbLayoutSidebarRightExpandFilled, TbLayoutSidebarLeftExpand, TbLayoutSidebarLeftExpandFilled } from 'react-icons/tb';
 import { FiSun, FiMoon } from 'react-icons/fi';
 import { VscPlay, VscDebugStop } from 'react-icons/vsc';
 import { useToast } from './ToastProvider';
@@ -19,6 +19,12 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [activePanel, setActivePanel] = useState('files');
   const [sidebarWidth, setSidebarWidth] = useState(260);
   const [chatWidth, setChatWidth] = useState(340);
+  const [leftChatVisible, setLeftChatVisible] = useState(false);
+  const [leftChatWidth, setLeftChatWidth] = useState(340);
+  const [rightSidebarVisible, setRightSidebarVisible] = useState(false);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(260);
+  const [rightActivePanel, setRightActivePanel] = useState('files');
+  const [activeSide, setActiveSide] = useState('left');
   const [terminalHeight, setTerminalHeight] = useState(240);
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [chatVisible, setChatVisible] = useState(true);
@@ -229,7 +235,9 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   useEffect(() => {
     function handleKeyDown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); if (activeTab) handleSaveFile(activeTab); }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); setRightSidebarVisible(v => !v); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); setSidebarVisible(v => !v); }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'j' || e.key === 'J')) { e.preventDefault(); setLeftChatVisible(v => !v); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); setChatVisible(v => !v); }
       if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); setTerminalVisible(v => !v); }
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
@@ -280,14 +288,28 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       else exitFullPage();
       return;
     }
-    // On a full page — just switch/toggle sidebar panel without closing the page
-    if (isFullPage) {
+
+    // Route to active side (left or right sidebar)
+    const isRight = activeSide === 'right' && rightSidebarVisible;
+
+    if (isRight) {
+      // Control right sidebar
+      if (rightActivePanel === panel && rightSidebarVisible) {
+        setRightSidebarVisible(false);
+      } else {
+        setRightActivePanel(panel);
+        setRightSidebarVisible(true);
+      }
+    } else {
+      // Control left sidebar (default)
+      if (isFullPage) {
+        if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
+        else { setActivePanel(panel); setSidebarVisible(true); }
+        return;
+      }
       if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
       else { setActivePanel(panel); setSidebarVisible(true); }
-      return;
     }
-    if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
-    else { setActivePanel(panel); setSidebarVisible(true); }
   };
 
   // Load saved start command when project changes
@@ -391,6 +413,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           showSettings={showSettings}
           showTasks={showTasks}
           gitChangeCount={gitStatus?.files?.length || 0}
+          rightActivePanel={rightActivePanel}
+          rightSidebarVisible={rightSidebarVisible}
         />
       </div>
 
@@ -448,7 +472,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             <button
               className={`${styles.titlebarBtn} ${sidebarVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setSidebarVisible(v => !v)}
-              title="Toggle Sidebar"
+              title="Toggle Sidebar (⌘B)"
             >
               <span className={styles.iconCrossfade}>
                 <TbLayoutSidebar size={20} className={`${styles.iconBase} ${sidebarVisible ? styles.iconHidden : ''}`} />
@@ -456,9 +480,19 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               </span>
             </button>
             <button
+              className={`${styles.titlebarBtn} ${leftChatVisible ? styles.titlebarBtnActive : ''}`}
+              onClick={() => setLeftChatVisible(v => !v)}
+              title="Toggle Left Chat (⌘⇧J)"
+            >
+              <span className={styles.iconCrossfade}>
+                <TbLayoutSidebarLeftExpand size={20} className={`${styles.iconBase} ${leftChatVisible ? styles.iconHidden : ''}`} />
+                <TbLayoutSidebarLeftExpandFilled size={20} className={`${styles.iconFill} ${leftChatVisible ? '' : styles.iconHidden}`} />
+              </span>
+            </button>
+            <button
               className={`${styles.titlebarBtn} ${terminalVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setTerminalVisible(v => !v)}
-              title="Toggle Terminal"
+              title="Toggle Terminal (⌘`)"
             >
               <span className={styles.iconCrossfade}>
                 <TbLayoutBottombar size={20} className={`${styles.iconBase} ${terminalVisible ? styles.iconHidden : ''}`} />
@@ -468,11 +502,21 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             <button
               className={`${styles.titlebarBtn} ${chatVisible ? styles.titlebarBtnActive : ''}`}
               onClick={() => setChatVisible(v => !v)}
-              title="Toggle Right Panel"
+              title="Toggle Right Chat (⌘J)"
             >
               <span className={styles.iconCrossfade}>
-                <TbLayoutSidebarRight size={20} className={`${styles.iconBase} ${chatVisible ? styles.iconHidden : ''}`} />
-                <TbLayoutSidebarRightFilled size={20} className={`${styles.iconFill} ${chatVisible ? '' : styles.iconHidden}`} />
+                <TbLayoutSidebarRightExpand size={20} className={`${styles.iconBase} ${chatVisible ? styles.iconHidden : ''}`} />
+                <TbLayoutSidebarRightExpandFilled size={20} className={`${styles.iconFill} ${chatVisible ? '' : styles.iconHidden}`} />
+              </span>
+            </button>
+            <button
+              className={`${styles.titlebarBtn} ${rightSidebarVisible ? styles.titlebarBtnActive : ''}`}
+              onClick={() => setRightSidebarVisible(v => !v)}
+              title="Toggle Right Sidebar (⌘⇧B)"
+            >
+              <span className={styles.iconCrossfade}>
+                <TbLayoutSidebarRight size={20} className={`${styles.iconBase} ${rightSidebarVisible ? styles.iconHidden : ''}`} />
+                <TbLayoutSidebarRightFilled size={20} className={`${styles.iconFill} ${rightSidebarVisible ? '' : styles.iconHidden}`} />
               </span>
             </button>
           </div>
@@ -493,9 +537,24 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 projectPath={project?.path}
                 onWidthChange={handleSidebarWidthChange}
                 activeFile={activeTab}
+                onFocus={() => setActiveSide('left')}
+                isActive={activeSide === 'left'}
               />
             )}
           </AnimatePresence>
+          <ChatPanelContainer
+            visible={leftChatVisible}
+            width={leftChatWidth}
+            onWidthChange={setLeftChatWidth}
+            projectPath={project?.path}
+            side="left"
+            onOpenSettings={(section) => {
+              setSettingsInitialSection(section || null);
+              if (!showSettings) enterFullPage();
+              setShowSettings(true);
+              setShowTasks(false);
+            }}
+          />
           <div className={styles.editorContainer} ref={editorContainerRef}>
             <div className={`${styles.editorArea} ${terminalMaximized ? styles.editorAreaHidden : ''}`}>
               {/* Keep all mounted; toggle visibility so pages retain state across open/close */}
@@ -575,6 +634,27 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               setShowTasks(false);
             }}
           />
+          <AnimatePresence initial={false}>
+            {rightSidebarVisible && (
+              <Sidebar
+                key="right-sidebar"
+                panel={rightActivePanel}
+                width={rightSidebarWidth}
+                project={project}
+                fileTree={fileTree}
+                gitStatus={gitStatus}
+                onOpenFile={handleOpenFile}
+                onOpenFolder={handleOpenFolder}
+                onRefresh={refreshTree}
+                projectPath={project?.path}
+                onWidthChange={setRightSidebarWidth}
+                activeFile={activeTab}
+                side="right"
+                onFocus={() => setActiveSide('right')}
+                isActive={activeSide === 'right'}
+              />
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>

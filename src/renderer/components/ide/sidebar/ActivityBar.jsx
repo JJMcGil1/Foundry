@@ -10,7 +10,7 @@ const panels = [
   { id: 'tasks',  icon: MdTaskAlt,         label: 'Tasks', size: 22 },
 ];
 
-export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, showTasks, gitChangeCount = 0 }) {
+export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, showTasks, gitChangeCount = 0, rightActivePanel, rightSidebarVisible }) {
   const [hoveredId, setHoveredId] = useState(null);
 
   const initials = profile
@@ -21,7 +21,9 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
     <nav className={styles.bar}>
       <div className={styles.top}>
         {panels.map(p => {
-          const active = p.id === 'tasks' ? showTasks : activePanel === p.id;
+          const activeLeft = p.id === 'tasks' ? showTasks : activePanel === p.id;
+          const activeRight = rightSidebarVisible && rightActivePanel === p.id;
+          const active = activeLeft || activeRight;
           const Icon = p.icon;
           const iconSize = p.size || 24;
           return (
@@ -38,10 +40,16 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
                     <span className={styles.badge}>{gitChangeCount > 99 ? '99+' : gitChangeCount}</span>
                   )}
                 </span>
-                {active && (
+                {activeLeft && (
                   <span className={styles.indicator}>
                     <span className={styles.indicatorLine} />
                     <span className={styles.indicatorGlow} />
+                  </span>
+                )}
+                {activeRight && (
+                  <span className={styles.indicatorRight}>
+                    <span className={styles.indicatorLineRight} />
+                    <span className={styles.indicatorGlowRight} />
                   </span>
                 )}
               </button>
@@ -60,7 +68,7 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
 
         <div className={styles.itemWrap}>
           <button
-            className={`${styles.item} ${activePanel === 'workflows' ? styles.active : ''}`}
+            className={`${styles.item} ${(activePanel === 'workflows' || (rightSidebarVisible && rightActivePanel === 'workflows')) ? styles.active : ''}`}
             onClick={() => onPanelClick('workflows')}
             onMouseEnter={() => setHoveredId('workflows')}
             onMouseLeave={() => setHoveredId(null)}
@@ -70,6 +78,12 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
               <span className={styles.indicator}>
                 <span className={styles.indicatorLine} />
                 <span className={styles.indicatorGlow} />
+              </span>
+            )}
+            {rightSidebarVisible && rightActivePanel === 'workflows' && (
+              <span className={styles.indicatorRight}>
+                <span className={styles.indicatorLineRight} />
+                <span className={styles.indicatorGlowRight} />
               </span>
             )}
           </button>

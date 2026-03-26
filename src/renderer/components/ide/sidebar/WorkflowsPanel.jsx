@@ -68,7 +68,7 @@ function durationStr(startedAt, completedAt) {
   return `${mins}m ${secs}s`;
 }
 
-export default function WorkflowsPanel({ projectPath }) {
+export default function WorkflowsPanel({ projectPath, isActive }) {
   const [runs, setRuns] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -164,7 +164,7 @@ export default function WorkflowsPanel({ projectPath }) {
     return (
       <div className={wfStyles.container}>
         <div className={styles.explorerHeader}>
-          <span className={styles.gitPanelTitle}>Workflows</span>
+          <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>Workflows</span>
         </div>
         <div className={wfStyles.emptyState}>
           <span className={wfStyles.emptyText}>Not a GitHub repository</span>
@@ -177,7 +177,7 @@ export default function WorkflowsPanel({ projectPath }) {
   return (
     <div className={wfStyles.container}>
       <div className={styles.explorerHeader}>
-        <span className={styles.gitPanelTitle}>Workflows</span>
+        <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>Workflows</span>
         <div className={styles.headerActions}>
           <MiniTooltipBtn
             icon={FiRefreshCw}
@@ -232,13 +232,16 @@ export default function WorkflowsPanel({ projectPath }) {
                     <span className={wfStyles.runTime}>{timeAgo(run.updated_at)}</span>
                   </span>
                 </div>
-                <button
+                <span
                   className={wfStyles.externalBtn}
+                  role="button"
+                  tabIndex={0}
                   onClick={(e) => { e.stopPropagation(); handleOpenInBrowser(run.html_url); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleOpenInBrowser(run.html_url); } }}
                   title="Open in GitHub"
                 >
                   <FiExternalLink size={12} />
-                </button>
+                </span>
               </button>
 
               <AnimatePresence>

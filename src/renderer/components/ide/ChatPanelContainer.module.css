@@ -11,6 +11,11 @@
   background: var(--surface-1);
 }
 
+.containerLeft {
+  border-left: none;
+  border-right: 1px solid var(--border);
+}
+
 /* ---- Resize Handle (left edge) ---- */
 .resizeHandle {
   position: absolute;
@@ -21,6 +26,11 @@
   cursor: col-resize;
   z-index: 20;
   transition: background 0.2s ease;
+}
+
+.resizeHandleRight {
+  left: auto;
+  right: -2px;
 }
 
 .resizeHandle:hover,

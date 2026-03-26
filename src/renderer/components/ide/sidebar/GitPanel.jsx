@@ -36,7 +36,7 @@ function parsePullOutput(output) {
   return null;
 }
 
-export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile }) {
+export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile, isActive }) {
   const addToast = useToast();
   const [commitMsg, setCommitMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -377,7 +377,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   return (
     <div className={styles.gitPanelContent}>
       <div className={styles.gitPanelHeader}>
-        <span className={styles.gitPanelTitle}>Source Control</span>
+        <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>Source Control</span>
       </div>
       <div className={styles.commitArea}>
         <div className={styles.commitInputWrap}>
