@@ -9,7 +9,6 @@ import { EditorArea } from './editor';
 import ChatPanelContainer from './ChatPanelContainer';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
-import { TasksPage } from './tasks';
 import { SearchBar, ProjectControls } from './titlebar';
 import styles from './IDELayout.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
@@ -33,7 +32,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [preMaxTerminalHeight, setPreMaxTerminalHeight] = useState(240);
   const [maxTerminalHeight, setMaxTerminalHeight] = useState(600);
   const [showSettings, setShowSettings] = useState(false);
-  const [showTasks, setShowTasks] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState(null);
   const editorContainerRef = useRef(null);
   const prePanelSidebarRef = useRef(null);
@@ -243,7 +241,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
         setShowSettings(v => {
-          if (!v) { enterFullPage(); setShowTasks(false); }
+          if (!v) { enterFullPage(); }
           else { exitFullPage(); }
           return !v;
         });
@@ -253,7 +251,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeTab, handleSaveFile]);
 
-  const isFullPage = showSettings || showTasks;
+  const isFullPage = showSettings;
 
   const enterFullPage = () => {
     // Save current state before collapsing
@@ -275,15 +273,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (panel === 'settings') {
       const wasOpen = showSettings;
       setShowSettings(v => !v);
-      setShowTasks(false);
-      if (!wasOpen) enterFullPage();
-      else exitFullPage();
-      return;
-    }
-    if (panel === 'tasks') {
-      const wasOpen = showTasks;
-      setShowTasks(v => !v);
-      setShowSettings(false);
       if (!wasOpen) enterFullPage();
       else exitFullPage();
       return;
@@ -411,7 +400,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           onPanelClick={handleActivityClick}
           profile={profile}
           showSettings={showSettings}
-          showTasks={showTasks}
           gitChangeCount={gitStatus?.files?.length || 0}
           rightActivePanel={rightActivePanel}
           rightSidebarVisible={rightSidebarVisible}
@@ -588,10 +576,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                   }}
                 />
               </div>
-              <div style={{ display: showTasks ? 'contents' : 'none' }}>
-                <TasksPage workspacePath={project?.path} onClose={() => { setShowTasks(false); exitFullPage(); }} />
-              </div>
-              <div style={{ display: (showSettings || showTasks) ? 'none' : 'contents' }}>
+              <div style={{ display: showSettings ? 'none' : 'contents' }}>
                 <EditorArea
                   tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
                   onCloseTab={handleCloseTab} onContentChange={handleContentChange}

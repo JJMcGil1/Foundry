@@ -1,16 +1,14 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
-import { MdTaskAlt } from 'react-icons/md';
 import { FiGithub } from 'react-icons/fi';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
   { id: 'files',  icon: VscFiles,          label: 'Explorer' },
   { id: 'git',    icon: VscSourceControl,  label: 'Source Control' },
-  { id: 'tasks',  icon: MdTaskAlt,         label: 'Tasks', size: 22 },
 ];
 
-export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, showTasks, gitChangeCount = 0, rightActivePanel, rightSidebarVisible }) {
+export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, gitChangeCount = 0, rightActivePanel, rightSidebarVisible }) {
   const [hoveredId, setHoveredId] = useState(null);
 
   const initials = profile
@@ -21,7 +19,7 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
     <nav className={styles.bar}>
       <div className={styles.top}>
         {panels.map(p => {
-          const activeLeft = p.id === 'tasks' ? showTasks : activePanel === p.id;
+          const activeLeft = activePanel === p.id;
           const activeRight = rightSidebarVisible && rightActivePanel === p.id;
           const active = activeLeft || activeRight;
           const Icon = p.icon;

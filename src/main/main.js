@@ -8,7 +8,7 @@ const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 const pty = require('node-pty');
 const https = require('https');
-const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages, getBoards, createBoard, updateBoard, deleteBoard, getBoardColumns, createBoardColumn, updateBoardColumn, deleteBoardColumn, reorderBoardColumns, getTasks, createTask, updateTask, deleteTask, reorderTasks } = require('./database');
+const { initDatabase, getProfile, createProfile, updateProfile, saveProfilePhoto, loadProfilePhoto, getSetting, setSetting, getWorkspaces, addWorkspace, removeWorkspace, touchWorkspace, closeDatabase, createThread, getThreads, getThread, updateThread, deleteThread, saveMessages, getMessages, getMessageCount, deleteThreadMessages } = require('./database');
 const { initAutoUpdater, destroyAutoUpdater } = require('./auto-updater');
 
 // ---- GitHub Avatar Resolution ---- //
@@ -2380,68 +2380,6 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
   ipcMain.handle('chat:deleteThreadMessages', async (_event, threadId) => {
     return deleteThreadMessages(threadId);
-  });
-
-  // ---- Boards ---- //
-
-  ipcMain.handle('boards:list', async (_event, workspacePath) => {
-    return getBoards(workspacePath);
-  });
-
-  ipcMain.handle('boards:create', async (_event, data) => {
-    return createBoard(data);
-  });
-
-  ipcMain.handle('boards:update', async (_event, id, updates) => {
-    return updateBoard(id, updates);
-  });
-
-  ipcMain.handle('boards:delete', async (_event, id) => {
-    return deleteBoard(id);
-  });
-
-  // ---- Board Columns ---- //
-
-  ipcMain.handle('boards:columns:list', async (_event, boardId) => {
-    return getBoardColumns(boardId);
-  });
-
-  ipcMain.handle('boards:columns:create', async (_event, data) => {
-    return createBoardColumn(data);
-  });
-
-  ipcMain.handle('boards:columns:update', async (_event, id, updates) => {
-    return updateBoardColumn(id, updates);
-  });
-
-  ipcMain.handle('boards:columns:delete', async (_event, id) => {
-    return deleteBoardColumn(id);
-  });
-
-  ipcMain.handle('boards:columns:reorder', async (_event, columnUpdates) => {
-    return reorderBoardColumns(columnUpdates);
-  });
-
-  // ---- Tasks (Kanban) ---- //
-
-  ipcMain.handle('tasks:list', async (_event, workspacePath) => {
-    return getTasks(workspacePath);
-  });
-
-  ipcMain.handle('tasks:create', async (_event, data) => {
-    return createTask(data);
-  });
-
-  ipcMain.handle('tasks:update', async (_event, id, updates) => {
-    return updateTask(id, updates);
-  });
-
-  ipcMain.handle('tasks:delete', async (_event, id) => {
-    return deleteTask(id);
-  });
-
-  ipcMain.handle('tasks:reorder', async (_event, taskUpdates) => {
-    return reorderTasks(taskUpdates);
   });
 
 }
