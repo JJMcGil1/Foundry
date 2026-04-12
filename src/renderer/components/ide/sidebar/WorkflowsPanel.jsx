@@ -2,8 +2,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { FiRefreshCw, FiChevronRight, FiExternalLink } from 'react-icons/fi';
 import { VscCheck, VscClose, VscLoading, VscCircleFilled, VscWatch } from 'react-icons/vsc';
 import { motion, AnimatePresence } from 'framer-motion';
-import MiniTooltipBtn from './MiniTooltipBtn';
-import styles from '../Sidebar.module.css';
 import wfStyles from '../WorkflowsPanel.module.css';
 
 function parseGitHubRepo(remoteUrl) {
@@ -163,9 +161,6 @@ export default function WorkflowsPanel({ projectPath, isActive }) {
   if (!repoInfo) {
     return (
       <div className={wfStyles.container}>
-        <div className={styles.explorerHeader}>
-          <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>Workflows</span>
-        </div>
         <div className={wfStyles.emptyState}>
           <span className={wfStyles.emptyText}>Not a GitHub repository</span>
           <span className={wfStyles.emptySubtext}>Open a project with a GitHub remote to see workflows</span>
@@ -176,18 +171,6 @@ export default function WorkflowsPanel({ projectPath, isActive }) {
 
   return (
     <div className={wfStyles.container}>
-      <div className={styles.explorerHeader}>
-        <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>Workflows</span>
-        <div className={styles.headerActions}>
-          <MiniTooltipBtn
-            icon={FiRefreshCw}
-            label="Refresh"
-            onClick={fetchRuns}
-            className={loading ? wfStyles.spinning : undefined}
-          />
-        </div>
-      </div>
-
       <div className={wfStyles.scrollArea}>
         {loading && runs.length === 0 && (
           <div className={wfStyles.loadingState}>

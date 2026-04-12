@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
-import { FiGithub, FiGitCommit } from 'react-icons/fi';
+import { FiGitCommit, FiGithub, FiTerminal, FiMessageSquare } from 'react-icons/fi';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
-  { id: 'files',  icon: VscFiles,          label: 'Explorer' },
-  { id: 'git',    icon: VscSourceControl,  label: 'Source Control' },
+  { id: 'files',     icon: VscFiles,         label: 'Explorer',       size: 24 },
+  { id: 'git',       icon: VscSourceControl, label: 'Source Control',  size: 24 },
+  { id: 'graph',     icon: FiGitCommit,      label: 'Commit Graph',   size: 21 },
+  { id: 'workflows', icon: FiGithub,         label: 'Workflows',      size: 21 },
+  { id: 'terminal',  icon: FiTerminal,       label: 'Terminal',       size: 20 },
+  { id: 'chat',      icon: FiMessageSquare,  label: 'Chat',           size: 20 },
 ];
 
-export default function ActivityBar({ activePanel, onPanelClick, profile, showSettings, gitChangeCount = 0, rightActivePanel, rightSidebarVisible }) {
+export default function ActivityBar({ onPanelClick, profile, showSettings, gitChangeCount = 0, openPanelTypes = new Set() }) {
   const [hoveredId, setHoveredId] = useState(null);
 
   const initials = profile
@@ -19,15 +23,13 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
     <nav className={styles.bar}>
       <div className={styles.top}>
         {panels.map(p => {
-          const activeLeft = activePanel === p.id;
-          const activeRight = rightSidebarVisible && rightActivePanel === p.id;
-          const active = activeLeft || activeRight;
+          const isOpen = openPanelTypes.has(p.id);
           const Icon = p.icon;
           const iconSize = p.size || 24;
           return (
             <div key={p.id} className={styles.itemWrap}>
               <button
-                className={`${styles.item} ${active ? styles.active : ''}`}
+                className={`${styles.item} ${isOpen ? styles.active : ''}`}
                 onClick={() => onPanelClick(p.id)}
                 onMouseEnter={() => setHoveredId(p.id)}
                 onMouseLeave={() => setHoveredId(null)}
@@ -38,16 +40,10 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
                     <span className={styles.badge}>{gitChangeCount > 99 ? '99+' : gitChangeCount}</span>
                   )}
                 </span>
-                {activeLeft && (
+                {isOpen && (
                   <span className={styles.indicator}>
                     <span className={styles.indicatorLine} />
                     <span className={styles.indicatorGlow} />
-                  </span>
-                )}
-                {activeRight && (
-                  <span className={styles.indicatorRight}>
-                    <span className={styles.indicatorLineRight} />
-                    <span className={styles.indicatorGlowRight} />
                   </span>
                 )}
               </button>
@@ -59,62 +55,6 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
             </div>
           );
         })}
-
-        <div className={styles.itemWrap}>
-          <button
-            className={`${styles.item} ${(activePanel === 'graph' || (rightSidebarVisible && rightActivePanel === 'graph')) ? styles.active : ''}`}
-            onClick={() => onPanelClick('graph')}
-            onMouseEnter={() => setHoveredId('graph')}
-            onMouseLeave={() => setHoveredId(null)}
-          >
-            <FiGitCommit size={21} />
-            {activePanel === 'graph' && (
-              <span className={styles.indicator}>
-                <span className={styles.indicatorLine} />
-                <span className={styles.indicatorGlow} />
-              </span>
-            )}
-            {rightSidebarVisible && rightActivePanel === 'graph' && (
-              <span className={styles.indicatorRight}>
-                <span className={styles.indicatorLineRight} />
-                <span className={styles.indicatorGlowRight} />
-              </span>
-            )}
-          </button>
-          {hoveredId === 'graph' && (
-            <div className={styles.tooltip}>
-              <span className={styles.tooltipText}>Commit Graph</span>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.itemWrap}>
-          <button
-            className={`${styles.item} ${(activePanel === 'workflows' || (rightSidebarVisible && rightActivePanel === 'workflows')) ? styles.active : ''}`}
-            onClick={() => onPanelClick('workflows')}
-            onMouseEnter={() => setHoveredId('workflows')}
-            onMouseLeave={() => setHoveredId(null)}
-          >
-            <FiGithub size={21} />
-            {activePanel === 'workflows' && (
-              <span className={styles.indicator}>
-                <span className={styles.indicatorLine} />
-                <span className={styles.indicatorGlow} />
-              </span>
-            )}
-            {rightSidebarVisible && rightActivePanel === 'workflows' && (
-              <span className={styles.indicatorRight}>
-                <span className={styles.indicatorLineRight} />
-                <span className={styles.indicatorGlowRight} />
-              </span>
-            )}
-          </button>
-          {hoveredId === 'workflows' && (
-            <div className={styles.tooltip}>
-              <span className={styles.tooltipText}>Workflows</span>
-            </div>
-          )}
-        </div>
       </div>
 
       <div className={styles.bottom}>

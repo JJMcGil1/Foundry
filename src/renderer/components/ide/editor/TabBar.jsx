@@ -3,7 +3,7 @@ import { FiX } from 'react-icons/fi';
 import FileIcon from '../FileIcon';
 import styles from '../EditorArea.module.css';
 
-export default function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReorderTabs }) {
+export default function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReorderTabs, onPanelClose, panelDragProps }) {
   const [dragIndex, setDragIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
 
@@ -45,7 +45,31 @@ export default function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReo
   };
 
   return (
-    <div className={styles.tabBar}>
+    <div
+      className={`${styles.tabBar} ${panelDragProps?.isDragOver ? styles.tabBarDragOver : ''}`}
+      onDragOver={(e) => {
+        // Only handle panel drag when not dragging tabs
+        if (dragIndex === null && panelDragProps) {
+          e.preventDefault();
+          panelDragProps.onDragOver?.();
+        }
+      }}
+      onDrop={(e) => {
+        if (dragIndex === null && panelDragProps) {
+          panelDragProps.onDrop?.();
+        }
+      }}
+    >
+      {panelDragProps && (
+        <div
+          className={styles.panelDragGrip}
+          draggable
+          onDragStart={panelDragProps.onDragStart}
+          onDragEnd={panelDragProps.onDragEnd}
+        >
+          <span /><span /><span /><span /><span /><span />
+        </div>
+      )}
       {tabs.map((tab, index) => (
         <div
           key={tab.path}
@@ -69,6 +93,11 @@ export default function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReo
           </button>
         </div>
       ))}
+      {onPanelClose && (
+        <button className={styles.panelCloseBtn} onClick={onPanelClose} title="Close panel">
+          <FiX size={13} />
+        </button>
+      )}
     </div>
   );
 }

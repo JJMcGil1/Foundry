@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiMessageSquare, FiChevronDown, FiPlus, FiTrash2, FiX } from 'react-icons/fi';
-import { TbLayoutColumns } from 'react-icons/tb';
 import styles from './ChatHeader.module.css';
 
 export default function ChatHeader({
@@ -14,12 +13,19 @@ export default function ChatHeader({
   handleDeleteThread,
   onNewChat,
   threadListRef,
-  onSplit,
-  onClosePanel,
-  panelCount = 1,
+  panelDragProps,
+  onPanelClose,
 }) {
   return (
-    <div className={styles.header}>
+    <div
+      className={`${styles.header} ${panelDragProps?.isDragOver ? styles.headerDragOver : ''}`}
+      draggable={!!panelDragProps}
+      onDragStart={panelDragProps?.onDragStart}
+      onDragEnd={panelDragProps?.onDragEnd}
+      onDragOver={(e) => { e.preventDefault(); panelDragProps?.onDragOver?.(); }}
+      onDrop={panelDragProps?.onDrop}
+    >
+      {panelDragProps && <div className={styles.dragGrip}><span /><span /><span /><span /><span /><span /></div>}
       <FiMessageSquare size={13} />
       <div className={styles.threadSelector} ref={threadListRef}>
         <button
@@ -85,20 +91,11 @@ export default function ChatHeader({
       >
         <FiPlus size={14} />
       </button>
-      {onSplit && panelCount < 4 && (
+      {onPanelClose && (
         <button
-          className={styles.newChatBtn}
-          onClick={onSplit}
-          title="Split chat panel"
-        >
-          <TbLayoutColumns size={14} />
-        </button>
-      )}
-      {onClosePanel && panelCount > 1 && (
-        <button
-          className={`${styles.newChatBtn} ${styles.closePanelBtn}`}
-          onClick={onClosePanel}
-          title="Close this panel"
+          className={styles.panelCloseBtn}
+          onClick={onPanelClose}
+          title="Close panel"
         >
           <FiX size={14} />
         </button>

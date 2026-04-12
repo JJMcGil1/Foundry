@@ -103,7 +103,7 @@
   color: var(--zinc-100);
 }
 
-/* Icon crossfade for smooth outline ↔ filled transitions */
+/* Icon crossfade for smooth outline <-> filled transitions */
 .iconCrossfade {
   position: relative;
   display: flex;
@@ -127,7 +127,7 @@
 .iconHidden { opacity: 0; transform: scale(0.92); }
 .iconFill:not(.iconHidden) { opacity: 1; transform: scale(1); }
 
-/* Theme toggle: rotational crossfade for sun ↔ moon */
+/* Theme toggle: rotational crossfade for sun <-> moon */
 .themeIcon {
   position: absolute;
   transition: opacity 0.45s cubic-bezier(0.16, 1, 0.3, 1),
@@ -148,6 +148,7 @@
   margin: 0 4px;
 }
 
+/* ── Main panel area ── */
 .main {
   flex: 1;
   display: flex;
@@ -167,29 +168,196 @@
   pointer-events: none;
 }
 
-.editorContainer {
+/* ── Settings overlay ── */
+.settingsOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  background: var(--surface-2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Panel strip (horizontal panel container) ── */
+.panelStrip {
   flex: 1;
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  overflow-y: hidden;
   min-width: 0;
+}
+
+/* Hide scrollbar but keep scroll functionality */
+.panelStrip::-webkit-scrollbar {
+  height: 0;
+  display: none;
+}
+
+/* ── Individual panel slot ── */
+.panelSlot {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background: var(--surface-1);
+  border-right: 1px solid var(--border);
+  transition: opacity 0.15s ease;
+  min-width: 200px;
+  flex-shrink: 0;
 }
 
-.editorArea {
+.panelSlot:last-child {
+  border-right: none;
+}
+
+.panelSlotDragging {
+  opacity: 0.5;
+}
+
+.panelContent {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  transition: opacity 0.3s ease;
 }
 
-.editorAreaHidden {
-  flex: 0 0 0px;
-  min-height: 0;
-  opacity: 0;
+/* ── Resize handle between panels ── */
+.panelResizeHandle {
+  width: 5px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.2s ease;
+  z-index: 5;
+  margin: 0 -2px;
+}
+
+.panelResizeHandle:hover,
+.panelResizeHandle:active {
+  background: var(--zinc-600);
+}
+
+/* ── Empty main state ── */
+.emptyMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--surface-1);
+  border-radius: 12px 0 0 0;
+}
+
+.emptyMainLogo {
+  height: 48px;
+  width: auto;
+  opacity: 0.15;
+  margin-bottom: 4px;
+}
+
+.emptyMainText {
+  font-size: 13px;
+  color: var(--zinc-500);
+  font-family: var(--font-sans);
+}
+
+.emptyMainHints {
+  display: flex;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+.emptyMainHints span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--zinc-600);
+  font-family: var(--font-sans);
+}
+
+.kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 6px;
+  font-size: 10px;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  color: var(--zinc-400);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  line-height: 1;
+}
+
+:global([data-theme="light"]) .kbd {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--zinc-500);
+}
+
+/* ── Add Panel dropdown ── */
+.addPanelWrap {
+  position: relative;
+}
+
+.addPanelBtn {
+  gap: 4px;
+}
+
+.addPanelDropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+  z-index: 200;
   overflow: hidden;
-  pointer-events: none;
+  padding: 4px;
+  animation: dropdownIn 0.12s ease-out;
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.addPanelItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--zinc-300);
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.1s ease, color 0.1s ease;
+  text-align: left;
+}
+
+.addPanelItem:hover {
+  background: var(--surface-3);
+  color: var(--zinc-100);
+}
+
+.addPanelEmpty {
+  padding: 12px;
+  font-size: 12px;
+  color: var(--zinc-500);
+  text-align: center;
+  font-family: var(--font-sans);
 }
 
 /* ── Start button (titlebar left, after project controls) ── */

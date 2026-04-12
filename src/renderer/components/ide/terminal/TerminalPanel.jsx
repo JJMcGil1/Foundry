@@ -1,6 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState, useImperativeHandle, forwardRef } from 'react';
-import { motion } from 'framer-motion';
-import { FiPlus, FiX, FiMaximize2, FiMinimize2 } from 'react-icons/fi';
+import { FiPlus, FiX } from 'react-icons/fi';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -10,8 +9,7 @@ import { getTerminalTheme } from './terminalTheme';
 import TerminalTab from './TerminalTab';
 import styles from '../TerminalPanel.module.css';
 
-const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange, projectPath, visible = true, onClose, isMaximized, onToggleMaximize }, ref) {
-  const [isResizing, setIsResizing] = useState(false);
+const TerminalPanel = forwardRef(function TerminalPanel({ projectPath, onClose, panelDragProps }, ref) {
   const [terminals, setTerminals] = useState([]);
   const [activeTermId, setActiveTermId] = useState(null);
   const containerRef = useRef(null);
@@ -64,13 +62,12 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
     const applyCursorStyle = () => {
       const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
       const cursorHex = isDark ? '#E4E4E7' : '#27272A';
-      xterm.write(`\x1b]12;${cursorHex}\x07`);  // OSC 12: set cursor color
-      xterm.write('\x1b[2 q');                    // DECSCUSR: solid block cursor
+      xterm.write(`\x1b]12;${cursorHex}\x07`);
+      xterm.write('\x1b[2 q');
       xterm.options.cursorStyle = 'block';
       xterm.options.cursorBlink = true;
     };
 
-    // Apply after shell initializes (shell profile may override cursor)
     setTimeout(applyCursorStyle, 200);
     setTimeout(applyCursorStyle, 600);
     setTimeout(applyCursorStyle, 1500);
@@ -90,21 +87,16 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
         if (entry.applyCursorStyle) entry.applyCursorStyle();
       }
     });
-
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['data-theme'],
-    });
-
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => observer.disconnect();
   }, []);
 
   // Strip escape sequences that override cursor color or shape
   const stripCursorEscapes = useCallback((data) => {
     return data
-      .replace(/\x1b\]12;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '')   // OSC 12: set cursor color
-      .replace(/\x1b\]112(?:\x07|\x1b\\)/g, '')                 // OSC 112: reset cursor color
-      .replace(/\x1b\[\d* ?q/g, '');                             // DECSCUSR: cursor shape
+      .replace(/\x1b\]12;[^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b\]112(?:\x07|\x1b\\)/g, '')
+      .replace(/\x1b\[\d* ?q/g, '');
   }, []);
 
   // Listen for PTY data from main process
@@ -143,12 +135,9 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
 
     if (!entry.xterm.element) {
       entry.xterm.open(containerRef.current);
-      // Load WebGL renderer after terminal is in the DOM (requires canvas context)
       try {
         entry.xterm.loadAddon(new WebglAddon());
-      } catch {
-        // WebGL not available — falls back to canvas renderer automatically
-      }
+      } catch {}
     } else {
       containerRef.current.appendChild(entry.xterm.element);
     }
@@ -164,24 +153,7 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
     return () => clearTimeout(timer);
   }, [activeTermId]);
 
-  // Refit on height change or when becoming visible again
-  useEffect(() => {
-    if (!visible || !activeTermId) return;
-    const entry = terminalsRef.current.get(activeTermId);
-    if (!entry) return;
-
-    const timer = setTimeout(() => {
-      try {
-        entry.fitAddon.fit();
-        window.foundry?.terminalResize(entry.ptyId, entry.xterm.cols, entry.xterm.rows);
-      } catch {}
-      entry.xterm.focus();
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [height, activeTermId, visible]);
-
-  // ResizeObserver for width changes
+  // ResizeObserver for container size changes
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -199,18 +171,17 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
     return () => resizeObserverRef.current?.disconnect();
   }, [activeTermId]);
 
-  // Auto-create a terminal when panel becomes visible and none exist
+  // Auto-create a terminal on mount
   useEffect(() => {
-    if (visible && terminals.length === 0) {
+    if (terminals.length === 0) {
       createTerminal();
     }
-  }, [visible, createTerminal, terminals.length]);
+  }, [createTerminal, terminals.length]);
 
   const handleClose = useCallback((id) => {
     const entry = terminalsRef.current.get(id);
     if (entry) {
       window.foundry?.terminalKill(entry.ptyId);
-      // Detach xterm element from DOM before disposing to avoid visible teardown flash
       if (entry.xterm.element?.parentNode) {
         entry.xterm.element.parentNode.removeChild(entry.xterm.element);
       }
@@ -236,46 +207,14 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
   useEffect(() => {
     if (terminals.length > 0) {
       hadTerminalsRef.current = true;
-    } else if (hadTerminalsRef.current && visible) {
+    } else if (hadTerminalsRef.current) {
       hadTerminalsRef.current = false;
       onClose?.();
     }
-  }, [terminals.length, visible, onClose]);
+  }, [terminals.length, onClose]);
 
-  const handleClear = useCallback(() => {
-    if (!activeTermId) return;
-    const entry = terminalsRef.current.get(activeTermId);
-    if (entry) {
-      entry.xterm.clear();
-    }
-  }, [activeTermId]);
-
-  const handleResizeStart = useCallback((e) => {
-    e.preventDefault();
-    setIsResizing(true);
-    const startY = e.clientY;
-    const startHeight = height;
-
-    const handleMouseMove = (e) => {
-      const newHeight = Math.max(120, Math.min(600, startHeight - (e.clientY - startY)));
-      onHeightChange(newHeight);
-    };
-    const handleMouseUp = () => {
-      setIsResizing(false);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-    };
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [height, onHeightChange]);
-
-  // Expose methods for parent to run/kill commands in terminal tabs
+  // Expose methods for parent to run/kill commands
   useImperativeHandle(ref, () => ({
-    // Create a new tab, run a command in it, return the ptyId
     async runCommand(cmd) {
       const cwd = projectPath || undefined;
       let result;
@@ -330,7 +269,6 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
       setTerminals(prev => [...prev, { id, label: cmd.split(' ')[0], ptyId }]);
       setActiveTermId(id);
 
-      // Wait for shell prompt before sending command
       await new Promise((resolve) => {
         let resolved = false;
         const cleanup = window.foundry?.onTerminalData((dataId, data) => {
@@ -349,12 +287,10 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
       return ptyId;
     },
 
-    // Kill a specific terminal by ptyId
     killByPtyId(ptyId) {
       for (const [id, entry] of terminalsRef.current) {
         if (entry.ptyId === ptyId) {
           window.foundry?.terminalKill(entry.ptyId);
-          // Don't remove the tab — let the exit listener show [Process exited]
           return true;
         }
       }
@@ -374,51 +310,39 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
   }, []);
 
   return (
-    <motion.div
-      className={`${styles.panel} ${isMaximized ? styles.panelMaximized : ''}`}
-      style={isResizing ? { height } : undefined}
-      initial={false}
-      animate={
-        visible
-          ? { height, opacity: 1, y: 0 }
-          : { height: 0, opacity: 0, y: 10 }
-      }
-      transition={
-        isResizing
-          ? { duration: 0 }
-          : { duration: 0.3, ease: [0.25, 0.1, 0.25, 1] }
-      }
-    >
-      <div style={{ display: visible ? 'flex' : 'none', height: '100%', flexDirection: 'column' }}>
-        {!isMaximized && <div className={styles.resizeHandle} onMouseDown={handleResizeStart} />}
-        <div className={styles.header}>
-          <div className={styles.tabs}>
-            {terminals.map(t => (
-              <TerminalTab
-                key={t.id}
-                id={t.id}
-                label={t.label}
-                active={activeTermId === t.id}
-                onSelect={setActiveTermId}
-                onClose={handleClose}
-              />
-            ))}
-            <button className={styles.newBtn} onClick={createTerminal} title="New Terminal">
-              <FiPlus size={13} />
-            </button>
-          </div>
-          <div className={styles.actions}>
-            <button className={styles.actionBtn} onClick={onToggleMaximize} title={isMaximized ? 'Restore' : 'Maximize'}>
-              {isMaximized ? <FiMinimize2 size={13} /> : <FiMaximize2 size={13} />}
-            </button>
-            <button className={styles.actionBtn} onClick={onClose} title="Close Terminal">
-              <FiX size={13} />
-            </button>
-          </div>
+    <div className={styles.panel}>
+      <div
+        className={`${styles.header} ${panelDragProps?.isDragOver ? styles.headerDragOver : ''}`}
+        draggable={!!panelDragProps}
+        onDragStart={panelDragProps?.onDragStart}
+        onDragEnd={panelDragProps?.onDragEnd}
+        onDragOver={(e) => { e.preventDefault(); panelDragProps?.onDragOver?.(); }}
+        onDrop={panelDragProps?.onDrop}
+      >
+        {panelDragProps && <div className={styles.dragGrip}><span /><span /><span /><span /><span /><span /></div>}
+        <div className={styles.tabs}>
+          {terminals.map(t => (
+            <TerminalTab
+              key={t.id}
+              id={t.id}
+              label={t.label}
+              active={activeTermId === t.id}
+              onSelect={setActiveTermId}
+              onClose={handleClose}
+            />
+          ))}
+          <button className={styles.newBtn} onClick={createTerminal} title="New Terminal">
+            <FiPlus size={13} />
+          </button>
         </div>
-        <div className={styles.terminalContainer} ref={containerRef} />
+        {panelDragProps && (
+          <button className={styles.panelCloseBtn} onClick={onClose} title="Close panel">
+            <FiX size={13} />
+          </button>
+        )}
       </div>
-    </motion.div>
+      <div className={styles.terminalContainer} ref={containerRef} />
+    </div>
   );
 });
 

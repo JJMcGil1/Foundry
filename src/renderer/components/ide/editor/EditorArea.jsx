@@ -1,10 +1,9 @@
 import React from 'react';
 import TabBar from './TabBar';
 import CodeEditor from './CodeEditor';
-import WelcomePane from './WelcomePane';
 import styles from '../EditorArea.module.css';
 
-export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, onContentChange, onSaveFile, onOpenFolder, project, onReorderTabs }) {
+export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, onContentChange, onSaveFile, onOpenFolder, project, onReorderTabs, onPanelClose, panelDragProps }) {
   const currentTab = tabs.find(t => t.path === activeTab);
 
   return (
@@ -16,6 +15,8 @@ export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, o
           onSelectTab={onSelectTab}
           onCloseTab={onCloseTab}
           onReorderTabs={onReorderTabs}
+          onPanelClose={onPanelClose}
+          panelDragProps={panelDragProps}
         />
       )}
       <div className={styles.editorContent}>
@@ -27,7 +28,9 @@ export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, o
             onSave={onSaveFile}
           />
         ) : (
-          <WelcomePane onOpenFolder={onOpenFolder} project={project} />
+          <div className={styles.editorEmpty}>
+            <span className={styles.editorEmptyText}>No file open</span>
+          </div>
         )}
       </div>
     </div>

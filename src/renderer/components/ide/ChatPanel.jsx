@@ -29,7 +29,7 @@ function playChatCompleteSound() {
 }
 
 // ---- Main ChatPanel Component ---- //
-export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClosePanel, panelCount = 1, startFresh = false }) {
+export default function ChatPanel({ onOpenSettings, projectPath, startFresh = false, panelDragProps, onPanelClose }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [images, setImages] = useState([]);
@@ -763,9 +763,8 @@ export default function ChatPanel({ onOpenSettings, projectPath, onSplit, onClos
         handleDeleteThread={handleDeleteThread}
         onNewChat={handleNewChat}
         threadListRef={threadListRef}
-        onSplit={onSplit}
-        onClosePanel={onClosePanel}
-        panelCount={panelCount}
+        panelDragProps={panelDragProps}
+        onPanelClose={onPanelClose}
       />
 
       <div className={styles.messages}>

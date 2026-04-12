@@ -1,43 +1,48 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import { TbLayoutBottombar, TbLayoutBottombarFilled, TbLayoutSidebar, TbLayoutSidebarFilled, TbLayoutSidebarRight, TbLayoutSidebarRightFilled, TbLayoutSidebarRightExpand, TbLayoutSidebarRightExpandFilled, TbLayoutSidebarLeftExpand, TbLayoutSidebarLeftExpandFilled } from 'react-icons/tb';
-import { FiSun, FiMoon } from 'react-icons/fi';
+import { VscFiles, VscSourceControl } from 'react-icons/vsc';
+import { FiSun, FiMoon, FiPlus, FiGitCommit, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw } from 'react-icons/fi';
 import { VscPlay, VscDebugStop } from 'react-icons/vsc';
 import { useToast } from './ToastProvider';
-import { ActivityBar, Sidebar } from './sidebar';
+import { ActivityBar, FileTreeItem, GitPanel, CommitGraphPanel, WorkflowsPanel, MiniTooltipBtn } from './sidebar';
+import PanelHeader from './PanelHeader';
 import { EditorArea } from './editor';
-import ChatPanelContainer from './ChatPanelContainer';
+import ChatPanel from './ChatPanel';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
 import { SearchBar, ProjectControls } from './titlebar';
 import styles from './IDELayout.module.css';
+import sidebarStyles from './Sidebar.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
 import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
+// ── Panel type config ──
+const PANEL_TYPES = {
+  files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 260, minWidth: 200, maxWidth: 480, singleton: true },
+  git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 280, minWidth: 200, maxWidth: 480, singleton: true },
+  graph:     { title: 'Commit Graph',    icon: FiGitCommit,       defaultWidth: 300, minWidth: 200, maxWidth: 480, singleton: true },
+  workflows: { title: 'Workflows',       icon: FiGithub,          defaultWidth: 260, minWidth: 200, maxWidth: 480, singleton: true },
+  terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 450, minWidth: 280, maxWidth: 900 },
+  chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 360, minWidth: 280, maxWidth: 650 },
+  editor:    { title: 'Editor',         icon: VscFiles,          minWidth: 200, flex: true, singleton: true },
+};
+
+let nextPanelId = 0;
+function makePanelId() { return `panel-${++nextPanelId}`; }
+
 export default function IDELayout({ profile, onProfileChange, initialProjectPath }) {
-  const [activePanel, setActivePanel] = useState('files');
-  const [sidebarWidth, setSidebarWidth] = useState(260);
-  const [chatWidth, setChatWidth] = useState(340);
-  const [leftChatVisible, setLeftChatVisible] = useState(false);
-  const [leftChatWidth, setLeftChatWidth] = useState(340);
-  const [rightSidebarVisible, setRightSidebarVisible] = useState(false);
-  const [rightSidebarWidth, setRightSidebarWidth] = useState(260);
-  const [rightActivePanel, setRightActivePanel] = useState('files');
-  const [activeSide, setActiveSide] = useState('left');
-  const [terminalHeight, setTerminalHeight] = useState(240);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
-  const [chatVisible, setChatVisible] = useState(true);
-  const [terminalVisible, setTerminalVisible] = useState(false);
-  const [terminalMaximized, setTerminalMaximized] = useState(false);
-  const [preMaxTerminalHeight, setPreMaxTerminalHeight] = useState(240);
-  const [maxTerminalHeight, setMaxTerminalHeight] = useState(600);
+  // ── Panel state ──
+  const [panels, setPanels] = useState(() => [
+    { id: makePanelId(), type: 'files', width: 260 },
+  ]);
+  const [dragPanelIndex, setDragPanelIndex] = useState(null);
+  const [dragOverPanelIndex, setDragOverPanelIndex] = useState(null);
+  const [showAddPanel, setShowAddPanel] = useState(false);
+  const addPanelRef = useRef(null);
+
+  // ── Existing IDE state ──
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState(null);
-  const editorContainerRef = useRef(null);
-  const prePanelSidebarRef = useRef(null);
-  const prePanelTerminalRef = useRef(null);
 
-  // Start command state
   const [startCommand, setStartCommand] = useState('');
   const [startRunning, setStartRunning] = useState(false);
   const startPtyIdRef = useRef(null);
@@ -45,25 +50,14 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const addToast = useToast();
 
   const [windowState, setWindowState] = useState({ isFullScreen: false, isMaximized: false });
-
-  // Convenience booleans
   const isFullScreen = windowState.isFullScreen;
-  const isMaximizedOrFullscreen = windowState.isFullScreen || windowState.isMaximized;
 
   useEffect(() => {
-    // Live window state updates from main process
-    const cleanup = window.foundry?.onWindowStateChange?.((state) => {
-      setWindowState(state);
-    });
-
-    // Initial check
+    const cleanup = window.foundry?.onWindowStateChange?.((state) => setWindowState(state));
     window.foundry?.getWindowState?.().then(state => {
       if (state && typeof state === 'object') setWindowState(state);
     }).catch(() => {});
-
-    return () => {
-      cleanup?.();
-    };
+    return () => cleanup?.();
   }, []);
 
   const [project, setProject] = useState(null);
@@ -72,7 +66,15 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [activeTab, setActiveTab] = useState(null);
   const [gitStatus, setGitStatus] = useState({ branch: '', files: [], isRepo: false });
 
-  // Restore project on mount: prefer initialProjectPath (new window), fall back to last opened
+  // File tree expanded paths (moved from Sidebar)
+  const [expandedPaths, setExpandedPaths] = useState(new Set());
+  const expandPersistTimer = useRef(null);
+
+  const [currentTheme, setCurrentTheme] = useState(
+    () => document.documentElement.getAttribute('data-theme') || 'dark'
+  );
+
+  // ── Restore project ──
   useEffect(() => {
     async function restoreProject() {
       const targetPath = initialProjectPath || await window.foundry?.getSetting('last_project_path');
@@ -85,12 +87,10 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           setFileTree(tree);
           const status = await window.foundry?.gitStatus(targetPath);
           if (status) setGitStatus(status);
-          // Only update last_project_path if no explicit initial path (avoid overwriting other windows)
           if (!initialProjectPath) return;
           await window.foundry?.setSetting('last_project_path', targetPath);
         }
       } catch {
-        // Folder no longer exists
         if (!initialProjectPath) {
           await window.foundry?.setSetting('last_project_path', '');
         }
@@ -99,21 +99,12 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     restoreProject();
   }, []);
 
-  // Set window title to workspace name
-  useEffect(() => {
-    window.foundry?.setWindowTitle?.(project?.name || '');
-  }, [project]);
+  useEffect(() => { window.foundry?.setWindowTitle?.(project?.name || ''); }, [project]);
 
-  // Derive current effective theme (reactive via state)
-  const [currentTheme, setCurrentTheme] = useState(
-    () => document.documentElement.getAttribute('data-theme') || 'dark'
-  );
-
-  // Watch for theme attribute changes (from settings page, system changes, etc.)
+  // ── Theme ──
   useEffect(() => {
     const observer = new MutationObserver(() => {
-      const t = document.documentElement.getAttribute('data-theme') || 'dark';
-      setCurrentTheme(t);
+      setCurrentTheme(document.documentElement.getAttribute('data-theme') || 'dark');
     });
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
     return () => observer.disconnect();
@@ -127,10 +118,42 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (onProfileChange) await onProfileChange();
   }, [currentTheme, onProfileChange]);
 
-  const handleSidebarWidthChange = useCallback((newWidth) => {
-    setSidebarWidth(newWidth);
-  }, []);
+  // ── File tree persistence ──
+  useEffect(() => {
+    if (!project?.path) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const raw = await window.foundry?.getSetting('file_tree_expanded_paths:' + project.path);
+        if (!cancelled && raw) {
+          const paths = JSON.parse(raw);
+          if (Array.isArray(paths)) { setExpandedPaths(new Set(paths)); return; }
+        }
+      } catch {}
+      if (!cancelled) setExpandedPaths(new Set());
+    })();
+    return () => { cancelled = true; };
+  }, [project?.path]);
 
+  const persistExpandedPaths = useCallback((paths) => {
+    if (!project?.path) return;
+    clearTimeout(expandPersistTimer.current);
+    expandPersistTimer.current = setTimeout(() => {
+      window.foundry?.setSetting('file_tree_expanded_paths:' + project.path, JSON.stringify([...paths]));
+    }, 300);
+  }, [project?.path]);
+
+  const handleToggleExpand = useCallback((path) => {
+    setExpandedPaths(prev => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      persistExpandedPaths(next);
+      return next;
+    });
+  }, [persistExpandedPaths]);
+
+  // ── Project / folder ──
   const handleOpenFolder = useCallback(async () => {
     const result = await window.foundry?.openFolder();
     if (result) {
@@ -140,11 +163,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       setActiveTab(null);
       const status = await window.foundry?.gitStatus(result.path);
       if (status) setGitStatus(status);
-      // Persist last project
       await window.foundry?.setSetting('last_project_path', result.path);
     }
   }, []);
 
+  // ── File operations ──
   const handleOpenFile = useCallback(async (filePath) => {
     const existing = openTabs.find(t => t.path === filePath);
     if (existing) { setActiveTab(filePath); return; }
@@ -155,6 +178,16 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         language: file.language, modified: false, originalContent: file.content,
       }]);
       setActiveTab(filePath);
+      // Ensure editor panel exists
+      setPanels(prev => {
+        if (prev.some(p => p.type === 'editor')) return prev;
+        // Insert editor after the last sidebar-type panel
+        const lastSidebarIdx = [...prev].reverse().findIndex(p => ['files', 'git', 'graph', 'workflows'].includes(p.type));
+        const insertIdx = lastSidebarIdx >= 0 ? prev.length - lastSidebarIdx : prev.length;
+        const next = [...prev];
+        next.splice(insertIdx, 0, { id: makePanelId(), type: 'editor', width: 0 });
+        return next;
+      });
     }
   }, [openTabs]);
 
@@ -183,12 +216,19 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     }
   }, [openTabs]);
 
+  // Remove editor panel when all tabs close
+  useEffect(() => {
+    if (openTabs.length === 0 && activeTab === null) {
+      setPanels(prev => {
+        if (!prev.some(p => p.type === 'editor')) return prev;
+        return prev.filter(p => p.type !== 'editor');
+      });
+    }
+  }, [openTabs.length, activeTab]);
+
   const handleSwitchWorkspace = useCallback(async (workspace) => {
     try {
-      // Kill all active agent streams before switching — prevents stale subprocesses
-      // from pumping IPC to the wrong workspace and consuming CPU/memory
       await window.foundry?.claudeStopAllStreams?.();
-
       const tree = await window.foundry?.readDir(workspace.path);
       if (tree) {
         setProject({ path: workspace.path, name: workspace.name });
@@ -199,9 +239,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         if (status) setGitStatus(status);
         await window.foundry?.setSetting('last_project_path', workspace.path);
       }
-    } catch {
-      // Folder may no longer exist
-    }
+    } catch {}
   }, []);
 
   const refreshTree = useCallback(async () => {
@@ -212,104 +250,158 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (status) setGitStatus(status);
   }, [project]);
 
-  // Poll git status for real-time updates (guards against overlapping calls)
+  // Poll git status
   useEffect(() => {
     if (!project) return;
-    let running = false;
-    let cancelled = false;
+    let running = false, cancelled = false;
     const interval = setInterval(async () => {
-      if (running) return; // Skip if previous poll is still in-flight
+      if (running) return;
       running = true;
       try {
         const status = await window.foundry?.gitStatus(project.path);
         if (!cancelled && status) setGitStatus(status);
-      } finally {
-        running = false;
-      }
+      } finally { running = false; }
     }, 3000);
     return () => { cancelled = true; clearInterval(interval); };
   }, [project]);
 
+  // ── Panel management ──
+  const addPanel = useCallback((type) => {
+    const config = PANEL_TYPES[type];
+    if (!config) return;
+    if (config.singleton) {
+      const existing = panels.find(p => p.type === type);
+      if (existing) return;
+    }
+    // Max 4 chat panels
+    if (type === 'chat' && panels.filter(p => p.type === 'chat').length >= 4) return;
+    const isFirstOfType = !panels.some(p => p.type === type);
+    const newPanel = { id: makePanelId(), type, width: config.defaultWidth || 300, startFresh: !isFirstOfType };
+    setPanels(prev => [...prev, newPanel]);
+    return newPanel.id;
+  }, [panels]);
+
+  const removePanel = useCallback((panelId) => {
+    setPanels(prev => {
+      const panel = prev.find(p => p.id === panelId);
+      // If removing editor, close all tabs
+      if (panel?.type === 'editor') {
+        setOpenTabs([]);
+        setActiveTab(null);
+      }
+      return prev.filter(p => p.id !== panelId);
+    });
+  }, []);
+
+  const togglePanel = useCallback((type) => {
+    const existing = panels.find(p => p.type === type);
+    if (existing) {
+      removePanel(existing.id);
+    } else {
+      addPanel(type);
+    }
+  }, [panels, addPanel, removePanel]);
+
+  // ── Panel drag-and-drop reordering ──
+  const handlePanelDragStart = useCallback((e, index) => {
+    setDragPanelIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', String(index));
+  }, []);
+
+  const handlePanelDragOver = useCallback((index) => {
+    setDragOverPanelIndex(index);
+  }, []);
+
+  const handlePanelDrop = useCallback((targetIndex) => {
+    if (dragPanelIndex === null || dragPanelIndex === targetIndex) {
+      setDragPanelIndex(null);
+      setDragOverPanelIndex(null);
+      return;
+    }
+    setPanels(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(dragPanelIndex, 1);
+      next.splice(targetIndex, 0, moved);
+      return next;
+    });
+    setDragPanelIndex(null);
+    setDragOverPanelIndex(null);
+  }, [dragPanelIndex]);
+
+  const handlePanelDragEnd = useCallback(() => {
+    setDragPanelIndex(null);
+    setDragOverPanelIndex(null);
+  }, []);
+
+  // ── Panel resize ──
+  const handlePanelResize = useCallback((e, handleIndex) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const leftPanel = panels[handleIndex];
+    const rightPanel = panels[handleIndex + 1];
+
+    const isLeftFlex = PANEL_TYPES[leftPanel.type]?.flex;
+    const isRightFlex = PANEL_TYPES[rightPanel?.type]?.flex;
+
+    // If both are non-flex, resize left panel
+    // If left is flex, resize right panel (inverted)
+    // If right is flex, resize left panel normally
+    const targetPanel = isLeftFlex ? rightPanel : leftPanel;
+    if (!targetPanel) return;
+    const startWidth = targetPanel.width;
+    const direction = isLeftFlex ? -1 : 1;
+    const config = PANEL_TYPES[targetPanel.type] || {};
+
+    const handleMouseMove = (ev) => {
+      const delta = (ev.clientX - startX) * direction;
+      const newWidth = Math.max(config.minWidth || 200, Math.min(config.maxWidth || 800, startWidth + delta));
+      setPanels(prev => prev.map(p => p.id === targetPanel.id ? { ...p, width: newWidth } : p));
+    };
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [panels]);
+
+  // ── Activity bar handler ──
+  const handleActivityClick = useCallback((panel) => {
+    if (panel === 'settings') {
+      setShowSettings(v => !v);
+      return;
+    }
+    togglePanel(panel);
+  }, [togglePanel]);
+
+  // ── Keyboard shortcuts ──
   useEffect(() => {
     function handleKeyDown(e) {
       if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); if (activeTab) handleSaveFile(activeTab); }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'b' || e.key === 'B')) { e.preventDefault(); setRightSidebarVisible(v => !v); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); setSidebarVisible(v => !v); }
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'j' || e.key === 'J')) { e.preventDefault(); setLeftChatVisible(v => !v); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); setChatVisible(v => !v); }
-      if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); setTerminalVisible(v => !v); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); togglePanel('files'); }
+      if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); togglePanel('chat'); }
+      if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); togglePanel('terminal'); }
       if ((e.metaKey || e.ctrlKey) && e.key === ',') {
         e.preventDefault();
-        setShowSettings(v => {
-          if (!v) { enterFullPage(); }
-          else { exitFullPage(); }
-          return !v;
-        });
+        setShowSettings(v => !v);
       }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, handleSaveFile]);
+  }, [activeTab, handleSaveFile, togglePanel]);
 
-  const isFullPage = showSettings;
-
-  const enterFullPage = () => {
-    // Save current state before collapsing
-    prePanelSidebarRef.current = sidebarVisible;
-    prePanelTerminalRef.current = terminalVisible;
-    setSidebarVisible(false);
-    setTerminalVisible(false);
-  };
-
-  const exitFullPage = () => {
-    // Restore previous state
-    if (prePanelSidebarRef.current) setSidebarVisible(true);
-    if (prePanelTerminalRef.current) setTerminalVisible(true);
-    prePanelSidebarRef.current = null;
-    prePanelTerminalRef.current = null;
-  };
-
-  const handleActivityClick = (panel) => {
-    if (panel === 'settings') {
-      const wasOpen = showSettings;
-      setShowSettings(v => !v);
-      if (!wasOpen) enterFullPage();
-      else exitFullPage();
-      return;
-    }
-
-    // Route to active side (left or right sidebar)
-    const isRight = activeSide === 'right' && rightSidebarVisible;
-
-    if (isRight) {
-      // Control right sidebar
-      if (rightActivePanel === panel && rightSidebarVisible) {
-        setRightSidebarVisible(false);
-      } else {
-        setRightActivePanel(panel);
-        setRightSidebarVisible(true);
-      }
-    } else {
-      // Control left sidebar (default)
-      if (isFullPage) {
-        if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
-        else { setActivePanel(panel); setSidebarVisible(true); }
-        return;
-      }
-      if (activePanel === panel && sidebarVisible) { setSidebarVisible(false); }
-      else { setActivePanel(panel); setSidebarVisible(true); }
-    }
-  };
-
-  // Load saved start command when project changes
+  // ── Start command ──
   useEffect(() => {
     if (!project?.path) return;
-    const key = `start_command_${project.path}`;
-    window.foundry?.getSetting(key).then((cmd) => {
+    window.foundry?.getSetting(`start_command_${project.path}`).then((cmd) => {
       if (cmd) setStartCommand(cmd);
       else setStartCommand('');
     }).catch(() => {});
-    // Cleanup running process if project switches
     return () => {
       if (startPtyIdRef.current) {
         terminalPanelRef.current?.killByPtyId(startPtyIdRef.current);
@@ -322,9 +414,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const handleStartCommand = useCallback(async (cmdOverride) => {
     const cmd = (cmdOverride || startCommand).trim();
     if (!cmd || !project?.path) return;
-
+    // Ensure terminal panel exists
+    if (!panels.some(p => p.type === 'terminal')) addPanel('terminal');
     setStartRunning(true);
-
+    // Small delay to let terminal mount
+    await new Promise(r => setTimeout(r, 100));
     const ptyId = await terminalPanelRef.current?.runCommand(cmd);
     if (!ptyId) {
       setStartRunning(false);
@@ -332,18 +426,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       return;
     }
     startPtyIdRef.current = ptyId;
-
-    // Listen for exit to update running state
     const cleanupExit = window.foundry?.onTerminalExit((id) => {
-      if (id === ptyId) {
-        setStartRunning(false);
-        startPtyIdRef.current = null;
-        cleanupExit?.();
-      }
+      if (id === ptyId) { setStartRunning(false); startPtyIdRef.current = null; cleanupExit?.(); }
     });
-
     addToast({ message: `Started: ${cmd}`, type: 'success', sound: false });
-  }, [startCommand, project?.path, addToast]);
+  }, [startCommand, project?.path, addToast, panels, addPanel]);
 
   const handleStopCommand = useCallback(() => {
     if (startPtyIdRef.current) {
@@ -355,35 +442,192 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, [addToast]);
 
   const handleStartButtonClick = useCallback(async () => {
-    if (startRunning) {
-      handleStopCommand();
-      return;
-    }
-    // Always re-read the command fresh from settings to avoid stale state
+    if (startRunning) { handleStopCommand(); return; }
     let cmd = startCommand;
     if (project?.path) {
       try {
         const saved = await window.foundry?.getSetting(`start_command_${project.path}`);
-        if (saved !== undefined) {
-          cmd = saved || '';
-          setStartCommand(cmd);
-        }
+        if (saved !== undefined) { cmd = saved || ''; setStartCommand(cmd); }
       } catch {}
     }
     if (!cmd.trim()) {
       addToast({ message: 'No start command configured. Set one in Workspace settings.', type: 'error' });
       setSettingsInitialSection('workspace');
-      if (!showSettings) enterFullPage();
       setShowSettings(true);
-      setShowTasks(false);
       return;
     }
-    // Pass fresh command directly to avoid stale closure
     handleStartCommand(cmd);
-  }, [startRunning, startCommand, project?.path, handleStopCommand, handleStartCommand, addToast, showSettings]);
+  }, [startRunning, startCommand, project?.path, handleStopCommand, handleStartCommand, addToast]);
+
+  // ── Close add-panel dropdown on click outside ──
+  useEffect(() => {
+    if (!showAddPanel) return;
+    const handler = (e) => {
+      if (addPanelRef.current && !addPanelRef.current.contains(e.target)) setShowAddPanel(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showAddPanel]);
+
+  // ── Open settings helper ──
+  const handleOpenSettings = useCallback((section) => {
+    setSettingsInitialSection(section || null);
+    setShowSettings(true);
+  }, []);
+
+  // ── Panel content renderer ──
+  // Returns { header: 'panelHeader' | 'own', content: JSX, headerActions?: JSX }
+  // Panels with complex headers (terminal, chat, editor) manage their own header and receive drag props
+  const renderPanelContent = (panel, dragProps) => {
+    switch (panel.type) {
+      case 'files':
+        return {
+          header: 'panelHeader',
+          headerActions: project ? (
+            <>
+              <MiniTooltipBtn icon={FiFilePlus} label="New File" onClick={() => window.foundry?.createFile?.(project.path)} />
+              <MiniTooltipBtn icon={FiFolderPlus} label="New Folder" onClick={() => window.foundry?.createFolder?.(project.path)} />
+            </>
+          ) : null,
+          content: (
+            <div className={sidebarStyles.panelScroll}>
+              {project ? (
+                <>
+                  <div className={sidebarStyles.projectLabel}>{project.name}</div>
+                  <div className={sidebarStyles.treeContainer}>
+                    {fileTree.map(item => (
+                      <FileTreeItem
+                        key={item.path}
+                        item={item}
+                        onOpenFile={handleOpenFile}
+                        activeFile={activeTab}
+                        expandedPaths={expandedPaths}
+                        onToggleExpand={handleToggleExpand}
+                      />
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className={sidebarStyles.emptyState}>
+                  <span className={sidebarStyles.emptyText}>No folder open</span>
+                  <button className={sidebarStyles.openFolderBtn} onClick={handleOpenFolder}>
+                    <FiFolderPlus size={14} />
+                    <span>Open Folder</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ),
+        };
+
+      case 'git':
+        return {
+          header: 'panelHeader',
+          content: (
+            <div className={sidebarStyles.panelScroll}>
+              <GitPanel
+                gitStatus={gitStatus}
+                projectPath={project?.path}
+                onOpenFile={handleOpenFile}
+                onRefreshGit={refreshTree}
+                activeFile={activeTab}
+                isActive={true}
+              />
+            </div>
+          ),
+        };
+
+      case 'graph':
+        return {
+          header: 'panelHeader',
+          content: (
+            <div className={sidebarStyles.panelScroll}>
+              <CommitGraphPanel projectPath={project?.path} gitStatus={gitStatus} isActive={true} />
+            </div>
+          ),
+        };
+
+      case 'workflows':
+        return {
+          header: 'panelHeader',
+          headerActions: (
+            <MiniTooltipBtn icon={FiRefreshCw} label="Refresh" onClick={refreshTree} />
+          ),
+          content: (
+            <div className={sidebarStyles.panelScroll}>
+              <WorkflowsPanel projectPath={project?.path} isActive={true} />
+            </div>
+          ),
+        };
+
+      case 'terminal':
+        return {
+          header: 'own',
+          content: (
+            <TerminalPanel
+              ref={terminalPanelRef}
+              projectPath={project?.path}
+              onClose={() => removePanel(panel.id)}
+              panelDragProps={dragProps}
+            />
+          ),
+        };
+
+      case 'chat':
+        return {
+          header: 'own',
+          content: (
+            <ChatPanel
+              projectPath={project?.path}
+              onOpenSettings={handleOpenSettings}
+              onPanelClose={() => removePanel(panel.id)}
+              panelDragProps={dragProps}
+              startFresh={!!panel.startFresh}
+            />
+          ),
+        };
+
+      case 'editor':
+        return {
+          header: 'own',
+          content: (
+            <EditorArea
+              tabs={openTabs}
+              activeTab={activeTab}
+              onSelectTab={setActiveTab}
+              onCloseTab={handleCloseTab}
+              onContentChange={handleContentChange}
+              onSaveFile={handleSaveFile}
+              onOpenFolder={handleOpenFolder}
+              project={project}
+              onReorderTabs={setOpenTabs}
+              onPanelClose={() => removePanel(panel.id)}
+              panelDragProps={dragProps}
+            />
+          ),
+        };
+
+      default:
+        return { header: 'own', content: null };
+    }
+  };
+
+  // ── Build add-panel menu items ──
+  const addPanelItems = Object.entries(PANEL_TYPES)
+    .filter(([type, config]) => {
+      if (type === 'editor') return false; // Editor opens via file click only
+      if (config.singleton && panels.some(p => p.type === type)) return false;
+      if (type === 'chat' && panels.filter(p => p.type === 'chat').length >= 4) return false;
+      return true;
+    })
+    .map(([type, config]) => ({ type, ...config }));
+
+  // ── Determine which activity bar panels are open ──
+  const openPanelTypes = new Set(panels.map(p => p.type));
 
   return (
     <div className={styles.root}>
+      {/* ── Activity Bar Column ── */}
       <div className={styles.activityColumn}>
         <div className={`${styles.trafficLightSpacer} titlebar-drag`}>
           {isFullScreen && (
@@ -396,17 +640,18 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           )}
         </div>
         <ActivityBar
-          activePanel={activePanel}
+          activePanel={null}
           onPanelClick={handleActivityClick}
           profile={profile}
           showSettings={showSettings}
           gitChangeCount={gitStatus?.files?.length || 0}
-          rightActivePanel={rightActivePanel}
-          rightSidebarVisible={rightSidebarVisible}
+          openPanelTypes={openPanelTypes}
         />
       </div>
 
+      {/* ── Right Column: titlebar + panels ── */}
       <div className={styles.rightColumn}>
+        {/* ── Titlebar ── */}
         <div className={`${styles.titlebar} titlebar-drag`}>
           <div className={`${styles.titlebarLeft} titlebar-no-drag`}>
             {!isFullScreen && (
@@ -457,189 +702,151 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               </span>
             </button>
             <div className={styles.titlebarDivider} />
-            <button
-              className={`${styles.titlebarBtn} ${sidebarVisible ? styles.titlebarBtnActive : ''}`}
-              onClick={() => setSidebarVisible(v => !v)}
-              title="Toggle Sidebar (⌘B)"
-            >
-              <span className={styles.iconCrossfade}>
-                <TbLayoutSidebar size={20} className={`${styles.iconBase} ${sidebarVisible ? styles.iconHidden : ''}`} />
-                <TbLayoutSidebarFilled size={20} className={`${styles.iconFill} ${sidebarVisible ? '' : styles.iconHidden}`} />
-              </span>
-            </button>
-            <button
-              className={`${styles.titlebarBtn} ${leftChatVisible ? styles.titlebarBtnActive : ''}`}
-              onClick={() => setLeftChatVisible(v => !v)}
-              title="Toggle Left Chat (⌘⇧J)"
-            >
-              <span className={styles.iconCrossfade}>
-                <TbLayoutSidebarLeftExpand size={20} className={`${styles.iconBase} ${leftChatVisible ? styles.iconHidden : ''}`} />
-                <TbLayoutSidebarLeftExpandFilled size={20} className={`${styles.iconFill} ${leftChatVisible ? '' : styles.iconHidden}`} />
-              </span>
-            </button>
-            <button
-              className={`${styles.titlebarBtn} ${terminalVisible ? styles.titlebarBtnActive : ''}`}
-              onClick={() => setTerminalVisible(v => !v)}
-              title="Toggle Terminal (⌘`)"
-            >
-              <span className={styles.iconCrossfade}>
-                <TbLayoutBottombar size={20} className={`${styles.iconBase} ${terminalVisible ? styles.iconHidden : ''}`} />
-                <TbLayoutBottombarFilled size={20} className={`${styles.iconFill} ${terminalVisible ? '' : styles.iconHidden}`} />
-              </span>
-            </button>
-            <button
-              className={`${styles.titlebarBtn} ${chatVisible ? styles.titlebarBtnActive : ''}`}
-              onClick={() => setChatVisible(v => !v)}
-              title="Toggle Right Chat (⌘J)"
-            >
-              <span className={styles.iconCrossfade}>
-                <TbLayoutSidebarRightExpand size={20} className={`${styles.iconBase} ${chatVisible ? styles.iconHidden : ''}`} />
-                <TbLayoutSidebarRightExpandFilled size={20} className={`${styles.iconFill} ${chatVisible ? '' : styles.iconHidden}`} />
-              </span>
-            </button>
-            <button
-              className={`${styles.titlebarBtn} ${rightSidebarVisible ? styles.titlebarBtnActive : ''}`}
-              onClick={() => setRightSidebarVisible(v => !v)}
-              title="Toggle Right Sidebar (⌘⇧B)"
-            >
-              <span className={styles.iconCrossfade}>
-                <TbLayoutSidebarRight size={20} className={`${styles.iconBase} ${rightSidebarVisible ? styles.iconHidden : ''}`} />
-                <TbLayoutSidebarRightFilled size={20} className={`${styles.iconFill} ${rightSidebarVisible ? '' : styles.iconHidden}`} />
-              </span>
-            </button>
+            {/* Add Panel button */}
+            <div className={styles.addPanelWrap} ref={addPanelRef}>
+              <button
+                className={`${styles.titlebarBtn} ${styles.addPanelBtn}`}
+                onClick={() => setShowAddPanel(v => !v)}
+                title="Add panel"
+              >
+                <FiPlus size={16} />
+              </button>
+              {showAddPanel && (
+                <div className={styles.addPanelDropdown}>
+                  {addPanelItems.length > 0 ? addPanelItems.map(item => {
+                    const ItemIcon = item.icon;
+                    return (
+                      <button
+                        key={item.type}
+                        className={styles.addPanelItem}
+                        onClick={() => { addPanel(item.type); setShowAddPanel(false); }}
+                      >
+                        <ItemIcon size={14} />
+                        <span>{item.title}</span>
+                      </button>
+                    );
+                  }) : (
+                    <div className={styles.addPanelEmpty}>All panels open</div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
+
+        {/* ── Main panel area ── */}
         <div className={styles.main}>
-          <AnimatePresence initial={false}>
-            {sidebarVisible && (
-              <Sidebar
-                key="sidebar"
-                panel={activePanel}
-                width={sidebarWidth}
-                project={project}
-                fileTree={fileTree}
-                gitStatus={gitStatus}
-                onOpenFile={handleOpenFile}
-                onOpenFolder={handleOpenFolder}
-                onRefresh={refreshTree}
+          {/* Settings overlay */}
+          {showSettings && (
+            <div className={styles.settingsOverlay}>
+              <SettingsPage
+                profile={profile}
+                initialSection={settingsInitialSection}
                 projectPath={project?.path}
-                onWidthChange={handleSidebarWidthChange}
-                activeFile={activeTab}
-                onFocus={() => setActiveSide('left')}
-                isActive={activeSide === 'left'}
+                onClose={() => {
+                  setShowSettings(false);
+                  setSettingsInitialSection(null);
+                  if (project?.path) {
+                    window.foundry?.getSetting(`start_command_${project.path}`).then((cmd) => {
+                      if (cmd !== undefined) setStartCommand(cmd || '');
+                    }).catch(() => {});
+                  }
+                }}
+                onProfileChange={onProfileChange}
+                onCloneRepo={(result) => {
+                  setProject({ path: result.path, name: result.name });
+                  setFileTree(result.tree);
+                  setOpenTabs([]);
+                  setActiveTab(null);
+                  setShowSettings(false);
+                  window.foundry?.setSetting('last_project_path', result.path);
+                  window.foundry?.gitStatus(result.path).then(status => {
+                    if (status) setGitStatus(status);
+                  });
+                }}
               />
-            )}
-          </AnimatePresence>
-          <ChatPanelContainer
-            visible={leftChatVisible}
-            width={leftChatWidth}
-            onWidthChange={setLeftChatWidth}
-            projectPath={project?.path}
-            side="left"
-            onOpenSettings={(section) => {
-              setSettingsInitialSection(section || null);
-              if (!showSettings) enterFullPage();
-              setShowSettings(true);
-              setShowTasks(false);
-            }}
-          />
-          <div className={styles.editorContainer} ref={editorContainerRef}>
-            <div className={`${styles.editorArea} ${terminalMaximized ? styles.editorAreaHidden : ''}`}>
-              {/* Keep all mounted; toggle visibility so pages retain state across open/close */}
-              <div style={{ display: showSettings ? 'contents' : 'none' }}>
-                <SettingsPage
-                  profile={profile}
-                  initialSection={settingsInitialSection}
-                  projectPath={project?.path}
-                  onClose={() => {
-                    setShowSettings(false);
-                    setSettingsInitialSection(null);
-                    exitFullPage();
-                    // Re-read start command in case it was changed in workspace settings
-                    if (project?.path) {
-                      window.foundry?.getSetting(`start_command_${project.path}`).then((cmd) => {
-                        if (cmd !== undefined) setStartCommand(cmd || '');
-                      }).catch(() => {});
-                    }
-                  }}
-                  onProfileChange={onProfileChange}
-                  onCloneRepo={(result) => {
-                    setProject({ path: result.path, name: result.name });
-                    setFileTree(result.tree);
-                    setOpenTabs([]);
-                    setActiveTab(null);
-                    setShowSettings(false);
-                    window.foundry?.setSetting('last_project_path', result.path);
-                    window.foundry?.gitStatus(result.path).then(status => {
-                      if (status) setGitStatus(status);
-                    });
-                  }}
-                />
-              </div>
-              <div style={{ display: showSettings ? 'none' : 'contents' }}>
-                <EditorArea
-                  tabs={openTabs} activeTab={activeTab} onSelectTab={setActiveTab}
-                  onCloseTab={handleCloseTab} onContentChange={handleContentChange}
-                  onSaveFile={handleSaveFile} onOpenFolder={handleOpenFolder} project={project}
-                  onReorderTabs={setOpenTabs}
-                />
-              </div>
             </div>
-            <TerminalPanel
-              ref={terminalPanelRef}
-              height={terminalMaximized ? maxTerminalHeight : terminalHeight}
-              onHeightChange={setTerminalHeight}
-              projectPath={project?.path}
-              visible={terminalVisible}
-              onClose={() => { setTerminalVisible(false); setTerminalMaximized(false); }}
-              isMaximized={terminalMaximized}
-              onToggleMaximize={() => {
-                if (!terminalMaximized) {
-                  // Capture the full container height BEFORE state change
-                  const fullHeight = editorContainerRef.current?.clientHeight || 600;
-                  setPreMaxTerminalHeight(terminalHeight);
-                  setMaxTerminalHeight(fullHeight);
-                  setTerminalMaximized(true);
-                } else {
-                  setTerminalMaximized(false);
-                  setTerminalHeight(preMaxTerminalHeight);
-                }
-              }}
-            />
-          </div>
-          <ChatPanelContainer
-            visible={chatVisible}
-            width={chatWidth}
-            onWidthChange={setChatWidth}
-            projectPath={project?.path}
-            onOpenSettings={(section) => {
-              setSettingsInitialSection(section || null);
-              if (!showSettings) enterFullPage();
-              setShowSettings(true);
-              setShowTasks(false);
-            }}
-          />
-          <AnimatePresence initial={false}>
-            {rightSidebarVisible && (
-              <Sidebar
-                key="right-sidebar"
-                panel={rightActivePanel}
-                width={rightSidebarWidth}
-                project={project}
-                fileTree={fileTree}
-                gitStatus={gitStatus}
-                onOpenFile={handleOpenFile}
-                onOpenFolder={handleOpenFolder}
-                onRefresh={refreshTree}
-                projectPath={project?.path}
-                onWidthChange={setRightSidebarWidth}
-                activeFile={activeTab}
-                side="right"
-                onFocus={() => setActiveSide('right')}
-                isActive={activeSide === 'right'}
-              />
+          )}
+
+          {/* Panels */}
+          <div className={styles.panelStrip} style={{ display: showSettings ? 'none' : 'flex' }}>
+            {panels.map((panel, index) => {
+              const config = PANEL_TYPES[panel.type] || {};
+              const isFlex = !!config.flex;
+              const Icon = config.icon;
+              // If no panel has flex, the last panel fills remaining space
+              const hasFlexPanel = panels.some(p => PANEL_TYPES[p.type]?.flex);
+              const isLastPanel = index === panels.length - 1;
+              const shouldStretch = !isFlex && !hasFlexPanel && isLastPanel;
+              const isDragOver = dragOverPanelIndex === index && dragPanelIndex !== index;
+
+              // Drag props passed to panels that manage their own header
+              const dragProps = {
+                onDragStart: (e) => handlePanelDragStart(e, index),
+                onDragEnd: handlePanelDragEnd,
+                onDragOver: () => handlePanelDragOver(index),
+                onDrop: () => handlePanelDrop(index),
+                isDragOver,
+              };
+
+              const rendered = renderPanelContent(panel, dragProps);
+
+              return (
+                <React.Fragment key={panel.id}>
+                  <div
+                    className={`${styles.panelSlot} ${dragPanelIndex === index ? styles.panelSlotDragging : ''}`}
+                    style={{
+                      width: (isFlex || shouldStretch) ? undefined : panel.width,
+                      flex: (isFlex || shouldStretch) ? '1 1 0' : '0 0 auto',
+                      minWidth: config.minWidth || 200,
+                    }}
+                  >
+                    {rendered.header === 'panelHeader' && (
+                      <PanelHeader
+                        title={config.title || panel.type}
+                        icon={Icon}
+                        onClose={() => removePanel(panel.id)}
+                        onDragStart={dragProps.onDragStart}
+                        onDragEnd={dragProps.onDragEnd}
+                        onDragOver={dragProps.onDragOver}
+                        onDrop={dragProps.onDrop}
+                        isDragOver={isDragOver}
+                      >
+                        {rendered.headerActions}
+                      </PanelHeader>
+                    )}
+                    <div className={styles.panelContent}>
+                      {rendered.content}
+                    </div>
+                  </div>
+                  {/* Resize handle between panels */}
+                  {index < panels.length - 1 && (
+                    <div
+                      className={styles.panelResizeHandle}
+                      onMouseDown={(e) => handlePanelResize(e, index)}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+            {/* Empty state when no panels */}
+            {panels.length === 0 && (
+              <div className={styles.emptyMain}>
+                <img
+                  src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
+                  alt="Foundry"
+                  className={styles.emptyMainLogo}
+                  draggable={false}
+                />
+                <span className={styles.emptyMainText}>Open a panel to get started</span>
+                <div className={styles.emptyMainHints}>
+                  <span><kbd className={styles.kbd}>⌘B</kbd> Explorer</span>
+                  <span><kbd className={styles.kbd}>⌘J</kbd> Chat</span>
+                  <span><kbd className={styles.kbd}>⌘`</kbd> Terminal</span>
+                </div>
+              </div>
             )}
-          </AnimatePresence>
+          </div>
         </div>
       </div>
     </div>
