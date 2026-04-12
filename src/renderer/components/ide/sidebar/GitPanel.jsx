@@ -36,7 +36,7 @@ function parsePullOutput(output) {
   return null;
 }
 
-export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile, isActive }) {
+export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile, isActive, gitRefreshKey }) {
   const addToast = useToast();
   const [commitMsg, setCommitMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -118,7 +118,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       }
     })();
     return () => { cancelled = true; };
-  }, [projectPath, gitStatus.isRepo, effectiveBranch]);
+  }, [projectPath, gitStatus.isRepo, effectiveBranch, gitRefreshKey]);
 
   const loadMoreCommits = useCallback(async () => {
     if (loadingMore || !hasMoreCommits || !projectPath) return;

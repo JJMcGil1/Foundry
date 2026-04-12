@@ -67,6 +67,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [openTabs, setOpenTabs] = useState([]);
   const [activeTab, setActiveTab] = useState(null);
   const [gitStatus, setGitStatus] = useState({ branch: '', files: [], isRepo: false });
+  const [gitRefreshKey, setGitRefreshKey] = useState(0);
 
   // File tree expanded paths (moved from Sidebar)
   const [expandedPaths, setExpandedPaths] = useState(new Set());
@@ -250,6 +251,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (tree) setFileTree(tree);
     const status = await window.foundry?.gitStatus(project.path);
     if (status) setGitStatus(status);
+    setGitRefreshKey(k => k + 1);
   }, [project]);
 
   // Poll git status
@@ -595,6 +597,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 onRefreshGit={refreshTree}
                 activeFile={activeTab}
                 isActive={true}
+                gitRefreshKey={gitRefreshKey}
               />
             </div>
           ),

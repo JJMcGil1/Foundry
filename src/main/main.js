@@ -2027,8 +2027,15 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       '--no-session-persistence',
     ];
 
-    // Note: Claude CLI does not support --thinking-budget; thinking is automatic.
-    // Thinking budget is only used for the direct API path (streamViaAPI).
+    // Map thinking budget to CLI --effort level
+    if (typeof thinkingBudget === 'number') {
+      let effort;
+      if (thinkingBudget <= 0) effort = 'low';
+      else if (thinkingBudget <= 4000) effort = 'low';
+      else if (thinkingBudget <= 10000) effort = 'medium';
+      else effort = 'high';
+      args.push('--effort', effort);
+    }
 
     // If images are attached, add the temp directory so CLI can read them
     if (tempImagePaths.length > 0) {
