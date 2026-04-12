@@ -202,7 +202,7 @@
   overflow: hidden;
   background: var(--surface-1);
   border-right: 1px solid var(--border);
-  min-width: 200px;
+  min-width: 80px;
   flex-shrink: 0;
 }
 
@@ -312,7 +312,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 200px;
+  min-width: 80px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;

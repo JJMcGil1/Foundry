@@ -17,12 +17,12 @@ import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
 // ── Panel type config ──
 const PANEL_TYPES = {
-  files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 260, minWidth: 200, maxWidth: 480, singleton: true },
-  git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 280, minWidth: 200, maxWidth: 480, singleton: true },
-  workflows: { title: 'Workflows',       icon: FiGithub,          defaultWidth: 260, minWidth: 200, maxWidth: 480, singleton: true },
-  terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 450, minWidth: 280, maxWidth: 900 },
-  chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 360, minWidth: 280, maxWidth: 650 },
-  editor:    { title: 'Editor',         icon: VscFiles,          minWidth: 200, flex: true, singleton: true },
+  files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 260, minWidth: 80, singleton: true },
+  git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 280, minWidth: 80, singleton: true },
+  workflows: { title: 'Workflows',       icon: FiGithub,          defaultWidth: 260, minWidth: 80, singleton: true },
+  terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 450, minWidth: 80 },
+  chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 360, minWidth: 80 },
+  editor:    { title: 'Editor',         icon: VscFiles,          minWidth: 80, flex: true, singleton: true },
 };
 
 let nextPanelId = 0;
@@ -39,6 +39,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const addPanelRef = useRef(null);
 
   const isResizingRef = useRef(false);
+  const panelStripRef = useRef(null);
 
   // ── Existing IDE state ──
   const [showSettings, setShowSettings] = useState(false);
@@ -334,26 +335,90 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, []);
 
   // ── Panel resize ──
-  const handlePanelResize = useCallback((e, handleIndex) => {
+  const SNAP_THRESHOLD = 20; // px from edge to snap
+  const handlePanelResize = useCallback((e, handleIndex, isRightEdge = false) => {
     e.preventDefault();
     isResizingRef.current = true;
     const startX = e.clientX;
     const leftPanel = panels[handleIndex];
     const rightPanel = panels[handleIndex + 1];
 
-    const isLeftFlex = PANEL_TYPES[leftPanel.type]?.flex;
-    const isRightFlex = PANEL_TYPES[rightPanel?.type]?.flex;
+    // Right-edge resize: always resize the last panel directly
+    if (isRightEdge) {
+      const targetPanel = leftPanel;
+      const startWidth = targetPanel.width;
+      const config = PANEL_TYPES[targetPanel.type] || {};
 
-    const targetPanel = isLeftFlex ? rightPanel : leftPanel;
-    if (!targetPanel) return;
-    const startWidth = targetPanel.width;
-    const direction = isLeftFlex ? -1 : 1;
-    const config = PANEL_TYPES[targetPanel.type] || {};
+      const handleMouseMove = (ev) => {
+        const delta = ev.clientX - startX;
+        let newWidth = Math.max(config.minWidth || 80, startWidth + delta);
+
+        // Snap to container edge
+        if (panelStripRef.current) {
+          const stripRect = panelStripRef.current.getBoundingClientRect();
+          const panelEl = panelStripRef.current.querySelector(`[data-panel-id="${targetPanel.id}"]`);
+          if (panelEl) {
+            const panelLeft = panelEl.getBoundingClientRect().left;
+            const rightEdge = panelLeft + newWidth;
+            const containerRight = stripRect.right;
+            const distFromEdge = containerRight - rightEdge;
+            // Snap: if within threshold, snap to fill exactly
+            if (distFromEdge > 0 && distFromEdge < SNAP_THRESHOLD) {
+              newWidth = containerRight - panelLeft;
+            }
+          }
+        }
+
+        setPanels(prev => prev.map(p => p.id === targetPanel.id ? { ...p, width: newWidth } : p));
+      };
+      const handleMouseUp = () => {
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        isResizingRef.current = false;
+      };
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+      return;
+    }
+
+    if (!rightPanel) return;
+    const startLeftWidth = leftPanel.width;
+    const startRightWidth = rightPanel.width;
+    const leftConfig = PANEL_TYPES[leftPanel.type] || {};
+    const rightConfig = PANEL_TYPES[rightPanel.type] || {};
+    const leftMin = leftConfig.minWidth || 80;
+    const rightMin = rightConfig.minWidth || 80;
+    const isLeftFlex = !!leftConfig.flex;
+    const isRightFlex = !!rightConfig.flex;
 
     const handleMouseMove = (ev) => {
-      const delta = (ev.clientX - startX) * direction;
-      const newWidth = Math.max(config.minWidth || 200, Math.min(config.maxWidth || 800, startWidth + delta));
-      setPanels(prev => prev.map(p => p.id === targetPanel.id ? { ...p, width: newWidth } : p));
+      const delta = ev.clientX - startX;
+
+      // If one side is flex, only resize the non-flex panel
+      if (isLeftFlex) {
+        const newWidth = Math.max(rightMin, startRightWidth - delta);
+        setPanels(prev => prev.map(p => p.id === rightPanel.id ? { ...p, width: newWidth } : p));
+      } else if (isRightFlex) {
+        const newWidth = Math.max(leftMin, startLeftWidth + delta);
+        setPanels(prev => prev.map(p => p.id === leftPanel.id ? { ...p, width: newWidth } : p));
+      } else {
+        // Both fixed-width: grow one, shrink the other
+        let newLeft = startLeftWidth + delta;
+        let newRight = startRightWidth - delta;
+        // Clamp both to their minimums
+        if (newLeft < leftMin) { newRight += (newLeft - leftMin); newLeft = leftMin; }
+        if (newRight < rightMin) { newLeft += (newRight - rightMin); newRight = rightMin; }
+        newLeft = Math.max(leftMin, newLeft);
+        newRight = Math.max(rightMin, newRight);
+        setPanels(prev => prev.map(p =>
+          p.id === leftPanel.id ? { ...p, width: newLeft } :
+          p.id === rightPanel.id ? { ...p, width: newRight } : p
+        ));
+      }
     };
     const handleMouseUp = () => {
       document.removeEventListener('mousemove', handleMouseMove);
@@ -759,16 +824,13 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           )}
 
           {/* Panels */}
-          <div className={styles.panelStrip} style={{ display: showSettings ? 'none' : 'flex' }}>
+          <div ref={panelStripRef} className={styles.panelStrip} style={{ display: showSettings ? 'none' : 'flex' }}>
             {panels.map((panel, index) => {
               const config = PANEL_TYPES[panel.type] || {};
               const isFlex = !!config.flex;
               const Icon = config.icon;
-              const hasFlexPanel = panels.some(p => PANEL_TYPES[p.type]?.flex);
-              const isLastPanel = index === panels.length - 1;
-              const shouldStretch = !isFlex && !hasFlexPanel && isLastPanel;
               const isDragOver = dragOverPanelIndex === index && dragPanelIndex !== index;
-              const isFlexLike = isFlex || shouldStretch;
+              const isFlexLike = isFlex;
 
               const dragProps = {
                 onDragStart: (e) => handlePanelDragStart(e, index),
@@ -783,12 +845,13 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               const panelStyle = {
                 width: isFlexLike ? undefined : panel.width,
                 flex: isFlexLike ? '1 1 0' : '0 0 auto',
-                minWidth: config.minWidth || 200,
+                minWidth: config.minWidth || 80,
               };
 
               return (
                 <React.Fragment key={panel.id}>
                   <div
+                    data-panel-id={panel.id}
                     className={[
                       styles.panelSlot,
                       dragPanelIndex === index ? styles.panelSlotDragging : '',
@@ -817,6 +880,12 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                     <div
                       className={styles.panelResizeHandle}
                       onMouseDown={(e) => handlePanelResize(e, index)}
+                    />
+                  )}
+                  {index === panels.length - 1 && !isFlex && (
+                    <div
+                      className={styles.panelResizeHandle}
+                      onMouseDown={(e) => handlePanelResize(e, index, true)}
                     />
                   )}
                 </React.Fragment>
