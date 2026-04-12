@@ -59,10 +59,6 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
             </div>
           );
         })}
-      </div>
-
-      <div className={styles.bottom}>
-        <div className={styles.divider} />
 
         <div className={styles.itemWrap}>
           <button
@@ -119,6 +115,10 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
             </div>
           )}
         </div>
+      </div>
+
+      <div className={styles.bottom}>
+        <div className={styles.divider} />
 
         <div className={styles.itemWrap}>
           <button
