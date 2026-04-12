@@ -6,7 +6,8 @@ import {
 import { IoSparkles } from 'react-icons/io5';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChangeItem from './ChangeItem';
-import { statusColor } from './gitUtils';
+import CommitGraph from './CommitGraph';
+import { statusColor, COMMITS_PAGE_SIZE } from './gitUtils';
 import { useToast } from '../ToastProvider';
 import ConfirmationModal from '../ConfirmationModal';
 import styles from '../Sidebar.module.css';
@@ -81,6 +82,14 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   const [submodules, setSubmodules] = useState([]);
   const [selectedRepo, setSelectedRepo] = useState(''); // '' = root repo
 
+  // Commit graph state
+  const [commits, setCommits] = useState([]);
+  const [totalCommits, setTotalCommits] = useState(0);
+  const [hasMoreCommits, setHasMoreCommits] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const effectiveBranch = gitStatus?.branch || null;
+
   // Detect submodules
   useEffect(() => {
     if (!projectPath || !gitStatus.isRepo) return;
@@ -90,6 +99,41 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     }).catch(() => {});
     return () => { cancelled = true; };
   }, [projectPath, gitStatus]);
+
+  // Fetch commit log on mount and when branch changes
+  useEffect(() => {
+    if (!projectPath || !gitStatus.isRepo) return;
+    let cancelled = false;
+    (async () => {
+      const [log, count] = await Promise.all([
+        window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE, 0, effectiveBranch),
+        window.foundry?.gitCommitCount(projectPath, effectiveBranch),
+      ]);
+      if (!cancelled) {
+        if (log) {
+          setCommits(log);
+          setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
+        }
+        if (count != null) setTotalCommits(count);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [projectPath, gitStatus.isRepo, effectiveBranch]);
+
+  const loadMoreCommits = useCallback(async () => {
+    if (loadingMore || !hasMoreCommits || !projectPath) return;
+    setLoadingMore(true);
+    try {
+      const more = await window.foundry?.gitLog(projectPath, COMMITS_PAGE_SIZE, commits.length, effectiveBranch);
+      if (more && more.length > 0) {
+        setCommits(prev => [...prev, ...more]);
+        setHasMoreCommits(more.length >= COMMITS_PAGE_SIZE);
+      } else {
+        setHasMoreCommits(false);
+      }
+    } catch { setHasMoreCommits(false); }
+    setLoadingMore(false);
+  }, [loadingMore, hasMoreCommits, projectPath, commits.length, effectiveBranch]);
 
   // The effective path for git operations (root or submodule)
   const effectivePath = selectedRepo ? selectedRepo : projectPath;
@@ -502,6 +546,15 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
           )}
         </AnimatePresence>
       </div>
+
+      <CommitGraph
+        commits={commits}
+        projectPath={projectPath}
+        onLoadMore={loadMoreCommits}
+        hasMore={hasMoreCommits}
+        loadingMore={loadingMore}
+        totalCommits={totalCommits}
+      />
 
       <ConfirmationModal
         open={!!discardConfirm}

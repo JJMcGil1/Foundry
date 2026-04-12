@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import MiniTooltipBtn from './MiniTooltipBtn';
 import FileTreeItem from './FileTree';
 import GitPanel from './GitPanel';
-import CommitGraphPanel from './CommitGraphPanel';
 import WorkflowsPanel from './WorkflowsPanel';
 import styles from '../Sidebar.module.css';
 
@@ -111,12 +110,6 @@ export default function Sidebar({
           </div>
         )}
 
-        {panel === 'graph' && (
-          <div className={styles.explorerHeader}>
-            <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>Commit Graph</span>
-          </div>
-        )}
-
         <AnimatePresence mode="wait">
           <motion.div
             key={panel}
@@ -155,8 +148,6 @@ export default function Sidebar({
             )}
 
             {panel === 'git' && <GitPanel gitStatus={gitStatus} projectPath={projectPath} onOpenFile={onOpenFile} onRefreshGit={onRefresh} activeFile={activeFile} isActive={isActive} />}
-
-            {panel === 'graph' && <CommitGraphPanel projectPath={projectPath} gitStatus={gitStatus} isActive={isActive} />}
 
             {panel === 'workflows' && <WorkflowsPanel projectPath={projectPath} isActive={isActive} />}
           </motion.div>

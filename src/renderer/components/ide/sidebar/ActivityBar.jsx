@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
-import { FiGitCommit, FiGithub, FiTerminal, FiMessageSquare } from 'react-icons/fi';
+import { FiGithub, FiTerminal, FiMessageSquare } from 'react-icons/fi';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
-  { id: 'files',     icon: VscFiles,         label: 'Explorer',       size: 24 },
-  { id: 'git',       icon: VscSourceControl, label: 'Source Control',  size: 24 },
-  { id: 'graph',     icon: FiGitCommit,      label: 'Commit Graph',   size: 21 },
-  { id: 'workflows', icon: FiGithub,         label: 'Workflows',      size: 21 },
-  { id: 'terminal',  icon: FiTerminal,       label: 'Terminal',       size: 20 },
   { id: 'chat',      icon: FiMessageSquare,  label: 'Chat',           size: 20 },
+  { id: 'git',       icon: VscSourceControl, label: 'Source Control',  size: 24 },
+  { id: 'terminal',  icon: FiTerminal,       label: 'Terminal',       size: 20 },
+  { id: 'workflows', icon: FiGithub,         label: 'Workflows',      size: 21 },
+  { id: 'files',     icon: VscFiles,         label: 'Explorer',       size: 24 },
 ];
 
 export default function ActivityBar({ onPanelClick, profile, showSettings, gitChangeCount = 0, openPanelTypes = new Set() }) {

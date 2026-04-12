@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { VscFiles, VscSourceControl } from 'react-icons/vsc';
-import { FiSun, FiMoon, FiPlus, FiGitCommit, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw } from 'react-icons/fi';
+import { FiSun, FiMoon, FiPlus, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw } from 'react-icons/fi';
 import { VscPlay, VscDebugStop } from 'react-icons/vsc';
 import { useToast } from './ToastProvider';
-import { ActivityBar, FileTreeItem, GitPanel, CommitGraphPanel, WorkflowsPanel, MiniTooltipBtn } from './sidebar';
+import { ActivityBar, FileTreeItem, GitPanel, WorkflowsPanel, MiniTooltipBtn } from './sidebar';
 import PanelHeader from './PanelHeader';
 import { EditorArea } from './editor';
 import ChatPanel from './ChatPanel';
@@ -19,7 +19,6 @@ import foundryIconLight from '../../assets/foundry-icon-light.svg';
 const PANEL_TYPES = {
   files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 260, minWidth: 200, maxWidth: 480, singleton: true },
   git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 280, minWidth: 200, maxWidth: 480, singleton: true },
-  graph:     { title: 'Commit Graph',    icon: FiGitCommit,       defaultWidth: 300, minWidth: 200, maxWidth: 480, singleton: true },
   workflows: { title: 'Workflows',       icon: FiGithub,          defaultWidth: 260, minWidth: 200, maxWidth: 480, singleton: true },
   terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 450, minWidth: 280, maxWidth: 900 },
   chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 360, minWidth: 280, maxWidth: 650 },
@@ -32,7 +31,7 @@ function makePanelId() { return `panel-${++nextPanelId}`; }
 export default function IDELayout({ profile, onProfileChange, initialProjectPath }) {
   // ── Panel state ──
   const [panels, setPanels] = useState(() => [
-    { id: makePanelId(), type: 'files', width: 260 },
+    { id: makePanelId(), type: 'chat', width: 260 },
   ]);
   const [dragPanelIndex, setDragPanelIndex] = useState(null);
   const [dragOverPanelIndex, setDragOverPanelIndex] = useState(null);
@@ -182,7 +181,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       setPanels(prev => {
         if (prev.some(p => p.type === 'editor')) return prev;
         // Insert editor after the last sidebar-type panel
-        const lastSidebarIdx = [...prev].reverse().findIndex(p => ['files', 'git', 'graph', 'workflows'].includes(p.type));
+        const lastSidebarIdx = [...prev].reverse().findIndex(p => ['files', 'git', 'workflows'].includes(p.type));
         const insertIdx = lastSidebarIdx >= 0 ? prev.length - lastSidebarIdx : prev.length;
         const next = [...prev];
         next.splice(insertIdx, 0, { id: makePanelId(), type: 'editor', width: 0 });
@@ -537,15 +536,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           ),
         };
 
-      case 'graph':
-        return {
-          header: 'panelHeader',
-          content: (
-            <div className={sidebarStyles.panelScroll}>
-              <CommitGraphPanel projectPath={project?.path} gitStatus={gitStatus} isActive={true} />
-            </div>
-          ),
-        };
 
       case 'workflows':
         return {
