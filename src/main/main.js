@@ -2027,10 +2027,8 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       '--no-session-persistence',
     ];
 
-    // Set thinking budget for CLI — 0 means off
-    if (typeof thinkingBudget === 'number' && thinkingBudget > 0) {
-      args.push('--thinking-budget', String(thinkingBudget));
-    }
+    // Note: Claude CLI does not support --thinking-budget; thinking is automatic.
+    // Thinking budget is only used for the direct API path (streamViaAPI).
 
     // If images are attached, add the temp directory so CLI can read them
     if (tempImagePaths.length > 0) {
