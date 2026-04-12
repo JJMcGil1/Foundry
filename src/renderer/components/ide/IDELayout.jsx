@@ -38,6 +38,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [showAddPanel, setShowAddPanel] = useState(false);
   const addPanelRef = useRef(null);
 
+  // ── Panel animation state ──
+  const [openingPanelIds, setOpeningPanelIds] = useState(new Set());
+  const [closingPanelIds, setClosingPanelIds] = useState(new Set());
+  const isResizingRef = useRef(false);
+
   // ── Existing IDE state ──
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState(null);
@@ -269,37 +274,57 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const config = PANEL_TYPES[type];
     if (!config) return;
     if (config.singleton) {
+      // If it's closing, cancel the close instead of adding a new one
+      const closingPanel = panels.find(p => p.type === type && closingPanelIds.has(p.id));
+      if (closingPanel) {
+        setClosingPanelIds(prev => { const n = new Set(prev); n.delete(closingPanel.id); return n; });
+        return closingPanel.id;
+      }
       const existing = panels.find(p => p.type === type);
       if (existing) return;
     }
-    // Max 4 chat panels
-    if (type === 'chat' && panels.filter(p => p.type === 'chat').length >= 4) return;
-    const isFirstOfType = !panels.some(p => p.type === type);
-    const newPanel = { id: makePanelId(), type, width: config.defaultWidth || 300, startFresh: !isFirstOfType };
+    // Max 4 chat panels (exclude closing ones from count)
+    if (type === 'chat' && panels.filter(p => p.type === 'chat' && !closingPanelIds.has(p.id)).length >= 4) return;
+    const isFirstOfType = !panels.some(p => p.type === type && !closingPanelIds.has(p.id));
+    const id = makePanelId();
+    const newPanel = { id, type, width: config.defaultWidth || 300, startFresh: !isFirstOfType };
     setPanels(prev => [...prev, newPanel]);
-    return newPanel.id;
-  }, [panels]);
+    setOpeningPanelIds(prev => new Set([...prev, id]));
+    // Double rAF: render at width 0 first, then animate to target
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setOpeningPanelIds(prev => { const n = new Set(prev); n.delete(id); return n; });
+      });
+    });
+    return id;
+  }, [panels, closingPanelIds]);
 
   const removePanel = useCallback((panelId) => {
-    setPanels(prev => {
-      const panel = prev.find(p => p.id === panelId);
-      // If removing editor, close all tabs
-      if (panel?.type === 'editor') {
-        setOpenTabs([]);
-        setActiveTab(null);
-      }
-      return prev.filter(p => p.id !== panelId);
-    });
-  }, []);
+    // If already closing, ignore
+    if (closingPanelIds.has(panelId)) return;
+    const panel = panels.find(p => p.id === panelId);
+    if (!panel) return;
+    if (panel.type === 'editor') {
+      setOpenTabs([]);
+      setActiveTab(null);
+    }
+    setClosingPanelIds(prev => new Set([...prev, panelId]));
+  }, [panels, closingPanelIds]);
 
   const togglePanel = useCallback((type) => {
-    const existing = panels.find(p => p.type === type);
+    // Check if a panel of this type is currently closing - if so, cancel the close
+    const closingPanel = panels.find(p => p.type === type && closingPanelIds.has(p.id));
+    if (closingPanel) {
+      setClosingPanelIds(prev => { const n = new Set(prev); n.delete(closingPanel.id); return n; });
+      return;
+    }
+    const existing = panels.find(p => p.type === type && !closingPanelIds.has(p.id));
     if (existing) {
       removePanel(existing.id);
     } else {
       addPanel(type);
     }
-  }, [panels, addPanel, removePanel]);
+  }, [panels, closingPanelIds, addPanel, removePanel]);
 
   // ── Panel drag-and-drop reordering ──
   const handlePanelDragStart = useCallback((e, index) => {
@@ -336,6 +361,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   // ── Panel resize ──
   const handlePanelResize = useCallback((e, handleIndex) => {
     e.preventDefault();
+    isResizingRef.current = true;
     const startX = e.clientX;
     const leftPanel = panels[handleIndex];
     const rightPanel = panels[handleIndex + 1];
@@ -343,9 +369,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const isLeftFlex = PANEL_TYPES[leftPanel.type]?.flex;
     const isRightFlex = PANEL_TYPES[rightPanel?.type]?.flex;
 
-    // If both are non-flex, resize left panel
-    // If left is flex, resize right panel (inverted)
-    // If right is flex, resize left panel normally
     const targetPanel = isLeftFlex ? rightPanel : leftPanel;
     if (!targetPanel) return;
     const startWidth = targetPanel.width;
@@ -362,12 +385,38 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       document.removeEventListener('mouseup', handleMouseUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
+      isResizingRef.current = false;
     };
     document.body.style.cursor = 'col-resize';
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('mouseup', handleMouseUp);
   }, [panels]);
+
+  // ── Panel close animation completion ──
+  const handlePanelTransitionEnd = useCallback((e, panelId) => {
+    // Only act on the width transition to avoid firing multiple times
+    if (e.propertyName !== 'width' && e.propertyName !== 'flex-grow') return;
+    if (!closingPanelIds.has(panelId)) return;
+    setClosingPanelIds(prev => { const n = new Set(prev); n.delete(panelId); return n; });
+    setPanels(prev => prev.filter(p => p.id !== panelId));
+  }, [closingPanelIds]);
+
+  // Fallback: if transitionend doesn't fire (e.g., display:none), clean up after timeout
+  useEffect(() => {
+    if (closingPanelIds.size === 0) return;
+    const timeout = setTimeout(() => {
+      setClosingPanelIds(prev => {
+        if (prev.size === 0) return prev;
+        const remaining = new Set(prev);
+        remaining.forEach(id => {
+          setPanels(p => p.filter(panel => panel.id !== id));
+        });
+        return new Set();
+      });
+    }, 400); // slightly longer than animation duration
+    return () => clearTimeout(timeout);
+  }, [closingPanelIds]);
 
   // ── Activity bar handler ──
   const handleActivityClick = useCallback((panel) => {
@@ -414,7 +463,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const cmd = (cmdOverride || startCommand).trim();
     if (!cmd || !project?.path) return;
     // Ensure terminal panel exists
-    if (!panels.some(p => p.type === 'terminal')) addPanel('terminal');
+    if (!panels.some(p => p.type === 'terminal' && !closingPanelIds.has(p.id))) addPanel('terminal');
     setStartRunning(true);
     // Small delay to let terminal mount
     await new Promise(r => setTimeout(r, 100));
@@ -429,7 +478,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       if (id === ptyId) { setStartRunning(false); startPtyIdRef.current = null; cleanupExit?.(); }
     });
     addToast({ message: `Started: ${cmd}`, type: 'success', sound: false });
-  }, [startCommand, project?.path, addToast, panels, addPanel]);
+  }, [startCommand, project?.path, addToast, panels, addPanel, closingPanelIds]);
 
   const handleStopCommand = useCallback(() => {
     if (startPtyIdRef.current) {
@@ -605,15 +654,16 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   // ── Build add-panel menu items ──
   const addPanelItems = Object.entries(PANEL_TYPES)
     .filter(([type, config]) => {
-      if (type === 'editor') return false; // Editor opens via file click only
-      if (config.singleton && panels.some(p => p.type === type)) return false;
-      if (type === 'chat' && panels.filter(p => p.type === 'chat').length >= 4) return false;
+      if (type === 'editor') return false;
+      const activePanels = panels.filter(p => p.type === type && !closingPanelIds.has(p.id));
+      if (config.singleton && activePanels.length > 0) return false;
+      if (type === 'chat' && activePanels.length >= 4) return false;
       return true;
     })
     .map(([type, config]) => ({ type, ...config }));
 
-  // ── Determine which activity bar panels are open ──
-  const openPanelTypes = new Set(panels.map(p => p.type));
+  // ── Determine which activity bar panels are open (exclude closing ones) ──
+  const openPanelTypes = new Set(panels.filter(p => !closingPanelIds.has(p.id)).map(p => p.type));
 
   return (
     <div className={styles.root}>
@@ -764,13 +814,17 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               const config = PANEL_TYPES[panel.type] || {};
               const isFlex = !!config.flex;
               const Icon = config.icon;
-              // If no panel has flex, the last panel fills remaining space
               const hasFlexPanel = panels.some(p => PANEL_TYPES[p.type]?.flex);
               const isLastPanel = index === panels.length - 1;
               const shouldStretch = !isFlex && !hasFlexPanel && isLastPanel;
               const isDragOver = dragOverPanelIndex === index && dragPanelIndex !== index;
+              const isFlexLike = isFlex || shouldStretch;
 
-              // Drag props passed to panels that manage their own header
+              // Animation states
+              const isOpening = openingPanelIds.has(panel.id);
+              const isClosing = closingPanelIds.has(panel.id);
+              const isAnimating = (isOpening || isClosing) && !isResizingRef.current;
+
               const dragProps = {
                 onDragStart: (e) => handlePanelDragStart(e, index),
                 onDragEnd: handlePanelDragEnd,
@@ -781,15 +835,27 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
 
               const rendered = renderPanelContent(panel, dragProps);
 
+              // Compute animated styles
+              const collapsed = isOpening || isClosing;
+              const panelStyle = collapsed
+                ? { width: 0, flex: '0 0 0px', minWidth: 0, opacity: 0, borderRightColor: 'transparent' }
+                : {
+                    width: isFlexLike ? undefined : panel.width,
+                    flex: isFlexLike ? '1 1 0' : '0 0 auto',
+                    minWidth: config.minWidth || 200,
+                  };
+
               return (
                 <React.Fragment key={panel.id}>
                   <div
-                    className={`${styles.panelSlot} ${dragPanelIndex === index ? styles.panelSlotDragging : ''}`}
-                    style={{
-                      width: (isFlex || shouldStretch) ? undefined : panel.width,
-                      flex: (isFlex || shouldStretch) ? '1 1 0' : '0 0 auto',
-                      minWidth: config.minWidth || 200,
-                    }}
+                    className={[
+                      styles.panelSlot,
+                      isAnimating ? styles.panelSlotAnimating : '',
+                      isClosing ? styles.panelSlotClosing : '',
+                      dragPanelIndex === index ? styles.panelSlotDragging : '',
+                    ].filter(Boolean).join(' ')}
+                    style={panelStyle}
+                    onTransitionEnd={(e) => handlePanelTransitionEnd(e, panel.id)}
                   >
                     {rendered.header === 'panelHeader' && (
                       <PanelHeader
@@ -809,7 +875,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                       {rendered.content}
                     </div>
                   </div>
-                  {/* Resize handle between panels */}
                   {index < panels.length - 1 && (
                     <div
                       className={styles.panelResizeHandle}
@@ -819,8 +884,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 </React.Fragment>
               );
             })}
-            {/* Empty state when no panels */}
-            {panels.length === 0 && (
+            {/* Empty state when no panels (exclude closing panels) */}
+            {panels.filter(p => !closingPanelIds.has(p.id)).length === 0 && (
               <div className={styles.emptyMain}>
                 <img
                   src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}

@@ -90,37 +90,60 @@
   gap: 4px;
 }
 
-/* ---- Model Switcher ---- */
-.modelSwitcher {
+/* ---- Combined Model + Thinking Pill ---- */
+.combinedSwitcher {
   position: relative;
 }
 
-.modelBadge {
+.combinedPill {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 10px;
   background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: 100px;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.combinedPill:hover {
+  border-color: var(--zinc-600);
+}
+
+.combinedPillSection {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: none;
+  border: none;
+  outline: none;
   font-size: 11px;
   color: var(--zinc-400);
   font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background 0.15s ease;
   white-space: nowrap;
 }
 
-.modelBadge:hover {
-  background: var(--surface-3);
-  border-color: var(--zinc-600);
+.combinedPillSection:hover {
   color: var(--zinc-300);
+  background: rgba(255, 255, 255, 0.04);
 }
 
-.modelBadgeIcon {
-  color: var(--zinc-500);
+.combinedPillSection:focus {
+  outline: none;
+}
+
+.combinedPillDivider {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
   flex-shrink: 0;
+}
+
+.thinkingSectionActive {
+  color: var(--amber-400, #fbbf24);
 }
 
 .modelBadgeChevron {
@@ -136,7 +159,7 @@
   position: absolute;
   bottom: calc(100% + 6px);
   left: 0;
-  min-width: 210px;
+  min-width: 180px;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -154,6 +177,7 @@
   padding: 8px 10px;
   background: none;
   border: none;
+  outline: none;
   border-radius: 4px;
   font-family: var(--font-sans);
   font-size: 12px;
@@ -181,12 +205,9 @@
 
 .modelOptionLabel {
   flex: 1;
+  font-size: 12px;
 }
 
-.modelOptionDesc {
-  font-size: 10px;
-  color: var(--zinc-500);
-}
 
 /* ---- Attach Button ---- */
 .attachBtn {

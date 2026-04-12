@@ -36,9 +36,10 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   const [isStreaming, setIsStreaming] = useState(false);
   const [currentStreamId, setCurrentStreamId] = useState(null);
   const [hasProvider, setHasProvider] = useState(null);
-  const [modelLabel, setModelLabel] = useState('Claude 4 Sonnet');
+  const [modelLabel, setModelLabel] = useState('Sonnet 4.6');
   const [modelKey, setModelKey] = useState('sonnet');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [thinkingLevel, setThinkingLevel] = useState('medium');
   const [error, setError] = useState(null);
   const modelSwitcherRef = useRef(null);
   const messagesEndRef = useRef(null);
@@ -242,7 +243,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
           reconnectRef.current = null;
           const m = await window.foundry?.claudeGetModel();
           if (m) {
-            const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
+            const labels = { 'sonnet': 'Sonnet 4.6', 'opus': 'Opus 4.6', 'haiku': 'Haiku 4.5' };
             setModelLabel(labels[m] || m);
             setModelKey(m);
           }
@@ -253,16 +254,20 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
 
   const checkProvider = useCallback(async () => {
     try {
-      const [tokenResult, modelResult] = await Promise.all([
+      const [tokenResult, modelResult, thinkingResult] = await Promise.all([
         window.foundry?.claudeGetToken(),
         window.foundry?.claudeGetModel(),
+        window.foundry?.getSetting('claude_thinking_level'),
       ]);
       const connected = !!tokenResult?.token;
       setHasProvider(connected);
       if (modelResult) {
-        const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
+        const labels = { 'sonnet': 'Sonnet 4.6', 'opus': 'Opus 4.6', 'haiku': 'Haiku 4.5' };
         setModelLabel(labels[modelResult] || modelResult);
         setModelKey(modelResult);
+      }
+      if (thinkingResult) {
+        setThinkingLevel(thinkingResult);
       }
       if (connected && reconnectRef.current) {
         clearInterval(reconnectRef.current);
@@ -311,12 +316,20 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
 
   // ---- Model switch ---- //
   const handleModelSwitch = async (key) => {
-    const labels = { 'sonnet': 'Claude 4 Sonnet', 'opus': 'Claude 4 Opus', 'haiku': 'Claude 3.5 Haiku' };
+    const labels = { 'sonnet': 'Sonnet 4.6', 'opus': 'Opus 4.6', 'haiku': 'Haiku 4.5' };
     setModelKey(key);
     setModelLabel(labels[key] || key);
     setShowModelDropdown(false);
     try {
       await window.foundry?.claudeSetModel(key);
+    } catch { /* silent */ }
+  };
+
+  // ---- Thinking level switch ---- //
+  const handleThinkingLevelChange = async (level) => {
+    setThinkingLevel(level);
+    try {
+      await window.foundry?.setSetting('claude_thinking_level', level);
     } catch { /* silent */ }
   };
 
@@ -628,6 +641,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     let model;
     try { model = await window.foundry?.claudeGetModel(); } catch { /* default */ }
 
+    // Resolve thinking budget from current level
+    let thinkingBudget;
+    try {
+      const level = await window.foundry?.getSetting('claude_thinking_level');
+      const budgetMap = { off: 0, low: 4000, medium: 10000, high: 32000 };
+      thinkingBudget = budgetMap[level] ?? 10000;
+    } catch { thinkingBudget = 10000; }
+
     const result = await window.foundry?.claudeChat({
       messages: apiMessages,
       images: attachedImages.length > 0 ? attachedImages.map(img => ({
@@ -638,6 +659,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       model: model || 'sonnet',
       streamId,
       workspacePath: projectPath || null,
+      thinkingBudget,
     });
 
     if (result?.error) {
@@ -811,6 +833,8 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         onStop={handleStop}
         onModelSwitch={handleModelSwitch}
         modelSwitcherRef={modelSwitcherRef}
+        thinkingLevel={thinkingLevel}
+        onThinkingLevelChange={handleThinkingLevelChange}
         queueSize={queueSize}
         queuedMessages={messageQueueRef.current}
         onRemoveQueued={(index) => {

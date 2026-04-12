@@ -56,10 +56,7 @@ export default function ProvidersSection({ isActive }) {
         setClaudeModels(prev => prev.map(m => {
           const match = result.models.find(r => r.alias === m.id);
           if (match) {
-            const parts = match.resolvedId.replace('claude-', '').split('-');
-            const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-            const version = parts.slice(1).filter(p => !p.match(/^\d{8}$/)).join('.');
-            return { ...m, resolvedId: match.resolvedId, label: `Claude ${name} ${version}`.trim() };
+            return { ...m, resolvedId: match.resolvedId };
           }
           return m;
         }));

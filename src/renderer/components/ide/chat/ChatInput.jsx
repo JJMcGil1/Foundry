@@ -1,8 +1,15 @@
-import React, { forwardRef, useRef, useCallback, useState } from 'react';
+import React, { forwardRef, useRef, useCallback, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiCpu, FiChevronDown, FiCheck, FiSquare, FiPaperclip, FiX } from 'react-icons/fi';
+import { FiChevronDown, FiCheck, FiSquare, FiPaperclip, FiX, FiZap } from 'react-icons/fi';
 import styles from './ChatInput.module.css';
 import MediaPreview from './MediaPreview';
+import { THINKING_LEVELS } from '../settings/settingsUtils';
+
+const ClaudeLogo = ({ size = 14 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" style={{ flexShrink: 0 }}>
+    <path d="M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z" fill="#D97757" fillRule="nonzero"/>
+  </svg>
+);
 
 const SendIcon = ({ size = 28, active }) => (
   <svg width={size} height={size} viewBox="0 0 28 28" fill="none">
@@ -24,9 +31,9 @@ const SendIcon = ({ size = 28, active }) => (
 );
 
 const MODEL_OPTIONS = [
-  { key: 'opus', label: 'Claude 4 Opus', desc: 'Most capable' },
-  { key: 'sonnet', label: 'Claude 4 Sonnet', desc: 'Balanced' },
-  { key: 'haiku', label: 'Claude 3.5 Haiku', desc: 'Fastest' },
+  { key: 'opus', label: 'Opus 4.6', supportsThinking: true },
+  { key: 'sonnet', label: 'Sonnet 4.6', supportsThinking: true },
+  { key: 'haiku', label: 'Haiku 4.5', supportsThinking: false },
 ];
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -59,6 +66,8 @@ const ChatInput = forwardRef(function ChatInput({
   onStop,
   onModelSwitch,
   modelSwitcherRef,
+  thinkingLevel,
+  onThinkingLevelChange,
   queueSize = 0,
   queuedMessages = [],
   onRemoveQueued,
@@ -67,6 +76,8 @@ const ChatInput = forwardRef(function ChatInput({
   const fileInputRef = useRef(null);
   const dropTargetRef = useRef(null);
   const [previewIndex, setPreviewIndex] = useState(null);
+  const [showThinkingDropdown, setShowThinkingDropdown] = useState(false);
+  const thinkingSwitcherRef = useRef(null);
 
   const hasContent = input.trim() || (images && images.length > 0);
 
@@ -154,6 +165,20 @@ const ChatInput = forwardRef(function ChatInput({
     }
   }, [processFiles]);
 
+  // Close thinking dropdown on outside click
+  useEffect(() => {
+    if (!showThinkingDropdown) return;
+    const handler = (e) => {
+      if (thinkingSwitcherRef.current && !thinkingSwitcherRef.current.contains(e.target)) {
+        setShowThinkingDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [showThinkingDropdown]);
+
+  const currentModel = MODEL_OPTIONS.find(o => o.key === modelKey) || MODEL_OPTIONS[1];
+
   const handleAttachClick = () => {
     fileInputRef.current?.click();
   };
@@ -237,18 +262,37 @@ const ChatInput = forwardRef(function ChatInput({
         />
         <div className={styles.inputToolbar}>
           <div className={styles.toolbarLeft}>
-            <div className={styles.modelSwitcher} ref={modelSwitcherRef}>
-              <button
-                className={styles.modelBadge}
-                onClick={() => setShowModelDropdown(v => !v)}
-              >
-                <FiCpu size={12} className={styles.modelBadgeIcon} />
-                <span>{modelLabel}</span>
-                <FiChevronDown
-                  size={10}
-                  className={`${styles.modelBadgeChevron} ${showModelDropdown ? styles.modelBadgeChevronOpen : ''}`}
-                />
-              </button>
+            <div className={styles.combinedSwitcher} ref={modelSwitcherRef}>
+              <div className={styles.combinedPill}>
+                <button
+                  className={styles.combinedPillSection}
+                  onClick={() => { setShowModelDropdown(v => !v); setShowThinkingDropdown(false); }}
+                >
+                  <ClaudeLogo size={16} />
+                  <span>{(MODEL_OPTIONS.find(o => o.key === modelKey) || MODEL_OPTIONS[1]).label}</span>
+                  <FiChevronDown
+                    size={10}
+                    className={`${styles.modelBadgeChevron} ${showModelDropdown ? styles.modelBadgeChevronOpen : ''}`}
+                  />
+                </button>
+                {currentModel.supportsThinking && (
+                  <>
+                    <span className={styles.combinedPillDivider} />
+                    <button
+                      className={`${styles.combinedPillSection} ${thinkingLevel && thinkingLevel !== 'off' ? styles.thinkingSectionActive : ''}`}
+                      onClick={() => { setShowThinkingDropdown(v => !v); setShowModelDropdown(false); }}
+                      ref={thinkingSwitcherRef}
+                    >
+                      <FiZap size={11} />
+                      <span>{(THINKING_LEVELS.find(t => t.key === thinkingLevel) || THINKING_LEVELS[2]).label}</span>
+                      <FiChevronDown
+                        size={10}
+                        className={`${styles.modelBadgeChevron} ${showThinkingDropdown ? styles.modelBadgeChevronOpen : ''}`}
+                      />
+                    </button>
+                  </>
+                )}
+              </div>
               <AnimatePresence>
                 {showModelDropdown && (
                   <motion.div
@@ -267,8 +311,32 @@ const ChatInput = forwardRef(function ChatInput({
                         <span className={styles.modelOptionCheck}>
                           {modelKey === opt.key ? <FiCheck size={12} /> : null}
                         </span>
+                        <ClaudeLogo size={14} />
                         <span className={styles.modelOptionLabel}>{opt.label}</span>
-                        <span className={styles.modelOptionDesc}>{opt.desc}</span>
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+              <AnimatePresence>
+                {showThinkingDropdown && (
+                  <motion.div
+                    className={styles.modelDropdown}
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: 4 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {THINKING_LEVELS.map(opt => (
+                      <button
+                        key={opt.key}
+                        className={`${styles.modelOption} ${thinkingLevel === opt.key ? styles.modelOptionActive : ''}`}
+                        onClick={() => { onThinkingLevelChange(opt.key); setShowThinkingDropdown(false); }}
+                      >
+                        <span className={styles.modelOptionCheck}>
+                          {thinkingLevel === opt.key ? <FiCheck size={12} /> : null}
+                        </span>
+                        <span className={styles.modelOptionLabel}>{opt.label}</span>
                       </button>
                     ))}
                   </motion.div>

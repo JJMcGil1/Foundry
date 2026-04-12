@@ -11,9 +11,16 @@ export const SECTIONS = [
 
 // Model aliases — the CLI always resolves these to the latest version
 export const CLAUDE_MODELS_DEFAULT = [
-  { id: 'sonnet', label: 'Claude Sonnet', desc: 'Best balance of speed & quality', resolvedId: null },
-  { id: 'opus', label: 'Claude Opus', desc: 'Most capable, slower', resolvedId: null },
-  { id: 'haiku', label: 'Claude Haiku', desc: 'Fastest, most affordable', resolvedId: null },
+  { id: 'opus', label: 'Opus 4.6', desc: 'Most capable', resolvedId: null },
+  { id: 'sonnet', label: 'Sonnet 4.6', desc: 'Balanced', resolvedId: null },
+  { id: 'haiku', label: 'Haiku 4.5', desc: 'Fastest', resolvedId: null },
+];
+
+export const THINKING_LEVELS = [
+  { key: 'off', label: 'Off', budget: 0, desc: 'No extended thinking' },
+  { key: 'low', label: 'Low', budget: 4000, desc: '4k token budget' },
+  { key: 'medium', label: 'Medium', budget: 10000, desc: '10k token budget' },
+  { key: 'high', label: 'High', budget: 32000, desc: '32k token budget' },
 ];
 
 /* ── Language color map ── */

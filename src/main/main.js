@@ -1958,7 +1958,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
    * Uses `claude -p` with `--output-format stream-json --verbose --include-partial-messages`.
    * The CLI handles OAuth auth, token refresh, and API routing internally.
    */
-  async function streamViaCLI(event, messages, images, model, streamId, workspacePath) {
+  async function streamViaCLI(event, messages, images, model, streamId, workspacePath, thinkingBudget) {
     const claudeBin = await resolveClaudeBinary();
     if (!claudeBin) {
       return { error: 'Claude CLI not found. Install Claude Code or add an API key in Settings → Providers.' };
@@ -2026,6 +2026,11 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       '--max-turns', '200',
       '--no-session-persistence',
     ];
+
+    // Set thinking budget for CLI — 0 means off
+    if (typeof thinkingBudget === 'number' && thinkingBudget > 0) {
+      args.push('--thinking-budget', String(thinkingBudget));
+    }
 
     // If images are attached, add the temp directory so CLI can read them
     if (tempImagePaths.length > 0) {
@@ -2137,7 +2142,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
   /**
    * Stream chat via direct HTTPS to Anthropic API (for API key auth only).
    */
-  function streamViaAPI(event, messages, model, streamId, apiKey) {
+  function streamViaAPI(event, messages, model, streamId, apiKey, thinkingBudget) {
     const abortController = new AbortController();
     const win = BrowserWindow.fromWebContents(event.sender);
     activeStreams.set(streamId, { abort: () => abortController.abort(), windowId: win?.id });
@@ -2145,19 +2150,21 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     // Resolve aliases for the Anthropic API (it doesn't accept short aliases)
     const resolvedModel = ALIAS_TO_MODEL[model] || model || 'claude-sonnet-4-6';
 
-    // Enable extended thinking for supported models
+    // Enable extended thinking for supported models (unless explicitly turned off)
     const supportsThinking = /claude-(sonnet|opus)-4/.test(resolvedModel) || /claude-3-7/.test(resolvedModel);
+    const budget = typeof thinkingBudget === 'number' ? thinkingBudget : 10000;
+    const useThinking = supportsThinking && budget > 0;
     const requestBody = {
       model: resolvedModel,
-      max_tokens: supportsThinking ? 16384 : 8192,
+      max_tokens: useThinking ? Math.max(16384, budget + 8192) : 8192,
       stream: true,
       messages: messages.map(m => ({
         role: m.role,
         content: m.content, // Already properly formatted — string or content blocks array
       })),
     };
-    if (supportsThinking) {
-      requestBody.thinking = { type: 'enabled', budget_tokens: 10000 };
+    if (useThinking) {
+      requestBody.thinking = { type: 'enabled', budget_tokens: budget };
     }
     const postData = JSON.stringify(requestBody);
 
@@ -2252,7 +2259,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
   // Main chat handler — routes to CLI (subscription) or API (key) based on auth source
   const MAX_CONCURRENT_STREAMS = 3; // Prevent unbounded subprocess spawning
 
-  ipcMain.handle('claude:chat', async (event, { messages, images, model, streamId, workspacePath }) => {
+  ipcMain.handle('claude:chat', async (event, { messages, images, model, streamId, workspacePath, thinkingBudget }) => {
     // Enforce per-window concurrency limit
     const callingWin = BrowserWindow.fromWebContents(event.sender);
     const callingWinId = callingWin?.id;
@@ -2268,10 +2275,10 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
     if (cred.source === 'subscription') {
       // Subscription OAuth → use Claude CLI subprocess (handles auth internally)
-      return streamViaCLI(event, messages, images, model, streamId, workspacePath);
+      return streamViaCLI(event, messages, images, model, streamId, workspacePath, thinkingBudget);
     } else {
       // API key → direct HTTPS to Anthropic API
-      return streamViaAPI(event, messages, model, streamId, cred.token);
+      return streamViaAPI(event, messages, model, streamId, cred.token, thinkingBudget);
     }
   });
 
