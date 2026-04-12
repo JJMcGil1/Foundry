@@ -38,9 +38,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [showAddPanel, setShowAddPanel] = useState(false);
   const addPanelRef = useRef(null);
 
-  // ── Panel animation state ──
-  const [openingPanelIds, setOpeningPanelIds] = useState(new Set());
-  const [closingPanelIds, setClosingPanelIds] = useState(new Set());
   const isResizingRef = useRef(false);
 
   // ── Existing IDE state ──
@@ -274,57 +271,35 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const config = PANEL_TYPES[type];
     if (!config) return;
     if (config.singleton) {
-      // If it's closing, cancel the close instead of adding a new one
-      const closingPanel = panels.find(p => p.type === type && closingPanelIds.has(p.id));
-      if (closingPanel) {
-        setClosingPanelIds(prev => { const n = new Set(prev); n.delete(closingPanel.id); return n; });
-        return closingPanel.id;
-      }
       const existing = panels.find(p => p.type === type);
-      if (existing) return;
+      if (existing) return existing.id;
     }
-    // Max 4 chat panels (exclude closing ones from count)
-    if (type === 'chat' && panels.filter(p => p.type === 'chat' && !closingPanelIds.has(p.id)).length >= 4) return;
-    const isFirstOfType = !panels.some(p => p.type === type && !closingPanelIds.has(p.id));
+    if (type === 'chat' && panels.filter(p => p.type === 'chat').length >= 4) return;
+    const isFirstOfType = !panels.some(p => p.type === type);
     const id = makePanelId();
     const newPanel = { id, type, width: config.defaultWidth || 300, startFresh: !isFirstOfType };
     setPanels(prev => [...prev, newPanel]);
-    setOpeningPanelIds(prev => new Set([...prev, id]));
-    // Double rAF: render at width 0 first, then animate to target
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        setOpeningPanelIds(prev => { const n = new Set(prev); n.delete(id); return n; });
-      });
-    });
     return id;
-  }, [panels, closingPanelIds]);
+  }, [panels]);
 
   const removePanel = useCallback((panelId) => {
-    // If already closing, ignore
-    if (closingPanelIds.has(panelId)) return;
     const panel = panels.find(p => p.id === panelId);
     if (!panel) return;
     if (panel.type === 'editor') {
       setOpenTabs([]);
       setActiveTab(null);
     }
-    setClosingPanelIds(prev => new Set([...prev, panelId]));
-  }, [panels, closingPanelIds]);
+    setPanels(prev => prev.filter(p => p.id !== panelId));
+  }, [panels]);
 
   const togglePanel = useCallback((type) => {
-    // Check if a panel of this type is currently closing - if so, cancel the close
-    const closingPanel = panels.find(p => p.type === type && closingPanelIds.has(p.id));
-    if (closingPanel) {
-      setClosingPanelIds(prev => { const n = new Set(prev); n.delete(closingPanel.id); return n; });
-      return;
-    }
-    const existing = panels.find(p => p.type === type && !closingPanelIds.has(p.id));
+    const existing = panels.find(p => p.type === type);
     if (existing) {
       removePanel(existing.id);
     } else {
       addPanel(type);
     }
-  }, [panels, closingPanelIds, addPanel, removePanel]);
+  }, [panels, addPanel, removePanel]);
 
   // ── Panel drag-and-drop reordering ──
   const handlePanelDragStart = useCallback((e, index) => {
@@ -393,31 +368,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     document.addEventListener('mouseup', handleMouseUp);
   }, [panels]);
 
-  // ── Panel close animation completion ──
-  const handlePanelTransitionEnd = useCallback((e, panelId) => {
-    // Only act on the width transition to avoid firing multiple times
-    if (e.propertyName !== 'width' && e.propertyName !== 'flex-grow') return;
-    if (!closingPanelIds.has(panelId)) return;
-    setClosingPanelIds(prev => { const n = new Set(prev); n.delete(panelId); return n; });
-    setPanels(prev => prev.filter(p => p.id !== panelId));
-  }, [closingPanelIds]);
-
-  // Fallback: if transitionend doesn't fire (e.g., display:none), clean up after timeout
-  useEffect(() => {
-    if (closingPanelIds.size === 0) return;
-    const timeout = setTimeout(() => {
-      setClosingPanelIds(prev => {
-        if (prev.size === 0) return prev;
-        const remaining = new Set(prev);
-        remaining.forEach(id => {
-          setPanels(p => p.filter(panel => panel.id !== id));
-        });
-        return new Set();
-      });
-    }, 400); // slightly longer than animation duration
-    return () => clearTimeout(timeout);
-  }, [closingPanelIds]);
-
   // ── Activity bar handler ──
   const handleActivityClick = useCallback((panel) => {
     if (panel === 'settings') {
@@ -463,7 +413,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const cmd = (cmdOverride || startCommand).trim();
     if (!cmd || !project?.path) return;
     // Ensure terminal panel exists
-    if (!panels.some(p => p.type === 'terminal' && !closingPanelIds.has(p.id))) addPanel('terminal');
+    if (!panels.some(p => p.type === 'terminal')) addPanel('terminal');
     setStartRunning(true);
     // Small delay to let terminal mount
     await new Promise(r => setTimeout(r, 100));
@@ -478,7 +428,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       if (id === ptyId) { setStartRunning(false); startPtyIdRef.current = null; cleanupExit?.(); }
     });
     addToast({ message: `Started: ${cmd}`, type: 'success', sound: false });
-  }, [startCommand, project?.path, addToast, panels, addPanel, closingPanelIds]);
+  }, [startCommand, project?.path, addToast, panels, addPanel]);
 
   const handleStopCommand = useCallback(() => {
     if (startPtyIdRef.current) {
@@ -655,7 +605,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const addPanelItems = Object.entries(PANEL_TYPES)
     .filter(([type, config]) => {
       if (type === 'editor') return false;
-      const activePanels = panels.filter(p => p.type === type && !closingPanelIds.has(p.id));
+      const activePanels = panels.filter(p => p.type === type);
       if (config.singleton && activePanels.length > 0) return false;
       if (type === 'chat' && activePanels.length >= 4) return false;
       return true;
@@ -663,7 +613,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     .map(([type, config]) => ({ type, ...config }));
 
   // ── Determine which activity bar panels are open (exclude closing ones) ──
-  const openPanelTypes = new Set(panels.filter(p => !closingPanelIds.has(p.id)).map(p => p.type));
+  const openPanelTypes = new Set(panels.map(p => p.type));
 
   return (
     <div className={styles.root}>
@@ -820,11 +770,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               const isDragOver = dragOverPanelIndex === index && dragPanelIndex !== index;
               const isFlexLike = isFlex || shouldStretch;
 
-              // Animation states
-              const isOpening = openingPanelIds.has(panel.id);
-              const isClosing = closingPanelIds.has(panel.id);
-              const isAnimating = (isOpening || isClosing) && !isResizingRef.current;
-
               const dragProps = {
                 onDragStart: (e) => handlePanelDragStart(e, index),
                 onDragEnd: handlePanelDragEnd,
@@ -835,27 +780,20 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
 
               const rendered = renderPanelContent(panel, dragProps);
 
-              // Compute animated styles
-              const collapsed = isOpening || isClosing;
-              const panelStyle = collapsed
-                ? { width: 0, flex: '0 0 0px', minWidth: 0, opacity: 0, borderRightColor: 'transparent' }
-                : {
-                    width: isFlexLike ? undefined : panel.width,
-                    flex: isFlexLike ? '1 1 0' : '0 0 auto',
-                    minWidth: config.minWidth || 200,
-                  };
+              const panelStyle = {
+                width: isFlexLike ? undefined : panel.width,
+                flex: isFlexLike ? '1 1 0' : '0 0 auto',
+                minWidth: config.minWidth || 200,
+              };
 
               return (
                 <React.Fragment key={panel.id}>
                   <div
                     className={[
                       styles.panelSlot,
-                      isAnimating ? styles.panelSlotAnimating : '',
-                      isClosing ? styles.panelSlotClosing : '',
                       dragPanelIndex === index ? styles.panelSlotDragging : '',
                     ].filter(Boolean).join(' ')}
                     style={panelStyle}
-                    onTransitionEnd={(e) => handlePanelTransitionEnd(e, panel.id)}
                   >
                     {rendered.header === 'panelHeader' && (
                       <PanelHeader
@@ -884,8 +822,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 </React.Fragment>
               );
             })}
-            {/* Empty state when no panels (exclude closing panels) */}
-            {panels.filter(p => !closingPanelIds.has(p.id)).length === 0 && (
+            {panels.length === 0 && (
               <div className={styles.emptyMain}>
                 <img
                   src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}

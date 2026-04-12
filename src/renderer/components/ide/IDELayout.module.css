@@ -202,7 +202,6 @@
   overflow: hidden;
   background: var(--surface-1);
   border-right: 1px solid var(--border);
-  transition: opacity 0.15s ease;
   min-width: 200px;
   flex-shrink: 0;
 }
@@ -213,21 +212,6 @@
 
 .panelSlotDragging {
   opacity: 0.5;
-}
-
-/* ── Panel open/close animation ── */
-.panelSlotAnimating {
-  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              min-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1),
-              flex-grow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              flex-basis 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              border-right-color 0.2s ease;
-  will-change: width, min-width, opacity, flex-grow, flex-basis;
-}
-
-.panelSlotClosing {
-  pointer-events: none;
 }
 
 .panelContent {
