@@ -26,6 +26,7 @@ function formatRelativeTime(isoDate) {
 
 export default function CommitGraph({
   commits, projectPath, onLoadMore, hasMore, loadingMore, totalCommits,
+  fullPanel = false,
 }) {
   const [graphOpen, setGraphOpen] = useState(true);
   const [graphHeight, setGraphHeight] = useState(280);
@@ -36,6 +37,7 @@ export default function CommitGraph({
   const [avatarMap, setAvatarMap] = useState({});
   const [remoteUrl, setRemoteUrl] = useState(null);
   const graphRef = useRef(null);
+  const sentinelRef = useRef(null);
   const cardTimerRef = useRef(null);
   const rows = useMemo(() => buildGraph(commits), [commits]);
 
@@ -151,6 +153,19 @@ export default function CommitGraph({
     }
   }, [onLoadMore]);
 
+  // IntersectionObserver for fullPanel infinite scroll (sentinel-based)
+  useEffect(() => {
+    if (!fullPanel || !sentinelRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore?.();
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(sentinelRef.current);
+    return () => observer.disconnect();
+  }, [fullPanel, onLoadMore]);
+
   if (commits.length === 0 && !loadingMore) return null;
 
   const LANE_W = 12;
@@ -166,42 +181,9 @@ export default function CommitGraph({
 
   const mergingFromSet = (row) => new Set(row.mergingFromLanes || []);
 
-  return (
-    <div className={styles.graphSection}>
-      <div className={styles.graphResizeHandle} onMouseDown={handleResizeStart} />
-      <button className={`${styles.sectionLabel} ${styles.graphSectionLabel}`} onClick={() => setGraphOpen(!graphOpen)}>
-        <motion.span
-          className={styles.sectionChevron}
-          animate={{ rotate: graphOpen ? 90 : 0 }}
-          transition={{ duration: 0.12, ease: 'easeOut' }}
-        >
-          <FiChevronRight size={14} />
-        </motion.span>
-        <span>Graph</span>
-        <div className={styles.sectionActions}>
-          <span className={styles.badge}>{totalCommits || commits.length}</span>
-        </div>
-      </button>
-      <AnimatePresence initial={false}>
-        {graphOpen && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={isResizing ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
-            style={{ overflow: 'hidden' }}
-          >
-            {/* Graph Content */}
-            <motion.div
-              ref={graphRef}
-              className={styles.commitGraph}
-              initial={false}
-              animate={{ height: graphHeight }}
-              transition={isResizing ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
-              style={{ overflow: 'auto', position: 'relative' }}
-              onScroll={handleScroll}
-            >
-              {rows.map((row, ri) => {
+  const rowsContent = (
+    <>
+      {rows.map((row, ri) => {
                 const color = GRAPH_COLORS[row.lane % GRAPH_COLORS.length];
                 const { branches: refBranches, tags, isHead } = parseRefs(row.refs);
                 const hasRefs = refBranches.length > 0 || tags.length > 0;
@@ -514,18 +496,70 @@ export default function CommitGraph({
                   <span>All commits loaded</span>
                 </div>
               )}
+    </>
+  );
 
+  const hoverCard = (
+    <AnimatePresence>
+      {cardRow && cardPos && (
+        <CommitHoverCard row={cardRow} avatarUrl={getAvatarUrl(cardRow)} laneColor={cardLaneColor} remoteUrl={remoteUrl} style={{ position: 'fixed', top: cardPos.top, left: cardPos.left, width: 400 }} onMouseEnter={handleCardMouseEnter} onMouseLeave={handleCardMouseLeave} />
+      )}
+    </AnimatePresence>
+  );
+
+  // Full-panel mode: no collapsible header, no resize handle
+  // Renders flat into the parent panelScroll which handles scrolling
+  // Uses IntersectionObserver sentinel for infinite scroll instead of onScroll
+  if (fullPanel) {
+    return (
+      <>
+        {rowsContent}
+        <div ref={sentinelRef} style={{ height: 1 }} />
+        {hoverCard}
+      </>
+    );
+  }
+
+  return (
+    <div className={styles.graphSection}>
+      <div className={styles.graphResizeHandle} onMouseDown={handleResizeStart} />
+      <button className={`${styles.sectionLabel} ${styles.graphSectionLabel}`} onClick={() => setGraphOpen(!graphOpen)}>
+        <motion.span
+          className={styles.sectionChevron}
+          animate={{ rotate: graphOpen ? 90 : 0 }}
+          transition={{ duration: 0.12, ease: 'easeOut' }}
+        >
+          <FiChevronRight size={14} />
+        </motion.span>
+        <span>Graph</span>
+        <div className={styles.sectionActions}>
+          <span className={styles.badge}>{totalCommits || commits.length}</span>
+        </div>
+      </button>
+      <AnimatePresence initial={false}>
+        {graphOpen && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={isResizing ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <motion.div
+              ref={graphRef}
+              className={styles.commitGraph}
+              initial={false}
+              animate={{ height: graphHeight }}
+              transition={isResizing ? { duration: 0 } : { duration: 0.15, ease: 'easeOut' }}
+              style={{ overflow: 'auto', position: 'relative' }}
+              onScroll={handleScroll}
+            >
+              {rowsContent}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Hover card — flies out to the right of the sidebar */}
-      <AnimatePresence>
-        {cardRow && cardPos && (
-          <CommitHoverCard row={cardRow} avatarUrl={getAvatarUrl(cardRow)} laneColor={cardLaneColor} remoteUrl={remoteUrl} style={{ position: 'fixed', top: cardPos.top, left: cardPos.left, width: 400 }} onMouseEnter={handleCardMouseEnter} onMouseLeave={handleCardMouseLeave} />
-        )}
-      </AnimatePresence>
+      {hoverCard}
     </div>
   );
 }

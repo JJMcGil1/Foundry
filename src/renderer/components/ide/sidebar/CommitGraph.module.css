@@ -275,3 +275,39 @@
 .spinning {
   animation: spin 1s linear infinite;
 }
+
+/* ── Full-panel mode (standalone sidebar panel) ── */
+.graphSectionFull {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+
+.commitGraphFull {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+  padding: 0;
+}
+
+.commitGraphFull::-webkit-scrollbar {
+  width: 6px;
+  background: transparent;
+}
+
+.commitGraphFull::-webkit-scrollbar-thumb {
+  background: var(--zinc-600);
+  border-radius: 3px;
+}
+
+.commitGraphFull::-webkit-scrollbar-thumb:hover {
+  background: var(--zinc-500);
+}
+
+.commitGraphFull::-webkit-scrollbar-track {
+  background: transparent;
+}

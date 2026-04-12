@@ -1,9 +1,10 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { FiFolderPlus, FiFilePlus } from 'react-icons/fi';
+import { FiFolderPlus, FiFilePlus, FiRefreshCw } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import MiniTooltipBtn from './MiniTooltipBtn';
 import FileTreeItem from './FileTree';
 import GitPanel from './GitPanel';
+import CommitGraphPanel from './CommitGraphPanel';
 import WorkflowsPanel from './WorkflowsPanel';
 import styles from '../Sidebar.module.css';
 
@@ -13,7 +14,7 @@ let persistTimer = null;
 export default function Sidebar({
   panel, width, project, fileTree, gitStatus,
   onOpenFile, onOpenFolder, onRefresh, projectPath,
-  onWidthChange, activeFile, side = 'left', onFocus, isActive
+  onWidthChange, activeFile, side = 'left', onFocus, isActive,
 }) {
   const isRight = side === 'right';
   const [isResizing, setIsResizing] = useState(false);
@@ -110,6 +111,12 @@ export default function Sidebar({
           </div>
         )}
 
+        {panel === 'graph' && (
+          <div className={styles.explorerHeader}>
+            <span className={`${styles.gitPanelTitle} ${isActive ? styles.gitPanelTitleActive : ''}`}>Commit Graph</span>
+          </div>
+        )}
+
         <AnimatePresence mode="wait">
           <motion.div
             key={panel}
@@ -148,6 +155,8 @@ export default function Sidebar({
             )}
 
             {panel === 'git' && <GitPanel gitStatus={gitStatus} projectPath={projectPath} onOpenFile={onOpenFile} onRefreshGit={onRefresh} activeFile={activeFile} isActive={isActive} />}
+
+            {panel === 'graph' && <CommitGraphPanel projectPath={projectPath} gitStatus={gitStatus} isActive={isActive} />}
 
             {panel === 'workflows' && <WorkflowsPanel projectPath={projectPath} isActive={isActive} />}
           </motion.div>

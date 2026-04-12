@@ -3,6 +3,7 @@ export { default as ActivityBar } from './ActivityBar';
 export { default as FileTreeItem } from './FileTree';
 export { default as GitPanel } from './GitPanel';
 export { default as CommitGraph } from './CommitGraph';
+export { default as CommitGraphPanel } from './CommitGraphPanel';
 export { default as CommitHoverCard } from './CommitHoverCard';
 export { default as GitAvatar } from './GitAvatar';
 export { default as ChangeItem } from './ChangeItem';

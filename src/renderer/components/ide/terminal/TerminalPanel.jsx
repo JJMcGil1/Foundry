@@ -231,9 +231,13 @@ const TerminalPanel = forwardRef(function TerminalPanel({ height, onHeightChange
     });
   }, [activeTermId]);
 
-  // Auto-close panel when all terminals are removed
+  // Auto-close panel when user closes the last terminal tab
+  const hadTerminalsRef = useRef(false);
   useEffect(() => {
-    if (terminals.length === 0 && visible) {
+    if (terminals.length > 0) {
+      hadTerminalsRef.current = true;
+    } else if (hadTerminalsRef.current && visible) {
+      hadTerminalsRef.current = false;
       onClose?.();
     }
   }, [terminals.length, visible, onClose]);

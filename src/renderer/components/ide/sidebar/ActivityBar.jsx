@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
-import { FiGithub } from 'react-icons/fi';
+import { FiGithub, FiGitCommit } from 'react-icons/fi';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
@@ -63,6 +63,34 @@ export default function ActivityBar({ activePanel, onPanelClick, profile, showSe
 
       <div className={styles.bottom}>
         <div className={styles.divider} />
+
+        <div className={styles.itemWrap}>
+          <button
+            className={`${styles.item} ${(activePanel === 'graph' || (rightSidebarVisible && rightActivePanel === 'graph')) ? styles.active : ''}`}
+            onClick={() => onPanelClick('graph')}
+            onMouseEnter={() => setHoveredId('graph')}
+            onMouseLeave={() => setHoveredId(null)}
+          >
+            <FiGitCommit size={21} />
+            {activePanel === 'graph' && (
+              <span className={styles.indicator}>
+                <span className={styles.indicatorLine} />
+                <span className={styles.indicatorGlow} />
+              </span>
+            )}
+            {rightSidebarVisible && rightActivePanel === 'graph' && (
+              <span className={styles.indicatorRight}>
+                <span className={styles.indicatorLineRight} />
+                <span className={styles.indicatorGlowRight} />
+              </span>
+            )}
+          </button>
+          {hoveredId === 'graph' && (
+            <div className={styles.tooltip}>
+              <span className={styles.tooltipText}>Commit Graph</span>
+            </div>
+          )}
+        </div>
 
         <div className={styles.itemWrap}>
           <button

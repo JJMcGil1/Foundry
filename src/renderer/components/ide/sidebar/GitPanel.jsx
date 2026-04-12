@@ -6,8 +6,7 @@ import {
 import { IoSparkles } from 'react-icons/io5';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChangeItem from './ChangeItem';
-import CommitGraph from './CommitGraph';
-import { COMMITS_PAGE_SIZE, statusColor } from './gitUtils';
+import { statusColor } from './gitUtils';
 import { useToast } from '../ToastProvider';
 import ConfirmationModal from '../ConfirmationModal';
 import styles from '../Sidebar.module.css';
@@ -76,10 +75,6 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     }
   }, [gitStatus, optimisticUnstaged]);
 
-  const [commits, setCommits] = useState([]);
-  const [totalCommits, setTotalCommits] = useState(0);
-  const [hasMoreCommits, setHasMoreCommits] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const commitInputRef = useRef(null);
 
   // Submodule & repo connection state
@@ -99,56 +94,9 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   // The effective path for git operations (root or submodule)
   const effectivePath = selectedRepo ? selectedRepo : projectPath;
 
-  // Always show commits for the current branch
-  const effectiveBranch = gitStatus.branch || null;
-
-  // Fetch commit log for the selected repo on mount and after refreshes
-  useEffect(() => {
-    if (!effectivePath || !gitStatus.isRepo) return;
-    let cancelled = false;
-    (async () => {
-      const [log, count] = await Promise.all([
-        window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, 0, effectiveBranch),
-        window.foundry?.gitCommitCount(effectivePath, effectiveBranch),
-      ]);
-      if (!cancelled) {
-        if (log) {
-          setCommits(log);
-          setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
-        }
-        if (count != null) setTotalCommits(count);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [effectivePath, gitStatus, effectiveBranch]);
-
   const refreshGit = async () => {
     onRefreshGit?.();
-    const [log, count] = await Promise.all([
-      window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, 0, effectiveBranch),
-      window.foundry?.gitCommitCount(effectivePath, effectiveBranch),
-    ]);
-    if (log) {
-      setCommits(log);
-      setHasMoreCommits(log.length >= COMMITS_PAGE_SIZE);
-    }
-    if (count != null) setTotalCommits(count);
   };
-
-  const loadMoreCommits = useCallback(async () => {
-    if (loadingMore || !hasMoreCommits || !effectivePath) return;
-    setLoadingMore(true);
-    try {
-      const more = await window.foundry?.gitLog(effectivePath, COMMITS_PAGE_SIZE, commits.length, effectiveBranch);
-      if (more && more.length > 0) {
-        setCommits(prev => [...prev, ...more]);
-        setHasMoreCommits(more.length >= COMMITS_PAGE_SIZE);
-      } else {
-        setHasMoreCommits(false);
-      }
-    } catch { setHasMoreCommits(false); }
-    setLoadingMore(false);
-  }, [loadingMore, hasMoreCommits, effectivePath, commits.length, effectiveBranch]);
 
   const handleStageFile = (filePath) => {
     setOptimisticStaged(prev => new Set(prev).add(filePath));
@@ -557,15 +505,6 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
           )}
         </AnimatePresence>
       </div>
-
-      <CommitGraph
-        commits={commits}
-        projectPath={effectivePath}
-        onLoadMore={loadMoreCommits}
-        hasMore={hasMoreCommits}
-        loadingMore={loadingMore}
-        totalCommits={totalCommits}
-      />
 
       <ConfirmationModal
         open={!!discardConfirm}
