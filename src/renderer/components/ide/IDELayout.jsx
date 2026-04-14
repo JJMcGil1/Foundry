@@ -375,7 +375,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         next.delete(panelId);
         return next;
       });
-    }, 200);
+    }, 180);
   }, [panels, closingPanelIds]);
 
   const togglePanel = useCallback((type) => {
@@ -536,6 +536,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           if (!vertBlocked || !horizBlocked) return;
         }
         el = el.parentElement;
+      }
+      // If we're inside a panel, swallow the scroll — don't pan the canvas
+      if (el && el.dataset && el.dataset.panelId != null) {
+        e.preventDefault();
+        return;
       }
     }
     e.preventDefault();

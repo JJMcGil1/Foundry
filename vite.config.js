@@ -9,6 +9,7 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, 'dist'),
     emptyOutDir: true,
+    cssMinify: false,
   },
   server: {
     port: 5173,

@@ -7,111 +7,17 @@
   flex-direction: column;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0 18px;
+  padding: 12px 0 16px;
   z-index: 10;
   position: relative;
   overflow: visible;
-}
-
-/* ── Indicator (lives inside each active button) ── */
-.indicator {
-  position: absolute;
-  left: -8px;
-  top: 25%;
-  bottom: 25%;
-  width: 3px;
-  pointer-events: none;
-  animation: indicatorIn 0.25s ease-out forwards;
-}
-
-.indicatorLine {
-  position: absolute;
-  inset: 0;
-  background: var(--zinc-200);
-  border-radius: 0 3px 3px 0;
-}
-
-.indicatorGlow {
-  position: absolute;
-  top: -16px;
-  left: -10px;
-  width: 40px;
-  height: calc(100% + 32px);
-  background: radial-gradient(
-    ellipse at left center,
-    rgba(244, 244, 245, 0.4) 0%,
-    rgba(244, 244, 245, 0.18) 30%,
-    rgba(244, 244, 245, 0.06) 55%,
-    transparent 80%
-  );
-  filter: blur(8px);
-  pointer-events: none;
-  animation: glowIn 0.35s ease-out forwards;
-}
-
-@keyframes indicatorIn {
-  0% {
-    opacity: 0;
-    transform: scaleY(0);
-  }
-  100% {
-    opacity: 1;
-    transform: scaleY(1);
-  }
-}
-
-@keyframes glowIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* ── Right-side Indicator (for right sidebar active panel) ── */
-.indicatorRight {
-  position: absolute;
-  right: -8px;
-  top: 25%;
-  bottom: 25%;
-  width: 3px;
-  pointer-events: none;
-  animation: indicatorIn 0.25s ease-out forwards;
-}
-
-.indicatorLineRight {
-  position: absolute;
-  inset: 0;
-  background: var(--zinc-200);
-  border-radius: 3px 0 0 3px;
-}
-
-.indicatorGlowRight {
-  position: absolute;
-  top: -16px;
-  right: -10px;
-  width: 40px;
-  height: calc(100% + 32px);
-  background: radial-gradient(
-    ellipse at right center,
-    rgba(244, 244, 245, 0.4) 0%,
-    rgba(244, 244, 245, 0.18) 30%,
-    rgba(244, 244, 245, 0.06) 55%,
-    transparent 80%
-  );
-  filter: blur(8px);
-  pointer-events: none;
-  animation: glowIn 0.35s ease-out forwards;
 }
 
 .top, .bottom {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   padding: 0 8px;
 }
@@ -128,8 +34,8 @@
 /* ── Nav Item ── */
 .item {
   position: relative;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -138,23 +44,32 @@
   color: var(--zinc-500);
   cursor: pointer;
   outline: none;
-  border-radius: 8px;
+  border-radius: 10px;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.item svg {
-  transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
 .item:hover {
+  color: var(--zinc-300);
+  background: var(--activity-hover);
+}
+
+.item:active {
   color: var(--zinc-200);
+  background: var(--activity-press);
 }
 
-.item:hover svg {
-  transform: scale(1.15);
+/* Active state — clean pill */
+.active {
+  color: var(--zinc-100);
+  background: var(--activity-active);
 }
 
-/* Icon + badge wrapper — scales together on hover */
+.active:hover {
+  color: var(--zinc-50);
+  background: var(--activity-active-hover);
+}
+
+/* Icon + badge wrapper */
 .iconWrap {
   position: relative;
   width: 20px;
@@ -162,29 +77,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.item:hover .iconWrap {
-  transform: scale(1.15);
-}
-
-/* When using iconWrap, cancel the double-scale on svg */
-.item:hover .iconWrap svg {
-  transform: none;
-}
-
-.item:active {
-  color: var(--zinc-100);
-}
-
-/* Active state */
-.active {
-  color: var(--zinc-100);
-}
-
-.active:hover {
-  color: var(--zinc-50);
 }
 
 /* ── Change Count Badge ── */
@@ -260,17 +152,17 @@
 .divider {
   width: 24px;
   height: 1px;
-  background: var(--border);
+  background: var(--activity-divider);
   margin: 4px 0;
 }
 
 /* ── Avatar ── */
 .avatar {
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--surface-1);
-  border: 2px solid var(--surface-2);
+  border: 2px solid transparent;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -279,11 +171,11 @@
   padding: 0;
   outline: none;
   cursor: pointer;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.15s ease;
 }
 
 .avatar:hover {
-  border-color: var(--zinc-600);
+  border-color: var(--activity-avatar-hover);
 }
 
 .avatarImg {
@@ -293,7 +185,7 @@
 }
 
 .avatarText {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--zinc-400);
   letter-spacing: 0.02em;

@@ -294,33 +294,33 @@
     inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
   pointer-events: auto;
   transition: box-shadow 0.25s ease, border-color 0.25s ease;
-  animation: panelIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: panelIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .canvasPanelClosing {
-  animation: panelOut 0.2s cubic-bezier(0.4, 0, 1, 1) both;
+  animation: panelOut 0.18s cubic-bezier(0.4, 0, 1, 1) both;
   pointer-events: none;
 }
 
 @keyframes panelIn {
   from {
     opacity: 0;
-    transform: scale(0.92);
+    transform: scale(0.96) translateY(8px);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
 }
 
 @keyframes panelOut {
   from {
     opacity: 1;
-    transform: scale(1);
+    transform: scale(1) translateY(0);
   }
   to {
     opacity: 0;
-    transform: scale(0.92);
+    transform: scale(0.98);
   }
 }
 

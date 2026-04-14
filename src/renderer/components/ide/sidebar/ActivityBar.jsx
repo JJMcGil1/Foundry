@@ -39,12 +39,6 @@ export default function ActivityBar({ onPanelClick, profile, showSettings, gitCh
                     <span className={styles.badge}>{gitChangeCount > 99 ? '99+' : gitChangeCount}</span>
                   )}
                 </span>
-                {isOpen && (
-                  <span className={styles.indicator}>
-                    <span className={styles.indicatorLine} />
-                    <span className={styles.indicatorGlow} />
-                  </span>
-                )}
               </button>
               {hoveredId === p.id && (
                 <div className={styles.tooltip}>
@@ -67,12 +61,6 @@ export default function ActivityBar({ onPanelClick, profile, showSettings, gitCh
             onMouseLeave={() => setHoveredId(null)}
           >
             <VscSettingsGear size={22} />
-            {showSettings && (
-              <span className={styles.indicator}>
-                <span className={styles.indicatorLine} />
-                <span className={styles.indicatorGlow} />
-              </span>
-            )}
           </button>
           {hoveredId === 'settings' && (
             <div className={styles.tooltip}>
