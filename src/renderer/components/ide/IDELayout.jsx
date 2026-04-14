@@ -51,6 +51,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [showAddPanel, setShowAddPanel] = useState(false);
   const addPanelRef = useRef(null);
   const isResizingRef = useRef(false);
+  const dragCleanupRef = useRef(null);
   const [closingPanelIds, setClosingPanelIds] = useState(new Set());
 
   useEffect(() => { panelsRef.current = panels; }, [panels]);
@@ -398,6 +399,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
+    // Clean up any stale drag/resize listeners from a previous operation
+    if (dragCleanupRef.current) { dragCleanupRef.current(); dragCleanupRef.current = null; }
     bringToFront(panelId);
     const startX = e.clientX;
     const startY = e.clientY;
@@ -414,23 +417,28 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         p.id === panelId ? { ...p, x: startPanelX + dx, y: startPanelY + dy } : p
       ));
     };
-    const handleUp = () => {
+    const cleanup = () => {
       document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
+      document.removeEventListener('mouseup', cleanup);
+      window.removeEventListener('blur', cleanup);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       if (panelEl) panelEl.classList.remove(styles.canvasPanelDragging);
+      if (dragCleanupRef.current === cleanup) dragCleanupRef.current = null;
     };
+    dragCleanupRef.current = cleanup;
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
+    document.addEventListener('mouseup', cleanup);
+    window.addEventListener('blur', cleanup);
   }, [bringToFront]);
 
   // ── Canvas: panel resize ──
   const handlePanelResize = useCallback((e, panelId, direction) => {
     e.stopPropagation();
     e.preventDefault();
+    if (dragCleanupRef.current) { dragCleanupRef.current(); dragCleanupRef.current = null; }
     bringToFront(panelId);
     isResizingRef.current = true;
     const startX = e.clientX;
@@ -457,18 +465,22 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         return { ...p, x, y, width, height };
       }));
     };
-    const handleUp = () => {
+    const cleanup = () => {
       document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
+      document.removeEventListener('mouseup', cleanup);
+      window.removeEventListener('blur', cleanup);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       isResizingRef.current = false;
       if (panelEl) panelEl.classList.remove(styles.canvasPanelDragging);
+      if (dragCleanupRef.current === cleanup) dragCleanupRef.current = null;
     };
+    dragCleanupRef.current = cleanup;
     document.body.style.cursor = `${direction}-resize`;
     document.body.style.userSelect = 'none';
     document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
+    document.addEventListener('mouseup', cleanup);
+    window.addEventListener('blur', cleanup);
   }, [bringToFront]);
 
   // ── Canvas: pan (drag background) ──
@@ -476,6 +488,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (e.target !== canvasRef.current) return;
     if (e.button !== 0) return;
     e.preventDefault();
+    if (dragCleanupRef.current) { dragCleanupRef.current(); dragCleanupRef.current = null; }
     const startX = e.clientX;
     const startY = e.clientY;
     const startOffset = { ...canvasOffsetRef.current };
@@ -485,14 +498,18 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         y: startOffset.y + (ev.clientY - startY),
       });
     };
-    const handleUp = () => {
+    const cleanup = () => {
       document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', handleUp);
+      document.removeEventListener('mouseup', cleanup);
+      window.removeEventListener('blur', cleanup);
       document.body.style.cursor = '';
+      if (dragCleanupRef.current === cleanup) dragCleanupRef.current = null;
     };
+    dragCleanupRef.current = cleanup;
     document.body.style.cursor = 'grabbing';
     document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', handleUp);
+    document.addEventListener('mouseup', cleanup);
+    window.addEventListener('blur', cleanup);
   }, []);
 
   // ── Canvas: zoom (wheel/pinch) ──

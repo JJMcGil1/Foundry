@@ -282,9 +282,9 @@
   position: absolute;
   display: flex;
   flex-direction: column;
-  background: rgba(17, 17, 19, 0.62);
-  backdrop-filter: blur(32px) saturate(1.4);
-  -webkit-backdrop-filter: blur(32px) saturate(1.4);
+  background: rgba(17, 17, 19, 0.45);
+  backdrop-filter: blur(32px) saturate(1.6);
+  -webkit-backdrop-filter: blur(32px) saturate(1.6);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   overflow: hidden;
@@ -342,7 +342,7 @@
 }
 
 :global([data-theme="light"]) .canvasPanel {
-  background: rgba(245, 245, 246, 0.58);
+  background: rgba(245, 245, 246, 0.45);
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.06),
