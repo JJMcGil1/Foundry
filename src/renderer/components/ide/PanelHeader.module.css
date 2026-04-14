@@ -1,12 +1,13 @@
 /* ── Unified Panel Header ── */
 .header {
   height: 36px;
+  min-height: 36px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 6px 0 0;
-  background: var(--surface-1);
-  border-bottom: 1px solid var(--border);
+  background: rgba(17, 17, 19, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
   cursor: grab;
   user-select: none;
@@ -17,38 +18,25 @@
   cursor: grabbing;
 }
 
-.headerDragOver {
-  background: var(--surface-2);
-  box-shadow: inset 2px 0 0 var(--zinc-400);
-}
-
 .left {
   display: flex;
   align-items: center;
   gap: 6px;
   min-width: 0;
   flex: 1;
-  padding-left: 4px;
+  padding-left: 10px;
+}
+
+.header:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .dragGrip {
-  display: grid;
-  grid-template-columns: 3px 3px;
-  gap: 2px;
-  padding: 2px 4px;
-  opacity: 0.3;
-  transition: opacity 0.15s ease;
-}
-
-.header:hover .dragGrip {
-  opacity: 0.5;
+  display: none;
 }
 
 .gripDot {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--zinc-400);
+  display: none;
 }
 
 .icon {
@@ -113,4 +101,14 @@
 .actionBtn:hover {
   color: var(--zinc-200);
   background: var(--surface-3);
+}
+
+/* ── Light mode ── */
+:global([data-theme="light"]) .header {
+  background: rgba(245, 245, 246, 0.4);
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+:global([data-theme="light"]) .header:hover {
+  background: rgba(0, 0, 0, 0.04);
 }

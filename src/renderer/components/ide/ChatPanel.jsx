@@ -306,7 +306,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       if (showModelDropdown && modelSwitcherRef.current && !modelSwitcherRef.current.contains(e.target)) {
         setShowModelDropdown(false);
       }
-      if (showThreadList && threadListRef.current && !threadListRef.current.contains(e.target)) {
+      if (showThreadList && threadListRef.current && !threadListRef.current.contains(e.target) && !e.target.closest('[data-thread-dropdown]')) {
         setShowThreadList(false);
       }
     };
@@ -774,7 +774,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   }, []);
 
   return (
-    <div className={styles.panel}>
+    <>
       <ChatHeader
         threads={threads}
         currentThreadId={currentThreadId}
@@ -846,6 +846,6 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
           setQueueSize(0);
         }}
       />
-    </div>
+    </>
   );
 }

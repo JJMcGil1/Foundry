@@ -204,6 +204,8 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       const result = await window.foundry?.gitGenerateCommitMsg(projectPath);
       if (result && !result.error) {
         setCommitMsg(result.message);
+      } else if (result?.error) {
+        addToast({ message: 'Failed to generate commit message. Try again.', type: 'error' });
       }
     } catch (err) {
       console.error('AI commit message generation failed:', err);

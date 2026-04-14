@@ -1339,7 +1339,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
               '-p', commitPrompt,
               '--output-format', 'text',
               '--model', modelAlias,
-              '--max-turns', '1',
+              '--max-turns', '4',
               '--no-session-persistence',
             ], {
               stdio: ['ignore', 'pipe', 'pipe'],
@@ -1361,12 +1361,17 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
           });
 
           if (aiMessage) {
-            let cleaned = aiMessage.replace(/^["']|["']$/g, '').trim();
-            // Remove trailing period from subject line only
-            const lines = cleaned.split('\n');
-            lines[0] = lines[0].replace(/\.$/, '');
-            cleaned = lines.join('\n').trim();
-            return { message: cleaned };
+            // Detect CLI error messages leaked into stdout
+            if (/^error:/i.test(aiMessage) || /reached max turns/i.test(aiMessage)) {
+              console.warn('[CommitMsg] CLI returned error as output:', aiMessage.slice(0, 200));
+            } else {
+              let cleaned = aiMessage.replace(/^["']|["']$/g, '').trim();
+              // Remove trailing period from subject line only
+              const lines = cleaned.split('\n');
+              lines[0] = lines[0].replace(/\.$/, '');
+              cleaned = lines.join('\n').trim();
+              return { message: cleaned };
+            }
           }
         }
       } else if (cred && cred.source === 'api_key') {

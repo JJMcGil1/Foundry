@@ -46,26 +46,12 @@ export default function TabBar({ tabs, activeTab, onSelectTab, onCloseTab, onReo
 
   return (
     <div
-      className={`${styles.tabBar} ${panelDragProps?.isDragOver ? styles.tabBarDragOver : ''}`}
-      onDragOver={(e) => {
-        // Only handle panel drag when not dragging tabs
-        if (dragIndex === null && panelDragProps) {
-          e.preventDefault();
-          panelDragProps.onDragOver?.();
-        }
-      }}
-      onDrop={(e) => {
-        if (dragIndex === null && panelDragProps) {
-          panelDragProps.onDrop?.();
-        }
-      }}
+      className={styles.tabBar}
     >
       {panelDragProps && (
         <div
           className={styles.panelDragGrip}
-          draggable
-          onDragStart={panelDragProps.onDragStart}
-          onDragEnd={panelDragProps.onDragEnd}
+          onMouseDown={panelDragProps.onMouseDown}
         >
           <span /><span /><span /><span /><span /><span />
         </div>

@@ -312,12 +312,8 @@ const TerminalPanel = forwardRef(function TerminalPanel({ projectPath, onClose, 
   return (
     <div className={styles.panel}>
       <div
-        className={`${styles.header} ${panelDragProps?.isDragOver ? styles.headerDragOver : ''}`}
-        draggable={!!panelDragProps}
-        onDragStart={panelDragProps?.onDragStart}
-        onDragEnd={panelDragProps?.onDragEnd}
-        onDragOver={(e) => { e.preventDefault(); panelDragProps?.onDragOver?.(); }}
-        onDrop={panelDragProps?.onDrop}
+        className={styles.header}
+        onMouseDown={panelDragProps?.onMouseDown}
       >
         {panelDragProps && <div className={styles.dragGrip}><span /><span /><span /><span /><span /><span /></div>}
         <div className={styles.tabs}>

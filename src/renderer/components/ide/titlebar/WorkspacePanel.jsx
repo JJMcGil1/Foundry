@@ -71,10 +71,10 @@ export default function WorkspacePanel({ isOpen, onClose, dropdownPos, currentPr
           <motion.div
             className={styles.dropdown}
             style={{ top: dropdownPos.top, left: dropdownPos.left }}
-            initial={{ opacity: 0, scale: 0.98, y: -6 }}
+            initial={{ opacity: 0, scale: 0.97, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -6 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, scale: 0.97, y: -8 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className={styles.search}>
               <FiSearch size={13} className={styles.searchIcon} />
@@ -90,11 +90,11 @@ export default function WorkspacePanel({ isOpen, onClose, dropdownPos, currentPr
 
             <div className={styles.actions}>
               <button className={styles.actionBtn} onClick={() => { onClose(); onOpenFolder(); }}>
-                <FiPlus size={13} />
+                <FiPlus size={12} />
                 Open folder...
               </button>
               <button className={styles.actionBtn} onClick={() => handleNewWindow()}>
-                <FiExternalLink size={13} />
+                <FiExternalLink size={12} />
                 New window
               </button>
             </div>
@@ -114,13 +114,13 @@ export default function WorkspacePanel({ isOpen, onClose, dropdownPos, currentPr
                         tabIndex={0}
                         onKeyDown={(e) => { if (e.key === 'Enter' && !isActive) handleSwitch(ws); }}
                       >
-                        <span className={styles.itemIcon}><FiFolder size={14} /></span>
+                        <span className={styles.itemIcon}><FiFolder size={13} /></span>
                         <div className={styles.itemContent}>
                           <span className={styles.itemName}>{ws.name}</span>
                           <span className={styles.itemPath}>{shortenPath(ws.path)}</span>
                         </div>
                         {isActive && (
-                          <span className={styles.itemCheck}><FiCheck size={14} /></span>
+                          <span className={styles.itemCheck}><FiCheck size={12} /></span>
                         )}
                         {!isActive && (
                           <>
@@ -136,7 +136,7 @@ export default function WorkspacePanel({ isOpen, onClose, dropdownPos, currentPr
                               onClick={(e) => handleRemove(e, ws.path)}
                               title="Remove from workspaces"
                             >
-                              <FiX size={13} />
+                              <FiX size={12} />
                             </button>
                           </>
                         )}

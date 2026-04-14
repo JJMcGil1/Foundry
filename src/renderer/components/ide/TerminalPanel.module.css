@@ -1,21 +1,23 @@
 .panel {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: var(--terminal-bg);
+  background: transparent;
 }
 
 /* Header bar with tabs */
 .header {
   height: 36px;
+  min-height: 36px;
   display: flex;
   align-items: center;
-  padding: 0 8px;
+  padding: 0 6px 0 10px;
   gap: 4px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   flex-shrink: 0;
-  background: var(--surface-1);
+  background: rgba(17, 17, 19, 0.35);
   cursor: grab;
   user-select: none;
   transition: background 0.15s ease;
@@ -29,22 +31,11 @@
 }
 
 .dragGrip {
-  display: grid;
-  grid-template-columns: 3px 3px;
-  gap: 2px;
-  padding: 2px 4px;
-  opacity: 0.3;
-  transition: opacity 0.15s ease;
-  flex-shrink: 0;
+  display: none;
 }
 
-.header:hover .dragGrip { opacity: 0.5; }
-
-.dragGrip span {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: var(--zinc-400);
+.header:hover {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .panelCloseBtn {
@@ -179,7 +170,7 @@
   flex: 1;
   padding: 2px 0 0 4px;
   overflow: hidden;
-  background: var(--terminal-bg);
+  background: rgba(13, 13, 15, 0.45);
 }
 
 /* xterm fills its container */
@@ -188,11 +179,11 @@
 }
 
 .terminalContainer :global(.xterm-viewport) {
-  background-color: var(--terminal-bg) !important;
+  background-color: transparent !important;
 }
 
 .terminalContainer :global(.xterm-screen) {
-  background-color: var(--terminal-bg) !important;
+  background-color: transparent !important;
 }
 
 /* Force cursor color to match foreground */
@@ -225,4 +216,18 @@
 
 .terminalContainer :global(.xterm-viewport)::-webkit-scrollbar-thumb:hover {
   background: var(--zinc-500);
+}
+
+/* ── Light mode ── */
+:global([data-theme="light"]) .header {
+  background: rgba(245, 245, 246, 0.4);
+  border-bottom-color: rgba(0, 0, 0, 0.06);
+}
+
+:global([data-theme="light"]) .header:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:global([data-theme="light"]) .terminalContainer {
+  background: rgba(238, 238, 239, 0.4);
 }

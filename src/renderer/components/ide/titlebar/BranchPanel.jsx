@@ -92,18 +92,18 @@ export default function BranchPanel({ isOpen, onClose, dropdownPos, projectPath,
           <motion.div
             className={styles.dropdown}
             style={{ top: dropdownPos.top, left: dropdownPos.left }}
-            initial={{ opacity: 0, scale: 0.98, y: -6 }}
+            initial={{ opacity: 0, scale: 0.97, y: -8 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.98, y: -6 }}
-            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            exit={{ opacity: 0, scale: 0.97, y: -8 }}
+            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
           >
             <div className={styles.search}>
-              <FiSearch size={12} className={styles.searchIcon} />
+              <FiSearch size={13} className={styles.searchIcon} />
               <input
                 ref={searchRef}
                 type="text"
                 className={styles.searchInput}
-                placeholder="Select a branch or tag to checkout..."
+                placeholder="Find a branch..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={(e) => {
@@ -119,14 +119,16 @@ export default function BranchPanel({ isOpen, onClose, dropdownPos, projectPath,
             {error && <div className={styles.error}>{error}</div>}
 
             {!creating && (
-              <button className={styles.actionBtn} style={{ width: '100%', padding: '7px 10px', borderBottom: '1px solid var(--border)', borderRadius: 0 }} onClick={() => {
-                setCreating(true);
-                setNewBranchName(search.trim());
-                setTimeout(() => newBranchRef.current?.focus(), 50);
-              }}>
-                <FiPlus size={12} />
-                <span>Create new branch{search.trim() ? `: ${search.trim()}` : ''}</span>
-              </button>
+              <div className={styles.actions}>
+                <button className={styles.actionBtn} onClick={() => {
+                  setCreating(true);
+                  setNewBranchName(search.trim());
+                  setTimeout(() => newBranchRef.current?.focus(), 50);
+                }}>
+                  <FiPlus size={12} />
+                  <span>Create new branch{search.trim() ? `: ${search.trim()}` : ''}</span>
+                </button>
+              </div>
             )}
 
             {creating && (
@@ -144,15 +146,18 @@ export default function BranchPanel({ isOpen, onClose, dropdownPos, projectPath,
                   }}
                 />
                 <button className={styles.createConfirm} onClick={handleCreate} disabled={!newBranchName.trim() || loading}>
-                  {loading ? <FiRefreshCw size={11} className={styles.spinning} /> : <FiCheck size={11} />}
+                  {loading ? <FiRefreshCw size={12} className={styles.spinning} /> : <FiCheck size={12} />}
                 </button>
                 <button className={styles.createCancel} onClick={() => { setCreating(false); setNewBranchName(''); }}>
-                  <FiX size={11} />
+                  <FiX size={12} />
                 </button>
               </div>
             )}
 
             <div className={styles.list}>
+              {filteredLocal.length > 0 && (
+                <div className={styles.sectionLabel}>Local</div>
+              )}
               {filteredLocal.map(b => (
                 <button
                   key={b.name}
@@ -160,7 +165,7 @@ export default function BranchPanel({ isOpen, onClose, dropdownPos, projectPath,
                   onClick={() => !b.current && handleCheckout(b.name)}
                   disabled={loading}
                 >
-                  <FiGitBranch size={13} className={styles.branchItemIcon} />
+                  <FiGitBranch size={12} className={styles.branchItemIcon} />
                   <div className={styles.branchItemContent}>
                     <div className={styles.branchItemRow}>
                       <span className={styles.branchItemName}>{b.name}</span>
@@ -186,7 +191,7 @@ export default function BranchPanel({ isOpen, onClose, dropdownPos, projectPath,
                   <div className={styles.sectionLabel}>Remote</div>
                   {filteredRemote.map(b => (
                     <button key={b.name} className={styles.branchItem} onClick={() => handleCheckoutRemote(b.name)} disabled={loading}>
-                      <FiGlobe size={13} className={styles.branchItemIcon} />
+                      <FiGlobe size={12} className={styles.branchItemIcon} />
                       <div className={styles.branchItemContent}>
                         <div className={styles.branchItemRow}>
                           <span className={styles.branchItemName}>{b.shortName}</span>

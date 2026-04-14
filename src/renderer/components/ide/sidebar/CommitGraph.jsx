@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { FiChevronRight, FiRefreshCw } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import GitAvatar from './GitAvatar';
@@ -102,8 +103,9 @@ export default function CommitGraph({
     clearTimeout(cardTimerRef.current);
     const target = e.currentTarget;
     if (!target) return;
-    const rect = target.getBoundingClientRect();
     cardTimerRef.current = setTimeout(() => {
+      // Recalculate rect inside timeout so it's fresh after any pan/zoom
+      const rect = target.getBoundingClientRect();
       const viewportH = window.innerHeight;
       const viewportW = window.innerWidth;
       const cardW = 400;
@@ -499,12 +501,13 @@ export default function CommitGraph({
     </>
   );
 
-  const hoverCard = (
+  const hoverCard = createPortal(
     <AnimatePresence>
       {cardRow && cardPos && (
-        <CommitHoverCard row={cardRow} avatarUrl={getAvatarUrl(cardRow)} laneColor={cardLaneColor} remoteUrl={remoteUrl} style={{ position: 'fixed', top: cardPos.top, left: cardPos.left, width: 400 }} onMouseEnter={handleCardMouseEnter} onMouseLeave={handleCardMouseLeave} />
+        <CommitHoverCard row={cardRow} avatarUrl={getAvatarUrl(cardRow)} laneColor={cardLaneColor} remoteUrl={remoteUrl} style={{ position: 'fixed', top: cardPos.top, left: cardPos.left, width: 400, zIndex: 999999 }} onMouseEnter={handleCardMouseEnter} onMouseLeave={handleCardMouseLeave} />
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 
   // Full-panel mode: no collapsible header, no resize handle

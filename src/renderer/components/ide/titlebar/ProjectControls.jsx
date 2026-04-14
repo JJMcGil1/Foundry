@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { FiFolder, FiChevronDown, FiGitBranch, FiRefreshCw } from 'react-icons/fi';
+import { FiFolder, FiGitBranch, FiRefreshCw } from 'react-icons/fi';
 import { motion } from 'framer-motion';
 import WorkspacePanel from './WorkspacePanel';
 import BranchPanel from './BranchPanel';
@@ -39,7 +39,7 @@ export default function ProjectControls({
     if (branchOpen) setBranchOpen(false);
     if (!wsOpen && wsRef.current) {
       const rect = wsRef.current.getBoundingClientRect();
-      setWsDropdownPos({ top: rect.bottom + 6, left: rect.left });
+      setWsDropdownPos({ top: rect.bottom + 8, left: rect.left });
     }
     setWsOpen(v => !v);
   };
@@ -48,7 +48,7 @@ export default function ProjectControls({
     if (wsOpen) setWsOpen(false);
     if (!branchOpen && pillRef.current) {
       const pillRect = pillRef.current.getBoundingClientRect();
-      setBranchDropdownPos({ top: pillRect.bottom + 6, left: pillRect.left });
+      setBranchDropdownPos({ top: pillRect.bottom + 8, left: pillRect.left });
     }
     setBranchOpen(v => !v);
   };
@@ -57,10 +57,8 @@ export default function ProjectControls({
     e.stopPropagation();
     if (syncing) return;
     setSyncing(true);
-    // Minimum spin duration so the animation is always visible (smooth UX)
     const minSpin = new Promise(r => setTimeout(r, 600));
     try {
-      // Run pull→push sequentially, but ensure spinner shows for at least 600ms
       const syncWork = (async () => {
         const pullResult = await window.foundry?.gitPull(projectPath);
         const pushResult = await window.foundry?.gitPush(projectPath);
@@ -94,7 +92,7 @@ export default function ProjectControls({
       }
     } catch (err) {
       console.error('Sync failed:', err);
-      await minSpin; // Still wait for min spin even on error
+      await minSpin;
       addToast({ message: `Sync failed: ${err.message || 'Unknown error'}`, type: 'error' });
     }
     setSyncing(false);
@@ -115,15 +113,8 @@ export default function ProjectControls({
           className={`${styles.segment} ${wsOpen ? styles.segmentOpen : ''}`}
           onClick={openWorkspaceDropdown}
         >
-          <span className={styles.segmentIcon}><FiFolder size={13} /></span>
+          <span className={styles.segmentIcon}><FiFolder size={12} /></span>
           <span className={styles.segmentName}>{displayName}</span>
-          <motion.span
-            className={styles.segmentChevron}
-            animate={{ rotate: wsOpen ? 180 : 0 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
-          >
-            <FiChevronDown size={11} />
-          </motion.span>
         </button>
 
         {/* Branch + Sync segment (only when in a git repo) */}
@@ -137,13 +128,6 @@ export default function ProjectControls({
             >
               <span className={styles.segmentIcon}><FiGitBranch size={12} /></span>
               <span className={styles.segmentName}>{gitStatus.branch || 'HEAD'}</span>
-              <motion.span
-                className={styles.segmentChevron}
-                animate={{ rotate: branchOpen ? 180 : 0 }}
-                transition={{ duration: 0.15, ease: 'easeOut' }}
-              >
-                <FiChevronDown size={11} />
-              </motion.span>
             </button>
             <button
               className={`${styles.syncIcon} ${syncing ? styles.syncIconActive : ''}`}
@@ -160,7 +144,7 @@ export default function ProjectControls({
                 transition={syncing ? { duration: 0.8, repeat: Infinity, ease: 'linear' } : { duration: 0 }}
                 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', willChange: 'transform' }}
               >
-                <FiRefreshCw size={12} />
+                <FiRefreshCw size={11} />
               </motion.span>
               {totalUpdates > 0 && !syncing && (
                 <span className={styles.syncDot} />

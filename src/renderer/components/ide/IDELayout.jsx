@@ -1,6 +1,6 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { VscFiles, VscSourceControl } from 'react-icons/vsc';
-import { FiSun, FiMoon, FiPlus, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw } from 'react-icons/fi';
+import { FiSun, FiMoon, FiPlus, FiMinus, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw, FiMaximize2 } from 'react-icons/fi';
 import { VscPlay, VscDebugStop } from 'react-icons/vsc';
 import { useToast } from './ToastProvider';
 import { ActivityBar, FileTreeItem, GitPanel, WorkflowsPanel, MiniTooltipBtn } from './sidebar';
@@ -17,33 +17,90 @@ import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
 // ── Panel type config ──
 const PANEL_TYPES = {
-  files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 260, minWidth: 80, singleton: true },
-  git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 280, minWidth: 80, singleton: true },
-  workflows: { title: 'Workflows',       icon: FiGithub,          defaultWidth: 260, minWidth: 80, singleton: true },
-  terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 450, minWidth: 80 },
-  chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 360, minWidth: 80 },
-  editor:    { title: 'Editor',         icon: VscFiles,          minWidth: 80, flex: true, singleton: true },
+  files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
+  git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 300, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
+  workflows: { title: 'Workflows',       icon: FiGithub,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
+  terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 600, defaultHeight: 350, minWidth: 300, minHeight: 150 },
+  chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 420, defaultHeight: 600, minWidth: 280, minHeight: 300 },
+  editor:    { title: 'Editor',         icon: VscFiles,          defaultWidth: 700, defaultHeight: 500, minWidth: 300, minHeight: 200, singleton: true },
 };
+
+const RESIZE_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
 
 let nextPanelId = 0;
 function makePanelId() { return `panel-${++nextPanelId}`; }
 
 export default function IDELayout({ profile, onProfileChange, initialProjectPath }) {
+  // ── Canvas state ──
+  const [canvasOffset, setCanvasOffset] = useState({ x: 0, y: 0 });
+  const [canvasZoom, setCanvasZoom] = useState(1);
+  const canvasOffsetRef = useRef({ x: 0, y: 0 });
+  const canvasZoomRef = useRef(1);
+  const nextZIndexRef = useRef(2);
+  const canvasRef = useRef(null);
+  const panelsRef = useRef([]);
+  const initialLayoutDone = useRef(false);
+
+  useEffect(() => { canvasOffsetRef.current = canvasOffset; }, [canvasOffset]);
+  useEffect(() => { canvasZoomRef.current = canvasZoom; }, [canvasZoom]);
+
   // ── Panel state ──
   const [panels, setPanels] = useState(() => [
-    { id: makePanelId(), type: 'chat', width: 260 },
+    { id: makePanelId(), type: 'chat', x: 0, y: 0, width: 420, height: 600, zIndex: 1 },
   ]);
-  const [dragPanelIndex, setDragPanelIndex] = useState(null);
-  const [dragOverPanelIndex, setDragOverPanelIndex] = useState(null);
   const [showAddPanel, setShowAddPanel] = useState(false);
   const addPanelRef = useRef(null);
-
   const isResizingRef = useRef(false);
-  const panelStripRef = useRef(null);
+  const [closingPanelIds, setClosingPanelIds] = useState(new Set());
+
+  useEffect(() => { panelsRef.current = panels; }, [panels]);
+
+  // Center initial panels in viewport once canvas is visible
+  const centerPanelsOnce = useCallback(() => {
+    if (initialLayoutDone.current) return;
+    const el = canvasRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return;
+    initialLayoutDone.current = true;
+    const p = panelsRef.current;
+    if (p.length > 0) {
+      const offset = {
+        x: (rect.width - p[0].width) / 2 - p[0].x,
+        y: (rect.height - p[0].height) / 2 - p[0].y,
+      };
+      setCanvasOffset(offset);
+      canvasOffsetRef.current = offset;
+    }
+  }, []);
 
   // ── Existing IDE state ──
   const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState(null);
+
+  // Try on mount — double rAF ensures layout is fully settled before measuring
+  useEffect(() => {
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      if (!cancelled) requestAnimationFrame(() => {
+        if (!cancelled) centerPanelsOnce();
+      });
+    });
+    return () => { cancelled = true; };
+  }, [centerPanelsOnce]);
+
+  // Retry when settings closes (canvas goes from display:none to visible)
+  useEffect(() => {
+    if (!showSettings) {
+      let cancelled = false;
+      requestAnimationFrame(() => {
+        if (!cancelled) requestAnimationFrame(() => {
+          if (!cancelled) centerPanelsOnce();
+        });
+      });
+      return () => { cancelled = true; };
+    }
+  }, [showSettings, centerPanelsOnce]);
 
   const [startCommand, setStartCommand] = useState('');
   const [startRunning, setStartRunning] = useState(false);
@@ -69,7 +126,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [gitStatus, setGitStatus] = useState({ branch: '', files: [], isRepo: false });
   const [gitRefreshKey, setGitRefreshKey] = useState(0);
 
-  // File tree expanded paths (moved from Sidebar)
+  // File tree expanded paths
   const [expandedPaths, setExpandedPaths] = useState(new Set());
   const expandPersistTimer = useRef(null);
 
@@ -170,6 +227,25 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     }
   }, []);
 
+  // ── Get position for a new panel ──
+  const getNewPanelPosition = useCallback((type, existingPanels) => {
+    const config = PANEL_TYPES[type];
+    const w = config.defaultWidth || 400;
+    const h = config.defaultHeight || 500;
+    const el = canvasRef.current;
+    const offset = canvasOffsetRef.current;
+    const zoom = canvasZoomRef.current;
+    if (!el) return { x: 100, y: 80, width: w, height: h };
+    const rect = el.getBoundingClientRect();
+    let x = (rect.width / 2 - offset.x) / zoom - w / 2;
+    let y = (rect.height / 2 - offset.y) / zoom - h / 2;
+    let attempts = 0;
+    while (attempts < 10 && existingPanels.some(p => Math.abs(p.x - x) < 30 && Math.abs(p.y - y) < 30)) {
+      x += 40; y += 40; attempts++;
+    }
+    return { x, y, width: w, height: h };
+  }, []);
+
   // ── File operations ──
   const handleOpenFile = useCallback(async (filePath) => {
     const existing = openTabs.find(t => t.path === filePath);
@@ -184,15 +260,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       // Ensure editor panel exists
       setPanels(prev => {
         if (prev.some(p => p.type === 'editor')) return prev;
-        // Insert editor after the last sidebar-type panel
-        const lastSidebarIdx = [...prev].reverse().findIndex(p => ['files', 'git', 'workflows'].includes(p.type));
-        const insertIdx = lastSidebarIdx >= 0 ? prev.length - lastSidebarIdx : prev.length;
-        const next = [...prev];
-        next.splice(insertIdx, 0, { id: makePanelId(), type: 'editor', width: 0 });
-        return next;
+        const pos = getNewPanelPosition('editor', prev);
+        return [...prev, { id: makePanelId(), type: 'editor', ...pos, zIndex: nextZIndexRef.current++ }];
       });
     }
-  }, [openTabs]);
+  }, [openTabs, getNewPanelPosition]);
 
   const handleCloseTab = useCallback((filePath) => {
     setOpenTabs(prev => {
@@ -278,162 +350,254 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       if (existing) return existing.id;
     }
     if (type === 'chat' && panels.filter(p => p.type === 'chat').length >= 4) return;
-    const isFirstOfType = !panels.some(p => p.type === type);
     const id = makePanelId();
-    const newPanel = { id, type, width: config.defaultWidth || 300, startFresh: !isFirstOfType };
+    const isFirstOfType = !panels.some(p => p.type === type);
+    const pos = getNewPanelPosition(type, panels);
+    const zIndex = nextZIndexRef.current++;
+    const newPanel = { id, type, ...pos, zIndex, startFresh: !isFirstOfType };
     setPanels(prev => [...prev, newPanel]);
     return id;
-  }, [panels]);
+  }, [panels, getNewPanelPosition]);
 
   const removePanel = useCallback((panelId) => {
     const panel = panels.find(p => p.id === panelId);
-    if (!panel) return;
+    if (!panel || closingPanelIds.has(panelId)) return;
     if (panel.type === 'editor') {
       setOpenTabs([]);
       setActiveTab(null);
     }
-    setPanels(prev => prev.filter(p => p.id !== panelId));
-  }, [panels]);
+    setClosingPanelIds(prev => new Set(prev).add(panelId));
+    setTimeout(() => {
+      setPanels(prev => prev.filter(p => p.id !== panelId));
+      setClosingPanelIds(prev => {
+        const next = new Set(prev);
+        next.delete(panelId);
+        return next;
+      });
+    }, 200);
+  }, [panels, closingPanelIds]);
 
   const togglePanel = useCallback((type) => {
-    const existing = panels.find(p => p.type === type);
+    const existing = panels.find(p => p.type === type && !closingPanelIds.has(p.id));
     if (existing) {
       removePanel(existing.id);
     } else {
       addPanel(type);
     }
-  }, [panels, addPanel, removePanel]);
+  }, [panels, addPanel, removePanel, closingPanelIds]);
 
-  // ── Panel drag-and-drop reordering ──
-  const handlePanelDragStart = useCallback((e, index) => {
-    setDragPanelIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', String(index));
+  // ── Canvas: bring panel to front ──
+  const bringToFront = useCallback((panelId) => {
+    const z = nextZIndexRef.current++;
+    setPanels(prev => prev.map(p => p.id === panelId ? { ...p, zIndex: z } : p));
   }, []);
 
-  const handlePanelDragOver = useCallback((index) => {
-    setDragOverPanelIndex(index);
-  }, []);
-
-  const handlePanelDrop = useCallback((targetIndex) => {
-    if (dragPanelIndex === null || dragPanelIndex === targetIndex) {
-      setDragPanelIndex(null);
-      setDragOverPanelIndex(null);
-      return;
-    }
-    setPanels(prev => {
-      const next = [...prev];
-      const [moved] = next.splice(dragPanelIndex, 1);
-      next.splice(targetIndex, 0, moved);
-      return next;
-    });
-    setDragPanelIndex(null);
-    setDragOverPanelIndex(null);
-  }, [dragPanelIndex]);
-
-  const handlePanelDragEnd = useCallback(() => {
-    setDragPanelIndex(null);
-    setDragOverPanelIndex(null);
-  }, []);
-
-  // ── Panel resize ──
-  const SNAP_THRESHOLD = 20; // px from edge to snap
-  const handlePanelResize = useCallback((e, handleIndex, isRightEdge = false) => {
+  // ── Canvas: panel drag (move) ──
+  const handlePanelDrag = useCallback((e, panelId) => {
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select') || e.target.closest('textarea')) return;
+    if (e.button !== 0) return;
+    e.stopPropagation();
     e.preventDefault();
+    bringToFront(panelId);
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const panel = panelsRef.current.find(p => p.id === panelId);
+    if (!panel) return;
+    const startPanelX = panel.x;
+    const startPanelY = panel.y;
+    const panelEl = document.querySelector(`[data-panel-id="${panelId}"]`);
+    if (panelEl) panelEl.classList.add(styles.canvasPanelDragging);
+    const handleMove = (ev) => {
+      const dx = (ev.clientX - startX) / canvasZoomRef.current;
+      const dy = (ev.clientY - startY) / canvasZoomRef.current;
+      setPanels(prev => prev.map(p =>
+        p.id === panelId ? { ...p, x: startPanelX + dx, y: startPanelY + dy } : p
+      ));
+    };
+    const handleUp = () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      if (panelEl) panelEl.classList.remove(styles.canvasPanelDragging);
+    };
+    document.body.style.cursor = 'grabbing';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+  }, [bringToFront]);
+
+  // ── Canvas: panel resize ──
+  const handlePanelResize = useCallback((e, panelId, direction) => {
+    e.stopPropagation();
+    e.preventDefault();
+    bringToFront(panelId);
     isResizingRef.current = true;
     const startX = e.clientX;
-    const leftPanel = panels[handleIndex];
-    const rightPanel = panels[handleIndex + 1];
-
-    // Right-edge resize: always resize the last panel directly
-    if (isRightEdge) {
-      const targetPanel = leftPanel;
-      const startWidth = targetPanel.width;
-      const config = PANEL_TYPES[targetPanel.type] || {};
-
-      const handleMouseMove = (ev) => {
-        const delta = ev.clientX - startX;
-        let newWidth = Math.max(config.minWidth || 80, startWidth + delta);
-
-        // Snap to container edge
-        if (panelStripRef.current) {
-          const stripRect = panelStripRef.current.getBoundingClientRect();
-          const panelEl = panelStripRef.current.querySelector(`[data-panel-id="${targetPanel.id}"]`);
-          if (panelEl) {
-            const panelLeft = panelEl.getBoundingClientRect().left;
-            const rightEdge = panelLeft + newWidth;
-            const containerRight = stripRect.right;
-            const distFromEdge = containerRight - rightEdge;
-            // Snap: if within threshold, snap to fill exactly
-            if (distFromEdge > 0 && distFromEdge < SNAP_THRESHOLD) {
-              newWidth = containerRight - panelLeft;
-            }
-          }
-        }
-
-        setPanels(prev => prev.map(p => p.id === targetPanel.id ? { ...p, width: newWidth } : p));
-      };
-      const handleMouseUp = () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.body.style.cursor = '';
-        document.body.style.userSelect = '';
-        isResizingRef.current = false;
-      };
-      document.body.style.cursor = 'col-resize';
-      document.body.style.userSelect = 'none';
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return;
-    }
-
-    if (!rightPanel) return;
-    const startLeftWidth = leftPanel.width;
-    const startRightWidth = rightPanel.width;
-    const leftConfig = PANEL_TYPES[leftPanel.type] || {};
-    const rightConfig = PANEL_TYPES[rightPanel.type] || {};
-    const leftMin = leftConfig.minWidth || 80;
-    const rightMin = rightConfig.minWidth || 80;
-    const isLeftFlex = !!leftConfig.flex;
-    const isRightFlex = !!rightConfig.flex;
-
-    const handleMouseMove = (ev) => {
-      const delta = ev.clientX - startX;
-
-      // If one side is flex, only resize the non-flex panel
-      if (isLeftFlex) {
-        const newWidth = Math.max(rightMin, startRightWidth - delta);
-        setPanels(prev => prev.map(p => p.id === rightPanel.id ? { ...p, width: newWidth } : p));
-      } else if (isRightFlex) {
-        const newWidth = Math.max(leftMin, startLeftWidth + delta);
-        setPanels(prev => prev.map(p => p.id === leftPanel.id ? { ...p, width: newWidth } : p));
-      } else {
-        // Both fixed-width: grow one, shrink the other
-        let newLeft = startLeftWidth + delta;
-        let newRight = startRightWidth - delta;
-        // Clamp both to their minimums
-        if (newLeft < leftMin) { newRight += (newLeft - leftMin); newLeft = leftMin; }
-        if (newRight < rightMin) { newLeft += (newRight - rightMin); newRight = rightMin; }
-        newLeft = Math.max(leftMin, newLeft);
-        newRight = Math.max(rightMin, newRight);
-        setPanels(prev => prev.map(p =>
-          p.id === leftPanel.id ? { ...p, width: newLeft } :
-          p.id === rightPanel.id ? { ...p, width: newRight } : p
-        ));
-      }
+    const startY = e.clientY;
+    const panel = panelsRef.current.find(p => p.id === panelId);
+    if (!panel) return;
+    const panelEl = document.querySelector(`[data-panel-id="${panelId}"]`);
+    if (panelEl) panelEl.classList.add(styles.canvasPanelDragging);
+    const startPanel = { x: panel.x, y: panel.y, width: panel.width, height: panel.height };
+    const config = PANEL_TYPES[panel.type] || {};
+    const minW = config.minWidth || 200;
+    const minH = config.minHeight || 150;
+    const handleMove = (ev) => {
+      const zoom = canvasZoomRef.current;
+      const dx = (ev.clientX - startX) / zoom;
+      const dy = (ev.clientY - startY) / zoom;
+      setPanels(prev => prev.map(p => {
+        if (p.id !== panelId) return p;
+        let { x, y, width, height } = startPanel;
+        if (direction.includes('e')) width = Math.max(minW, width + dx);
+        if (direction.includes('s')) height = Math.max(minH, height + dy);
+        if (direction.includes('w')) { const nw = Math.max(minW, width - dx); x += width - nw; width = nw; }
+        if (direction.includes('n')) { const nh = Math.max(minH, height - dy); y += height - nh; height = nh; }
+        return { ...p, x, y, width, height };
+      }));
     };
-    const handleMouseUp = () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+    const handleUp = () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
       isResizingRef.current = false;
+      if (panelEl) panelEl.classList.remove(styles.canvasPanelDragging);
     };
-    document.body.style.cursor = 'col-resize';
+    document.body.style.cursor = `${direction}-resize`;
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  }, [panels]);
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+  }, [bringToFront]);
+
+  // ── Canvas: pan (drag background) ──
+  const handleCanvasMouseDown = useCallback((e) => {
+    if (e.target !== canvasRef.current) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startOffset = { ...canvasOffsetRef.current };
+    const handleMove = (ev) => {
+      setCanvasOffset({
+        x: startOffset.x + (ev.clientX - startX),
+        y: startOffset.y + (ev.clientY - startY),
+      });
+    };
+    const handleUp = () => {
+      document.removeEventListener('mousemove', handleMove);
+      document.removeEventListener('mouseup', handleUp);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'grabbing';
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+  }, []);
+
+  // ── Canvas: zoom (wheel/pinch) ──
+  const handleCanvasWheel = useCallback((e) => {
+    // Let scroll events pass through to scrollable panel content
+    const isZoom = e.ctrlKey || e.metaKey;
+    if (!isZoom) {
+      // Check if the event target is inside a scrollable element within a panel
+      let el = e.target;
+      while (el && el !== canvasRef.current) {
+        if (el.dataset && el.dataset.panelId != null) break; // reached panel root
+        const { overflowY, overflowX } = window.getComputedStyle(el);
+        const canScrollY = (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+        const canScrollX = (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth;
+        if (canScrollY || canScrollX) {
+          // Check if there's actually room to scroll in the direction the user is scrolling
+          const atTop = el.scrollTop <= 0 && e.deltaY < 0;
+          const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 1 && e.deltaY > 0;
+          const atLeft = el.scrollLeft <= 0 && e.deltaX < 0;
+          const atRight = el.scrollLeft + el.clientWidth >= el.scrollWidth - 1 && e.deltaX > 0;
+          const vertBlocked = !canScrollY || atTop || atBottom;
+          const horizBlocked = !canScrollX || atLeft || atRight;
+          // If there's room to scroll, let the browser handle it
+          if (!vertBlocked || !horizBlocked) return;
+        }
+        el = el.parentElement;
+      }
+    }
+    e.preventDefault();
+    const rect = canvasRef.current.getBoundingClientRect();
+    if (isZoom) {
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const delta = -e.deltaY;
+      const zoomFactor = delta > 0 ? 1.08 : 1 / 1.08;
+      const currentZoom = canvasZoomRef.current;
+      const newZoom = Math.min(3, Math.max(0.1, currentZoom * zoomFactor));
+      const scale = newZoom / currentZoom;
+      const currentOffset = canvasOffsetRef.current;
+      setCanvasZoom(newZoom);
+      setCanvasOffset({
+        x: mouseX - (mouseX - currentOffset.x) * scale,
+        y: mouseY - (mouseY - currentOffset.y) * scale,
+      });
+    } else {
+      setCanvasOffset(prev => ({
+        x: prev.x - e.deltaX,
+        y: prev.y - e.deltaY,
+      }));
+    }
+  }, []);
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    el.addEventListener('wheel', handleCanvasWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleCanvasWheel);
+  }, [handleCanvasWheel]);
+
+  // ── Canvas: zoom helper (zoom toward viewport center) ──
+  const zoomTo = useCallback((factor) => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const currentZoom = canvasZoomRef.current;
+    const currentOffset = canvasOffsetRef.current;
+    const newZoom = Math.min(3, Math.max(0.1, currentZoom * factor));
+    const scale = newZoom / currentZoom;
+    setCanvasZoom(newZoom);
+    setCanvasOffset({
+      x: cx - (cx - currentOffset.x) * scale,
+      y: cy - (cy - currentOffset.y) * scale,
+    });
+  }, []);
+
+  // ── Canvas: fit all panels to view ──
+  const fitToView = useCallback(() => {
+    const current = panelsRef.current;
+    if (current.length === 0) return;
+    const el = canvasRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    current.forEach(p => {
+      minX = Math.min(minX, p.x);
+      minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + p.width);
+      maxY = Math.max(maxY, p.y + p.height);
+    });
+    const padding = 60;
+    const contentW = maxX - minX;
+    const contentH = maxY - minY;
+    const zoomX = (rect.width - padding * 2) / contentW;
+    const zoomY = (rect.height - padding * 2) / contentH;
+    const newZoom = Math.min(1.5, Math.min(zoomX, zoomY));
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    setCanvasZoom(newZoom);
+    setCanvasOffset({
+      x: rect.width / 2 - centerX * newZoom,
+      y: rect.height / 2 - centerY * newZoom,
+    });
+  }, []);
 
   // ── Activity bar handler ──
   const handleActivityClick = useCallback((panel) => {
@@ -451,14 +615,14 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); togglePanel('files'); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); togglePanel('chat'); }
       if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); togglePanel('terminal'); }
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') {
-        e.preventDefault();
-        setShowSettings(v => !v);
-      }
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setShowSettings(v => !v); }
+      if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomTo(1.2); }
+      if ((e.metaKey || e.ctrlKey) && e.key === '-') { e.preventDefault(); zoomTo(1 / 1.2); }
+      if ((e.metaKey || e.ctrlKey) && e.key === '0') { e.preventDefault(); fitToView(); }
     }
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, handleSaveFile, togglePanel]);
+  }, [activeTab, handleSaveFile, togglePanel, zoomTo, fitToView]);
 
   // ── Start command ──
   useEffect(() => {
@@ -541,8 +705,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, []);
 
   // ── Panel content renderer ──
-  // Returns { header: 'panelHeader' | 'own', content: JSX, headerActions?: JSX }
-  // Panels with complex headers (terminal, chat, editor) manage their own header and receive drag props
   const renderPanelContent = (panel, dragProps) => {
     switch (panel.type) {
       case 'files':
@@ -602,7 +764,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             </div>
           ),
         };
-
 
       case 'workflows':
         return {
@@ -680,8 +841,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     })
     .map(([type, config]) => ({ type, ...config }));
 
-  // ── Determine which activity bar panels are open (exclude closing ones) ──
-  const openPanelTypes = new Set(panels.map(p => p.type));
+  // ── Determine which activity bar panels are open ──
+  const openPanelTypes = new Set(panels.filter(p => !closingPanelIds.has(p.id)).map(p => p.type));
 
   return (
     <div className={styles.root}>
@@ -707,7 +868,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         />
       </div>
 
-      {/* ── Right Column: titlebar + panels ── */}
+      {/* ── Right Column: titlebar + canvas ── */}
       <div className={styles.rightColumn}>
         {/* ── Titlebar ── */}
         <div className={`${styles.titlebar} titlebar-drag`}>
@@ -768,6 +929,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 title="Add panel"
               >
                 <FiPlus size={16} />
+                <span>Add Panel</span>
               </button>
               {showAddPanel && (
                 <div className={styles.addPanelDropdown}>
@@ -826,76 +988,70 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             </div>
           )}
 
-          {/* Panels */}
-          <div ref={panelStripRef} className={styles.panelStrip} style={{ display: showSettings ? 'none' : 'flex' }}>
-            {panels.map((panel, index) => {
-              const config = PANEL_TYPES[panel.type] || {};
-              const isFlex = !!config.flex;
-              const Icon = config.icon;
-              const isDragOver = dragOverPanelIndex === index && dragPanelIndex !== index;
-              const isFlexLike = isFlex;
+          {/* Canvas workspace */}
+          <div
+            ref={canvasRef}
+            className={`${styles.canvas} ${showSettings ? styles.canvasHidden : ''}`}
+            onMouseDown={handleCanvasMouseDown}
+          >
+            <div
+              className={styles.canvasTransform}
+              style={{ transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${canvasZoom})` }}
+            >
+              {panels.map((panel) => {
+                const config = PANEL_TYPES[panel.type] || {};
+                const Icon = config.icon;
+                const dragProps = {
+                  onMouseDown: (e) => handlePanelDrag(e, panel.id),
+                };
+                const rendered = renderPanelContent(panel, dragProps);
 
-              const dragProps = {
-                onDragStart: (e) => handlePanelDragStart(e, index),
-                onDragEnd: handlePanelDragEnd,
-                onDragOver: () => handlePanelDragOver(index),
-                onDrop: () => handlePanelDrop(index),
-                isDragOver,
-              };
-
-              const rendered = renderPanelContent(panel, dragProps);
-
-              const panelStyle = {
-                width: isFlexLike ? undefined : panel.width,
-                flex: isFlexLike ? '1 1 0' : '0 0 auto',
-                minWidth: config.minWidth || 80,
-              };
-
-              return (
-                <React.Fragment key={panel.id}>
+                return (
                   <div
+                    key={panel.id}
                     data-panel-id={panel.id}
-                    className={[
-                      styles.panelSlot,
-                      dragPanelIndex === index ? styles.panelSlotDragging : '',
-                    ].filter(Boolean).join(' ')}
-                    style={panelStyle}
+                    className={`${styles.canvasPanel}${closingPanelIds.has(panel.id) ? ` ${styles.canvasPanelClosing}` : ''}`}
+                    style={{
+                      left: panel.x,
+                      top: panel.y,
+                      width: panel.width,
+                      height: panel.height,
+                      zIndex: panel.zIndex,
+                    }}
+                    onMouseDown={() => bringToFront(panel.id)}
                   >
                     {rendered.header === 'panelHeader' && (
                       <PanelHeader
                         title={config.title || panel.type}
                         icon={Icon}
                         onClose={() => removePanel(panel.id)}
-                        onDragStart={dragProps.onDragStart}
-                        onDragEnd={dragProps.onDragEnd}
-                        onDragOver={dragProps.onDragOver}
-                        onDrop={dragProps.onDrop}
-                        isDragOver={isDragOver}
+                        onMouseDown={dragProps.onMouseDown}
                       >
                         {rendered.headerActions}
                       </PanelHeader>
                     )}
-                    <div className={styles.panelContent}>
-                      {rendered.content}
-                    </div>
+                    {rendered.header === 'own' ? (
+                      rendered.content
+                    ) : (
+                      <div className={styles.panelContent}>
+                        {rendered.content}
+                      </div>
+                    )}
+                    {RESIZE_DIRS.map(dir => (
+                      <div
+                        key={dir}
+                        className={`${styles.resizeHandle} ${styles['resize' + dir.charAt(0).toUpperCase() + dir.slice(1)]}`}
+                        onMouseDown={(e) => handlePanelResize(e, panel.id, dir)}
+                      />
+                    ))}
                   </div>
-                  {index < panels.length - 1 && (
-                    <div
-                      className={styles.panelResizeHandle}
-                      onMouseDown={(e) => handlePanelResize(e, index)}
-                    />
-                  )}
-                  {index === panels.length - 1 && !isFlex && (
-                    <div
-                      className={styles.panelResizeHandle}
-                      onMouseDown={(e) => handlePanelResize(e, index, true)}
-                    />
-                  )}
-                </React.Fragment>
-              );
-            })}
+                );
+              })}
+            </div>
+
+            {/* Empty canvas state */}
             {panels.length === 0 && (
-              <div className={styles.emptyMain}>
+              <div className={styles.emptyCanvas}>
                 <img
                   src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
                   alt="Foundry"
@@ -910,6 +1066,21 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 </div>
               </div>
             )}
+
+            {/* Zoom controls */}
+            <div className={styles.zoomControls}>
+              <button className={styles.zoomBtn} onClick={() => zoomTo(1 / 1.2)} title="Zoom out (⌘-)">
+                <FiMinus size={14} />
+              </button>
+              <span className={styles.zoomLabel} onClick={() => { setCanvasZoom(1); canvasZoomRef.current = 1; }} title="Reset zoom to 100%">{Math.round(canvasZoom * 100)}%</span>
+              <button className={styles.zoomBtn} onClick={() => zoomTo(1.2)} title="Zoom in (⌘+)">
+                <FiPlus size={14} />
+              </button>
+              <div className={styles.zoomDivider} />
+              <button className={styles.zoomBtn} onClick={fitToView} title="Fit to view (⌘0)">
+                <FiMaximize2 size={13} />
+              </button>
+            </div>
           </div>
         </div>
       </div>
