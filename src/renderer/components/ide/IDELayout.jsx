@@ -51,7 +51,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [showAddPanel, setShowAddPanel] = useState(false);
   const addPanelRef = useRef(null);
   const isResizingRef = useRef(false);
-  const dragCleanupRef = useRef(null);
+  const dragAbortRef = useRef(null);
   const [closingPanelIds, setClosingPanelIds] = useState(new Set());
 
   useEffect(() => { panelsRef.current = panels; }, [panels]);
@@ -393,14 +393,27 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     setPanels(prev => prev.map(p => p.id === panelId ? { ...p, zIndex: z } : p));
   }, []);
 
+  // ── Canvas: abort any active drag/resize/pan operation ──
+  const abortActiveDrag = useCallback(() => {
+    if (dragAbortRef.current) {
+      dragAbortRef.current.abort();
+      dragAbortRef.current = null;
+    }
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+    isResizingRef.current = false;
+    document.querySelectorAll(`.${styles.canvasPanelDragging}`).forEach(el =>
+      el.classList.remove(styles.canvasPanelDragging)
+    );
+  }, []);
+
   // ── Canvas: panel drag (move) ──
   const handlePanelDrag = useCallback((e, panelId) => {
     if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select') || e.target.closest('textarea')) return;
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
-    // Clean up any stale drag/resize listeners from a previous operation
-    if (dragCleanupRef.current) { dragCleanupRef.current(); dragCleanupRef.current = null; }
+    abortActiveDrag();
     bringToFront(panelId);
     const startX = e.clientX;
     const startY = e.clientY;
@@ -410,6 +423,9 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const startPanelY = panel.y;
     const panelEl = document.querySelector(`[data-panel-id="${panelId}"]`);
     if (panelEl) panelEl.classList.add(styles.canvasPanelDragging);
+    const controller = new AbortController();
+    dragAbortRef.current = controller;
+    const opts = { signal: controller.signal };
     const handleMove = (ev) => {
       const dx = (ev.clientX - startX) / canvasZoomRef.current;
       const dy = (ev.clientY - startY) / canvasZoomRef.current;
@@ -417,28 +433,21 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         p.id === panelId ? { ...p, x: startPanelX + dx, y: startPanelY + dy } : p
       ));
     };
-    const cleanup = () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', cleanup);
-      window.removeEventListener('blur', cleanup);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      if (panelEl) panelEl.classList.remove(styles.canvasPanelDragging);
-      if (dragCleanupRef.current === cleanup) dragCleanupRef.current = null;
+    const finish = () => {
+      abortActiveDrag();
     };
-    dragCleanupRef.current = cleanup;
     document.body.style.cursor = 'grabbing';
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', cleanup);
-    window.addEventListener('blur', cleanup);
-  }, [bringToFront]);
+    document.addEventListener('mousemove', handleMove, opts);
+    document.addEventListener('mouseup', finish, opts);
+    window.addEventListener('blur', finish, opts);
+  }, [bringToFront, abortActiveDrag]);
 
   // ── Canvas: panel resize ──
   const handlePanelResize = useCallback((e, panelId, direction) => {
     e.stopPropagation();
     e.preventDefault();
-    if (dragCleanupRef.current) { dragCleanupRef.current(); dragCleanupRef.current = null; }
+    abortActiveDrag();
     bringToFront(panelId);
     isResizingRef.current = true;
     const startX = e.clientX;
@@ -451,6 +460,9 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const config = PANEL_TYPES[panel.type] || {};
     const minW = config.minWidth || 200;
     const minH = config.minHeight || 150;
+    const controller = new AbortController();
+    dragAbortRef.current = controller;
+    const opts = { signal: controller.signal };
     const handleMove = (ev) => {
       const zoom = canvasZoomRef.current;
       const dx = (ev.clientX - startX) / zoom;
@@ -465,52 +477,42 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         return { ...p, x, y, width, height };
       }));
     };
-    const cleanup = () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', cleanup);
-      window.removeEventListener('blur', cleanup);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      isResizingRef.current = false;
-      if (panelEl) panelEl.classList.remove(styles.canvasPanelDragging);
-      if (dragCleanupRef.current === cleanup) dragCleanupRef.current = null;
+    const finish = () => {
+      abortActiveDrag();
     };
-    dragCleanupRef.current = cleanup;
     document.body.style.cursor = `${direction}-resize`;
     document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', cleanup);
-    window.addEventListener('blur', cleanup);
-  }, [bringToFront]);
+    document.addEventListener('mousemove', handleMove, opts);
+    document.addEventListener('mouseup', finish, opts);
+    window.addEventListener('blur', finish, opts);
+  }, [bringToFront, abortActiveDrag]);
 
   // ── Canvas: pan (drag background) ──
   const handleCanvasMouseDown = useCallback((e) => {
     if (e.target !== canvasRef.current) return;
     if (e.button !== 0) return;
     e.preventDefault();
-    if (dragCleanupRef.current) { dragCleanupRef.current(); dragCleanupRef.current = null; }
+    abortActiveDrag();
     const startX = e.clientX;
     const startY = e.clientY;
     const startOffset = { ...canvasOffsetRef.current };
+    const controller = new AbortController();
+    dragAbortRef.current = controller;
+    const opts = { signal: controller.signal };
     const handleMove = (ev) => {
       setCanvasOffset({
         x: startOffset.x + (ev.clientX - startX),
         y: startOffset.y + (ev.clientY - startY),
       });
     };
-    const cleanup = () => {
-      document.removeEventListener('mousemove', handleMove);
-      document.removeEventListener('mouseup', cleanup);
-      window.removeEventListener('blur', cleanup);
-      document.body.style.cursor = '';
-      if (dragCleanupRef.current === cleanup) dragCleanupRef.current = null;
+    const finish = () => {
+      abortActiveDrag();
     };
-    dragCleanupRef.current = cleanup;
     document.body.style.cursor = 'grabbing';
-    document.addEventListener('mousemove', handleMove);
-    document.addEventListener('mouseup', cleanup);
-    window.addEventListener('blur', cleanup);
-  }, []);
+    document.addEventListener('mousemove', handleMove, opts);
+    document.addEventListener('mouseup', finish, opts);
+    window.addEventListener('blur', finish, opts);
+  }, [abortActiveDrag]);
 
   // ── Canvas: zoom (wheel/pinch) ──
   const handleCanvasWheel = useCallback((e) => {
