@@ -2334,31 +2334,57 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     return { success: true };
   });
 
-  // Fetch real model IDs by querying the CLI — returns resolved model names
+  // Fetch available models from Anthropic /v1/models API — auto-discovers new models.
+  // NOTE: Anthropic's /v1/models endpoint explicitly rejects subscription OAuth tokens
+  // ("OAuth authentication is currently not supported"). Only API keys work.
+  // Priority: (1) saved API key in settings, (2) ANTHROPIC_API_KEY env var.
+  // Subscription-only users without an API key get { models: null, requiresApiKey: true }.
   ipcMain.handle('claude:fetchModels', async () => {
-    const claudeBin = await resolveClaudeBinary();
-    if (!claudeBin) return { models: null, error: 'CLI not found' };
+    const apiKey = getSetting('claude_api_key') || process.env.ANTHROPIC_API_KEY || '';
+    if (!apiKey) {
+      console.warn('[fetchModels] No API key available. Anthropic /v1/models rejects subscription OAuth tokens. Add an API key in Settings → Providers to enable dynamic model discovery.');
+      return { models: null, requiresApiKey: true };
+    }
 
-    // Query each alias in parallel using async exec — never block the main thread
-    const aliases = ['sonnet', 'opus', 'haiku'];
-    const settled = await Promise.allSettled(aliases.map(async (alias) => {
-      const { stdout } = await execAsync(
-        `"${claudeBin}" -p "hi" --output-format stream-json --verbose --model ${alias} --max-turns 1 --no-session-persistence 2>/dev/null | head -1`,
-        { encoding: 'utf8', timeout: 30000, shell: true }
-      );
-      const trimmed = stdout.trim();
-      if (trimmed) {
-        const data = JSON.parse(trimmed);
-        if (data.model) return { alias, resolvedId: data.model };
+    const TIER_DESC = { opus: 'Most capable', sonnet: 'Balanced', haiku: 'Fastest' };
+
+    function parseModelsResponse(data) {
+      return (data.data || [])
+        .filter(m => m.id && m.id.startsWith('claude-'))
+        .map(m => {
+          const tierMatch = m.id.match(/claude-(opus|sonnet|haiku)/);
+          const tier = tierMatch ? tierMatch[1] : null;
+          const label = (m.display_name || m.id).replace(/^Claude\s+/i, '');
+          return {
+            id: m.id,
+            resolvedId: m.id,
+            label,
+            desc: TIER_DESC[tier] || '',
+            supportsThinking: Boolean(tier) && /claude-(opus|sonnet)-[4-9]/.test(m.id),
+          };
+        });
+    }
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/models?limit=100', {
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+      });
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '');
+        console.error('[fetchModels] fetch failed:', resp.status, body);
+        return { models: null, error: `HTTP ${resp.status}` };
       }
-      return null;
-    }));
-
-    const results = settled
-      .filter(s => s.status === 'fulfilled' && s.value)
-      .map(s => s.value);
-
-    return { models: results };
+      const data = await resp.json();
+      const models = parseModelsResponse(data);
+      if (!models.length) return { models: null, error: 'Empty model list' };
+      return { models };
+    } catch (err) {
+      console.error('[fetchModels] fetch error:', err.message);
+      return { models: null, error: err.message };
+    }
   });
 
   // ---- Chat Threads & Messages ---- //

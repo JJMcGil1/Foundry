@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { FiCheck, FiEye, FiEyeOff, FiExternalLink, FiAlertCircle, FiCpu, FiKey, FiRefreshCw, FiLogOut, FiLock, FiChevronDown } from 'react-icons/fi';
-import { CLAUDE_MODELS_DEFAULT } from './settingsUtils';
+import { CLAUDE_MODELS_DEFAULT, LEGACY_ALIAS_MAP } from './settingsUtils';
 import styles from '../SettingsPage.module.css';
 
 export default function ProvidersSection({ isActive }) {
@@ -14,10 +14,11 @@ export default function ProvidersSection({ isActive }) {
   const [claudeKeySaved, setClaudeKeySaved] = useState(false);
   const [claudeDetecting, setClaudeDetecting] = useState(false);
   const [autoApprovePermissions, setAutoApprovePermissions] = useState(true);
-  const [selectedModel, setSelectedModel] = useState('sonnet');
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [claudeModels, setClaudeModels] = useState(CLAUDE_MODELS_DEFAULT);
   const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsRequireApiKey, setModelsRequireApiKey] = useState(false);
 
   const providersLoadedRef = useRef(false);
 
@@ -34,13 +35,13 @@ export default function ProvidersSection({ isActive }) {
         setClaudeApiKeyInitial(apiKey);
         setClaudeKeyValid(true);
       }
-      if (model) setSelectedModel(model);
+      if (model) setSelectedModel(LEGACY_ALIAS_MAP[model] || model);
       setAutoApprovePermissions(autoApproveRaw === null || autoApproveRaw === undefined || autoApproveRaw === 'true');
     }
     preload();
   }, []);
 
-  // Heavy detection runs AFTER the tab is visible
+  // Heavy detection (auth status) runs once after tab is first visible
   useEffect(() => {
     if (!isActive || providersLoadedRef.current) return;
     providersLoadedRef.current = true;
@@ -49,17 +50,20 @@ export default function ProvidersSection({ isActive }) {
     window.foundry?.claudeDetectAuth().then(result => {
       if (result) setClaudeCliStatus(result);
     }).catch(() => {}).finally(() => setClaudeDetecting(false));
+  }, [isActive]);
 
+  // Model discovery re-runs every time the tab becomes active so new models are picked up
+  useEffect(() => {
+    if (!isActive) return;
     setModelsLoading(true);
+    setModelsRequireApiKey(false);
     window.foundry?.claudeFetchModels().then(result => {
       if (result?.models?.length) {
-        setClaudeModels(prev => prev.map(m => {
-          const match = result.models.find(r => r.alias === m.id);
-          if (match) {
-            return { ...m, resolvedId: match.resolvedId };
-          }
-          return m;
-        }));
+        setClaudeModels(result.models);
+        setModelsRequireApiKey(false);
+        try { localStorage.setItem('claude_models_cache', JSON.stringify(result.models)); } catch { /* ignore */ }
+      } else if (result?.requiresApiKey) {
+        setModelsRequireApiKey(true);
       }
     }).catch(() => {}).finally(() => setModelsLoading(false));
   }, [isActive]);
@@ -336,6 +340,11 @@ export default function ProvidersSection({ isActive }) {
                 </div>
               )}
             </div>
+            {!modelsLoading && modelsRequireApiKey && (
+              <p style={{ margin: '8px 0 0', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                Add an API key above to enable live model discovery. Subscription-only accounts use a built-in model list.
+              </p>
+            )}
           </div>
         )}
       </div>

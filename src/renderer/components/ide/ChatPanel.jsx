@@ -9,6 +9,7 @@ import UserMessage from './chat/UserMessage';
 import AgentMessage from './chat/AgentMessage';
 import ChatInput from './chat/ChatInput';
 import ChatEmptyState from './chat/ChatEmptyState';
+import { CLAUDE_MODELS_DEFAULT, LEGACY_ALIAS_MAP } from './settings/settingsUtils';
 import chatCompleteSound from '../../assets/sounds/chat-complete.mp3';
 
 let streamIdCounter = 0;
@@ -37,7 +38,19 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   const [currentStreamId, setCurrentStreamId] = useState(null);
   const [hasProvider, setHasProvider] = useState(null);
   const [modelLabel, setModelLabel] = useState('Sonnet 4.6');
-  const [modelKey, setModelKey] = useState('sonnet');
+  const [modelKey, setModelKey] = useState('claude-sonnet-4-6');
+  const [modelOptions, setModelOptions] = useState(() => {
+    try {
+      const cached = localStorage.getItem('claude_models_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        // Invalidate old caches that were missing claude-opus-4-7
+        if (parsed?.length && parsed.some(m => m.id === 'claude-opus-4-7')) return parsed;
+        localStorage.removeItem('claude_models_cache');
+      }
+    } catch { /* ignore */ }
+    return CLAUDE_MODELS_DEFAULT;
+  });
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [thinkingLevel, setThinkingLevel] = useState('medium');
   const [error, setError] = useState(null);
@@ -243,13 +256,38 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
           reconnectRef.current = null;
           const m = await window.foundry?.claudeGetModel();
           if (m) {
-            const labels = { 'sonnet': 'Sonnet 4.6', 'opus': 'Opus 4.6', 'haiku': 'Haiku 4.5' };
-            setModelLabel(labels[m] || m);
-            setModelKey(m);
+            const resolvedKey = LEGACY_ALIAS_MAP[m] || m;
+            setModelKey(resolvedKey);
+            setModelOptions(prev => {
+              const match = prev.find(opt => opt.id === resolvedKey);
+              setModelLabel(match?.label || resolvedKey);
+              return prev;
+            });
           }
+          fetchModelOptions();
         }
       } catch { /* keep retrying until max attempts */ }
     }, 3000);
+  }, []);
+
+  // Fetch available models from the API and update modelOptions state.
+  // On success, persists the list to settings so next startup shows real models, not the hardcoded fallback.
+  const fetchModelOptions = useCallback(async () => {
+    try {
+      const result = await window.foundry?.claudeFetchModels();
+      if (result?.models?.length) {
+        setModelOptions(result.models);
+        try { localStorage.setItem('claude_models_cache', JSON.stringify(result.models)); } catch { /* ignore */ }
+        setModelKey(prev => {
+          const resolved = LEGACY_ALIAS_MAP[prev] || prev;
+          const match = result.models.find(m => m.id === resolved);
+          if (match) setModelLabel(match.label);
+          return resolved;
+        });
+      }
+    } catch (err) {
+      console.warn('[fetchModelOptions] failed:', err);
+    }
   }, []);
 
   const checkProvider = useCallback(async () => {
@@ -262,25 +300,31 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       const connected = !!tokenResult?.token;
       setHasProvider(connected);
       if (modelResult) {
-        const labels = { 'sonnet': 'Sonnet 4.6', 'opus': 'Opus 4.6', 'haiku': 'Haiku 4.5' };
-        setModelLabel(labels[modelResult] || modelResult);
-        setModelKey(modelResult);
+        // Migrate legacy short aliases to full model IDs; use cached model list for label lookup
+        const resolvedKey = LEGACY_ALIAS_MAP[modelResult] || modelResult;
+        let knownModels = CLAUDE_MODELS_DEFAULT;
+        try { const c = localStorage.getItem('claude_models_cache'); if (c) { const p = JSON.parse(c); if (p?.length) knownModels = p; } } catch { /* ignore */ }
+        const match = knownModels.find(m => m.id === resolvedKey);
+        setModelLabel(match?.label || resolvedKey);
+        setModelKey(resolvedKey);
       }
       if (thinkingResult) {
         setThinkingLevel(thinkingResult);
       }
-      if (connected && reconnectRef.current) {
-        clearInterval(reconnectRef.current);
-        reconnectRef.current = null;
-      }
-      if (!connected) {
+      if (connected) {
+        if (reconnectRef.current) {
+          clearInterval(reconnectRef.current);
+          reconnectRef.current = null;
+        }
+        fetchModelOptions();
+      } else {
         startReconnectLoop();
       }
     } catch {
       setHasProvider(false);
       startReconnectLoop();
     }
-  }, [startReconnectLoop]);
+  }, [startReconnectLoop, fetchModelOptions]);
 
   useEffect(() => {
     checkProvider();
@@ -315,13 +359,16 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   }, [showModelDropdown, showThreadList]);
 
   // ---- Model switch ---- //
-  const handleModelSwitch = async (key) => {
-    const labels = { 'sonnet': 'Sonnet 4.6', 'opus': 'Opus 4.6', 'haiku': 'Haiku 4.5' };
-    setModelKey(key);
-    setModelLabel(labels[key] || key);
+  const handleModelSwitch = async (id) => {
+    setModelKey(id);
+    setModelOptions(prev => {
+      const match = prev.find(m => m.id === id);
+      setModelLabel(match?.label || id);
+      return prev;
+    });
     setShowModelDropdown(false);
     try {
-      await window.foundry?.claudeSetModel(key);
+      await window.foundry?.claudeSetModel(id);
     } catch { /* silent */ }
   };
 
@@ -638,8 +685,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     const streamId = `stream-${++streamIdCounter}-${Date.now()}`;
     setStreamId(streamId);
 
-    let model;
-    try { model = await window.foundry?.claudeGetModel(); } catch { /* default */ }
+    const model = modelKey;
 
     // Resolve thinking budget from current level
     let thinkingBudget;
@@ -656,7 +702,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         mediaType: img.mediaType,
         name: img.name,
       })) : undefined,
-      model: model || 'sonnet',
+      model: model || 'claude-sonnet-4-6',
       streamId,
       workspacePath: projectPath || null,
       thinkingBudget,
@@ -827,6 +873,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         hasProvider={hasProvider}
         modelLabel={modelLabel}
         modelKey={modelKey}
+        modelOptions={modelOptions}
         showModelDropdown={showModelDropdown}
         setShowModelDropdown={setShowModelDropdown}
         onSend={handleSend}

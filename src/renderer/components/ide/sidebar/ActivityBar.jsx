@@ -7,7 +7,7 @@ const panels = [
   { id: 'chat',      icon: FiMessageSquare,  label: 'Chat',           size: 20 },
   { id: 'git',       icon: VscSourceControl, label: 'Source Control',  size: 24 },
   { id: 'terminal',  icon: FiTerminal,       label: 'Terminal',       size: 20 },
-  { id: 'workflows', icon: FiGithub,         label: 'Workflows',      size: 21 },
+  { id: 'workflows', icon: FiGithub,         label: 'GitHub Actions', size: 21 },
   { id: 'files',     icon: VscFiles,         label: 'Explorer',       size: 24 },
 ];
 

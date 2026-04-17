@@ -1,8 +1,9 @@
 import React, { memo, useState } from 'react';
-import { FiCpu, FiCopy, FiCheck } from 'react-icons/fi';
+import { FiCopy, FiCheck } from 'react-icons/fi';
 import { renderMarkdown } from './Markdown';
 import ThinkingBlock from './ThinkingBlock';
 import ToolUseBlock from './ToolUseBlock';
+import SageIcon from './SageIcon';
 import styles from './AgentMessage.module.css';
 
 function getMessageText(msg) {
@@ -26,8 +27,8 @@ function AgentMessage({ msg, isStreaming, isLastMsg }) {
   return (
     <div className={styles.message}>
       <div className={styles.header}>
-        <div className={styles.avatar}>
-          <FiCpu size={12} />
+        <div className={styles.avatarSage}>
+          <SageIcon size={24} glyphOnly />
         </div>
         <span className={styles.role}>Sage</span>
         <button className={styles.copyBtn} onClick={handleCopy} title="Copy message">

@@ -163,7 +163,7 @@ export default function WorkflowsPanel({ projectPath, isActive }) {
       <div className={wfStyles.container}>
         <div className={wfStyles.emptyState}>
           <span className={wfStyles.emptyText}>Not a GitHub repository</span>
-          <span className={wfStyles.emptySubtext}>Open a project with a GitHub remote to see workflows</span>
+          <span className={wfStyles.emptySubtext}>Open a project with a GitHub remote to see GitHub Actions</span>
         </div>
       </div>
     );
@@ -175,7 +175,7 @@ export default function WorkflowsPanel({ projectPath, isActive }) {
         {loading && runs.length === 0 && (
           <div className={wfStyles.loadingState}>
             <FiRefreshCw size={16} className={wfStyles.spinning} />
-            <span>Loading workflows…</span>
+            <span>Loading GitHub Actions…</span>
           </div>
         )}
 
@@ -187,7 +187,7 @@ export default function WorkflowsPanel({ projectPath, isActive }) {
 
         {!loading && !error && runs.length === 0 && (
           <div className={wfStyles.emptyState}>
-            <span className={wfStyles.emptyText}>No workflow runs</span>
+            <span className={wfStyles.emptyText}>No GitHub Actions runs</span>
             <span className={wfStyles.emptySubtext}>Push code or create a workflow to get started</span>
           </div>
         )}

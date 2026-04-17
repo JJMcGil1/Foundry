@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FiSettings, FiChevronRight } from 'react-icons/fi';
+import SageIcon from './SageIcon';
 import styles from './ChatEmptyState.module.css';
 
 function getGreeting() {
@@ -9,7 +10,14 @@ function getGreeting() {
   return 'Good evening';
 }
 
-export default function ChatEmptyState({ hasProvider, hasMessages, onOpenSettings, onSelectPrompt }) {
+function getSubtitle() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Ready to help you start the day strong.';
+  if (hour < 17) return 'What are we building together?';
+  return 'Let\'s make the most of the evening.';
+}
+
+export default function ChatEmptyState({ hasProvider, hasMessages, onOpenSettings }) {
   const [firstName, setFirstName] = useState('');
 
   useEffect(() => {
@@ -61,21 +69,13 @@ export default function ChatEmptyState({ hasProvider, hasMessages, onOpenSetting
 
     return (
       <div className={styles.emptyState}>
-        <div className={styles.heroSection}>
-          <div className={styles.sageIcon}>
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <path d="M16 2L18.5 13.5L30 16L18.5 18.5L16 30L13.5 18.5L2 16L13.5 13.5L16 2Z" fill="url(#sage-grad)" />
-              <defs>
-                <linearGradient id="sage-grad" x1="2" y1="2" x2="30" y2="30" gradientUnits="userSpaceOnUse">
-                  <stop stopColor="#FB923C" />
-                  <stop offset="1" stopColor="#F97316" />
-                </linearGradient>
-              </defs>
-            </svg>
+        <div className={styles.hero}>
+          <div className={styles.iconWrap}>
+            <SageIcon size={68} glyphOnly />
           </div>
           <h2 className={styles.greeting}>{greeting}</h2>
-          <p className={styles.subtitle}>What are we building next?</p>
-          <p className={styles.sageBadge}>Sage</p>
+          <p className={styles.subtitle}>{getSubtitle()}</p>
+          <span className={styles.agentName}>Sage</span>
         </div>
       </div>
     );

@@ -30,10 +30,11 @@ const SendIcon = ({ size = 28, active }) => (
   </svg>
 );
 
-const MODEL_OPTIONS = [
-  { key: 'opus', label: 'Opus 4.6', supportsThinking: true },
-  { key: 'sonnet', label: 'Sonnet 4.6', supportsThinking: true },
-  { key: 'haiku', label: 'Haiku 4.5', supportsThinking: false },
+const MODEL_OPTIONS_FALLBACK = [
+  { id: 'claude-opus-4-7', label: 'Opus 4.7', supportsThinking: true },
+  { id: 'claude-opus-4-6', label: 'Opus 4.6', supportsThinking: true },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', supportsThinking: true },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', supportsThinking: false },
 ];
 
 const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
@@ -60,6 +61,7 @@ const ChatInput = forwardRef(function ChatInput({
   hasProvider,
   modelLabel,
   modelKey,
+  modelOptions,
   showModelDropdown,
   setShowModelDropdown,
   onSend,
@@ -73,6 +75,7 @@ const ChatInput = forwardRef(function ChatInput({
   onRemoveQueued,
   onClearQueue,
 }, inputRef) {
+  const MODEL_OPTIONS = modelOptions || MODEL_OPTIONS_FALLBACK;
   const fileInputRef = useRef(null);
   const dropTargetRef = useRef(null);
   const [previewIndex, setPreviewIndex] = useState(null);
@@ -177,7 +180,7 @@ const ChatInput = forwardRef(function ChatInput({
     return () => document.removeEventListener('mousedown', handler);
   }, [showThinkingDropdown]);
 
-  const currentModel = MODEL_OPTIONS.find(o => o.key === modelKey) || MODEL_OPTIONS[1];
+  const currentModel = MODEL_OPTIONS.find(o => o.id === modelKey) || MODEL_OPTIONS[1] || MODEL_OPTIONS[0];
 
   const handleAttachClick = () => {
     fileInputRef.current?.click();
@@ -269,7 +272,7 @@ const ChatInput = forwardRef(function ChatInput({
                   onClick={() => { setShowModelDropdown(v => !v); setShowThinkingDropdown(false); }}
                 >
                   <ClaudeLogo size={16} />
-                  <span>{(MODEL_OPTIONS.find(o => o.key === modelKey) || MODEL_OPTIONS[1]).label}</span>
+                  <span>{(MODEL_OPTIONS.find(o => o.id === modelKey) || MODEL_OPTIONS[1] || MODEL_OPTIONS[0]).label}</span>
                   <FiChevronDown
                     size={10}
                     className={`${styles.modelBadgeChevron} ${showModelDropdown ? styles.modelBadgeChevronOpen : ''}`}
@@ -304,12 +307,12 @@ const ChatInput = forwardRef(function ChatInput({
                   >
                     {MODEL_OPTIONS.map(opt => (
                       <button
-                        key={opt.key}
-                        className={`${styles.modelOption} ${modelKey === opt.key ? styles.modelOptionActive : ''}`}
-                        onClick={() => onModelSwitch(opt.key)}
+                        key={opt.id}
+                        className={`${styles.modelOption} ${modelKey === opt.id ? styles.modelOptionActive : ''}`}
+                        onClick={() => onModelSwitch(opt.id)}
                       >
                         <span className={styles.modelOptionCheck}>
-                          {modelKey === opt.key ? <FiCheck size={12} /> : null}
+                          {modelKey === opt.id ? <FiCheck size={12} /> : null}
                         </span>
                         <ClaudeLogo size={14} />
                         <span className={styles.modelOptionLabel}>{opt.label}</span>

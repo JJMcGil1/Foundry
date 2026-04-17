@@ -4,55 +4,69 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 48px 24px;
+  padding: 48px 24px 18%;
   flex: 1;
-  gap: 32px;
 }
 
-/* ---- Hero Section ---- */
-.heroSection {
+/* ---- Hero (cardless) ---- */
+@keyframes heroIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+
+.hero {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 12px;
+  gap: 0;
+  animation: heroIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
-.sageIcon {
-  width: 56px;
-  height: 56px;
-  border-radius: 16px;
-  background: rgba(249, 115, 22, 0.08);
-  border: 1px solid rgba(249, 115, 22, 0.12);
+/* ---- Icon ---- */
+.iconWrap {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 4px;
+  margin-bottom: 32px;
+  filter:
+    drop-shadow(0 0 28px rgba(255, 138, 43, 0.5))
+    drop-shadow(0 0 10px rgba(255, 179, 71, 0.35))
+    drop-shadow(0 4px 8px rgba(180, 68, 10, 0.3));
 }
 
+/* ---- Text ---- */
 .greeting {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 26px;
+  font-weight: 650;
   color: var(--zinc-100);
-  margin: 0;
-  letter-spacing: -0.02em;
+  margin: 0 0 10px;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
 }
 
 .subtitle {
-  font-size: 13px;
-  color: var(--zinc-500);
-  margin: 0;
+  font-size: 14px;
+  color: var(--zinc-400);
+  margin: 0 0 36px;
   line-height: 1.5;
+  letter-spacing: -0.01em;
 }
 
-/* ---- Sage Badge ---- */
-.sageBadge {
+.agentName {
   font-size: 10px;
   font-weight: 500;
-  color: var(--primary);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  margin: 8px 0 0;
-  opacity: 0.5;
+  color: var(--zinc-600);
+}
+
+.agentName::before {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 1px;
+  background: var(--zinc-700);
+  margin: 0 auto 14px;
 }
 
 /* ---- Shared Card (Provider CTA) ---- */

@@ -179,3 +179,14 @@ export function statusColor(s) {
   };
   return map[s] || 'var(--zinc-400)';
 }
+
+export const CONFLICT_STATUS_CODES = new Set(['UU', 'AA', 'DD', 'AU', 'UA', 'DU', 'UD']);
+
+export function conflictLabel(status) {
+  const labels = {
+    'UU': 'Both Modified', 'AA': 'Both Added', 'DD': 'Both Deleted',
+    'AU': 'Added by Us', 'UA': 'Added by Them',
+    'DU': 'Deleted by Us', 'UD': 'Deleted by Them',
+  };
+  return labels[status] || 'Conflict';
+}

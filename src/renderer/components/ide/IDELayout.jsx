@@ -19,7 +19,7 @@ import foundryIconLight from '../../assets/foundry-icon-light.svg';
 const PANEL_TYPES = {
   files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
   git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 300, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
-  workflows: { title: 'Workflows',       icon: FiGithub,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
+  workflows: { title: 'GitHub Actions',       icon: FiGithub,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
   terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 600, defaultHeight: 350, minWidth: 300, minHeight: 150 },
   chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 420, defaultHeight: 600, minWidth: 280, minHeight: 300 },
   editor:    { title: 'Editor',         icon: VscFiles,          defaultWidth: 700, defaultHeight: 500, minWidth: 300, minHeight: 200, singleton: true },

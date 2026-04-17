@@ -7,7 +7,7 @@ import { IoSparkles } from 'react-icons/io5';
 import { motion, AnimatePresence } from 'framer-motion';
 import ChangeItem from './ChangeItem';
 import CommitGraph from './CommitGraph';
-import { statusColor, COMMITS_PAGE_SIZE } from './gitUtils';
+import { statusColor, COMMITS_PAGE_SIZE, CONFLICT_STATUS_CODES, conflictLabel } from './gitUtils';
 import { useToast } from '../ToastProvider';
 import ConfirmationModal from '../ConfirmationModal';
 import styles from '../Sidebar.module.css';
@@ -45,6 +45,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   const [completedSteps, setCompletedSteps] = useState(new Set());
   const [stagedOpen, setStagedOpen] = useState(true);
   const [changesOpen, setChangesOpen] = useState(true);
+  const [conflictsOpen, setConflictsOpen] = useState(true);
   // Optimistic staging state — files mid-transition
   const [optimisticStaged, setOptimisticStaged] = useState(new Set());   // paths being staged
   const [optimisticUnstaged, setOptimisticUnstaged] = useState(new Set()); // paths being unstaged
@@ -331,16 +332,20 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
 
   // Parse staged/unstaged from raw files if the main process hasn't been restarted
   // git status --porcelain: first char = index (staged), second char = working tree (unstaged)
-  const { staged, unstaged } = useMemo(() => {
-    let s, u;
+  const { staged, unstaged, conflicts } = useMemo(() => {
+    let s, u, c = [];
     if (gitStatus.staged) {
       s = [...gitStatus.staged];
       u = [...(gitStatus.unstaged || [])];
+      // If main process provides explicit conflicts list, use it
+      if (gitStatus.conflicts) c = [...gitStatus.conflicts];
     } else {
       s = []; u = [];
       for (const f of (gitStatus.files || [])) {
         const raw = f.status;
-        if (raw === '??') {
+        if (CONFLICT_STATUS_CODES.has(raw)) {
+          c.push({ status: raw, path: f.path, label: conflictLabel(raw) });
+        } else if (raw === '??') {
           u.push({ status: 'U', path: f.path });
         } else if (raw.length === 2) {
           if (raw[0] !== ' ') s.push({ status: raw[0], path: f.path });
@@ -365,7 +370,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
         if (!u.find(uf => uf.path === f.path)) u.push(f);
       }
     }
-    return { staged: s, unstaged: u };
+    return { staged: s, unstaged: u, conflicts: c };
   }, [gitStatus, optimisticStaged, optimisticUnstaged]);
 
   return (
@@ -453,100 +458,123 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
       )}
 
       <div className={styles.changesScrollArea}>
-        <AnimatePresence initial={false}>
-          {staged.length > 0 && (
-            <motion.div
-              key="staged-section"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
-              style={{ overflow: 'hidden' }}
-            >
-              <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setStagedOpen(!stagedOpen)}>
-                <motion.span
-                  className={styles.sectionChevron}
-                  animate={{ rotate: stagedOpen ? 90 : 0 }}
-                  transition={{ duration: 0.14, ease: [0.25, 0.1, 0.25, 1] }}
-                >
+        {conflicts.length > 0 && (
+          <div>
+            <div className={styles.sectionLabel}>
+              <div className={styles.sectionLabelLeft} onClick={() => setConflictsOpen(o => !o)}>
+                <span className={styles.sectionChevron} style={{ transform: `rotate(${conflictsOpen ? 90 : 0}deg)` }}>
                   <FiChevronRight size={14} />
-                </motion.span>
-                <span>Staged Changes</span>
-                <div className={styles.sectionActions}>
-                  <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleUnstageAll(staged); }} title="Unstage All">
-                    <FiMinus size={13} />
-                  </button>
-                  <span className={styles.badge}>{staged.length}</span>
-                </div>
+                </span>
+                <span style={{ color: '#E06C75' }}>Merge Conflicts</span>
               </div>
-              <AnimatePresence initial={false}>
-                {stagedOpen && (
-                  <motion.div
-                    className={styles.changesList}
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
-                    style={{ overflow: 'hidden' }}
-                  >
-                    <AnimatePresence initial={false}>
-                      {staged.map((f, i) => (
-                        <ChangeItem key={f.path} f={f} index={i} staged onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
-                      ))}
-                    </AnimatePresence>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div className={styles.sectionLabel} role="button" tabIndex={0} onClick={() => setChangesOpen(!changesOpen)}>
-          <motion.span
-            className={styles.sectionChevron}
-            animate={{ rotate: changesOpen ? 90 : 0 }}
-            transition={{ duration: 0.12, ease: 'easeOut' }}
-          >
-            <FiChevronRight size={14} />
-          </motion.span>
-          <span>Changes</span>
-          <div className={styles.sectionActions}>
-            {unstaged.length > 0 && (
-              <>
-                <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleDiscardAll(unstaged); }} title="Discard All Changes">
-                  <FiRotateCcw size={13} />
-                </button>
-                <button className={styles.changeActionBtn} onClick={(e) => { e.stopPropagation(); handleStageAll(unstaged); }} title="Stage All">
-                  <FiPlus size={13} />
-                </button>
-              </>
-            )}
-            {unstaged.length > 0 && <span className={styles.badge}>{unstaged.length}</span>}
-          </div>
-        </div>
-        <AnimatePresence initial={false}>
-          {changesOpen && (
-            <motion.div
-              className={styles.changesList}
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: 0.18, ease: [0.25, 0.1, 0.25, 1] }}
-              style={{ overflow: 'hidden' }}
-            >
-              <AnimatePresence initial={false}>
-                {unstaged.map((f, i) => (
-                  <ChangeItem key={f.path} f={f} index={i} onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
-                ))}
-              </AnimatePresence>
-              {unstaged.length === 0 && staged.length === 0 && (
-                <div className={styles.emptyState} style={{ padding: '16px' }}>
-                  <span className={styles.emptyText}>Working tree clean</span>
-                </div>
+              <div className={styles.sectionActions}>
+                <span className={styles.badge} style={{ color: '#E06C75', background: 'rgba(224,108,117,0.15)' }}>{conflicts.length}</span>
+              </div>
+            </div>
+            <AnimatePresence initial={false}>
+              {conflictsOpen && (
+                <motion.div
+                  key="conflicts-list"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div className={styles.changesList}>
+                    {conflicts.map((f) => (
+                      <ChangeItem key={f.path} f={f} conflict onOpen={handleOpenFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
+                    ))}
+                  </div>
+                </motion.div>
               )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+            </AnimatePresence>
+          </div>
+        )}
+
+        {staged.length > 0 && (
+          <div>
+            <div className={styles.sectionLabel}>
+              <div className={styles.sectionLabelLeft} onClick={() => setStagedOpen(o => !o)}>
+                <span className={styles.sectionChevron} style={{ transform: `rotate(${stagedOpen ? 90 : 0}deg)` }}>
+                  <FiChevronRight size={14} />
+                </span>
+                <span>Staged Changes</span>
+              </div>
+              <div className={styles.sectionActions}>
+                <button className={styles.changeActionBtn} onClick={() => handleUnstageAll(staged)} title="Unstage All">
+                  <FiMinus size={13} />
+                </button>
+                <span className={styles.badge}>{staged.length}</span>
+              </div>
+            </div>
+            <AnimatePresence initial={false}>
+              {stagedOpen && (
+                <motion.div
+                  key="staged-list"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div className={styles.changesList}>
+                    {staged.map((f) => (
+                      <ChangeItem key={f.path} f={f} staged onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
+        <div>
+          <div className={styles.sectionLabel}>
+            <div className={styles.sectionLabelLeft} onClick={() => setChangesOpen(o => !o)}>
+              <span className={styles.sectionChevron} style={{ transform: `rotate(${changesOpen ? 90 : 0}deg)` }}>
+                <FiChevronRight size={14} />
+              </span>
+              <span>Changes</span>
+            </div>
+            <div className={styles.sectionActions}>
+              {unstaged.length > 0 && (
+                <>
+                  <button className={styles.changeActionBtn} onClick={() => handleDiscardAll(unstaged)} title="Discard All Changes">
+                    <FiRotateCcw size={13} />
+                  </button>
+                  <button className={styles.changeActionBtn} onClick={() => handleStageAll(unstaged)} title="Stage All">
+                    <FiPlus size={13} />
+                  </button>
+                </>
+              )}
+              {unstaged.length > 0 && <span className={styles.badge}>{unstaged.length}</span>}
+            </div>
+          </div>
+          <AnimatePresence initial={false}>
+            {changesOpen && (
+              <motion.div
+                key="changes-list"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <div className={styles.changesList}>
+                  {unstaged.map((f) => (
+                    <ChangeItem key={f.path} f={f} onOpen={handleOpenFile} onStage={handleStageFile} onUnstage={handleUnstageFile} onDiscard={handleDiscardFile} statusColor={statusColor} isActive={activeFile === projectPath + '/' + f.path} />
+                  ))}
+                  {unstaged.length === 0 && staged.length === 0 && conflicts.length === 0 && (
+                    <div className={styles.emptyState} style={{ padding: '16px' }}>
+                      <span className={styles.emptyText}>Working tree clean</span>
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       <CommitGraph

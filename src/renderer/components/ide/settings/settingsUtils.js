@@ -9,12 +9,22 @@ export const SECTIONS = [
   { id: 'about', label: 'About', icon: FiGlobe },
 ];
 
-// Model aliases — the CLI always resolves these to the latest version
+// Fallback model list shown before dynamic discovery completes (or for subscription-only users
+// who can't use the /v1/models API — Anthropic rejects subscription OAuth tokens for that endpoint).
+// Keep this current: update when Anthropic releases new models.
 export const CLAUDE_MODELS_DEFAULT = [
-  { id: 'opus', label: 'Opus 4.6', desc: 'Most capable', resolvedId: null },
-  { id: 'sonnet', label: 'Sonnet 4.6', desc: 'Balanced', resolvedId: null },
-  { id: 'haiku', label: 'Haiku 4.5', desc: 'Fastest', resolvedId: null },
+  { id: 'claude-opus-4-7', label: 'Opus 4.7', desc: 'Most capable', resolvedId: 'claude-opus-4-7', supportsThinking: true },
+  { id: 'claude-opus-4-6', label: 'Opus 4.6', desc: 'Most capable', resolvedId: 'claude-opus-4-6', supportsThinking: true },
+  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', desc: 'Balanced', resolvedId: 'claude-sonnet-4-6', supportsThinking: true },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', desc: 'Fastest', resolvedId: 'claude-haiku-4-5-20251001', supportsThinking: false },
 ];
+
+// Legacy short aliases stored before v1.0.47 — map to canonical full model IDs
+export const LEGACY_ALIAS_MAP = {
+  'opus': 'claude-opus-4-7',
+  'sonnet': 'claude-sonnet-4-6',
+  'haiku': 'claude-haiku-4-5-20251001',
+};
 
 export const THINKING_LEVELS = [
   { key: 'off', label: 'Off', budget: 0, desc: 'No extended thinking' },

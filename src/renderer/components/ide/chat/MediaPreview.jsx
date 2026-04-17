@@ -1,4 +1,5 @@
 import React, { useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiX, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import styles from './MediaPreview.module.css';
@@ -21,7 +22,7 @@ export default function MediaPreview({ images, currentIndex, onClose, onNavigate
 
   const src = current.preview || current.url || `data:${current.mediaType};base64,${current.base64}`;
 
-  return (
+  return createPortal(
     <AnimatePresence>
       <motion.div
         className={styles.overlay}
@@ -67,6 +68,7 @@ export default function MediaPreview({ images, currentIndex, onClose, onNavigate
           </div>
         )}
       </motion.div>
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
