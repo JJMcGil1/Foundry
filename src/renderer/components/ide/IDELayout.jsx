@@ -53,9 +53,71 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const isResizingRef = useRef(false);
   const dragAbortRef = useRef(null);
   const [closingPanelIds, setClosingPanelIds] = useState(new Set());
-
+  const layoutRestoredRef = useRef(false);
+  const layoutSaveTimer = useRef(null);
 
   useEffect(() => { panelsRef.current = panels; }, [panels]);
+
+  // ── Restore saved panel layout on mount ──
+  useEffect(() => {
+    if (layoutRestoredRef.current) return;
+    layoutRestoredRef.current = true;
+    (async () => {
+      try {
+        const raw = await window.foundry?.getSetting('panel_layout');
+        if (!raw) return;
+        const saved = JSON.parse(raw);
+        if (!saved || !Array.isArray(saved.panels)) return;
+        if (saved.panels.length === 0) {
+          setPanels([]);
+          initialLayoutDone.current = true;
+          return;
+        }
+        // Re-assign IDs so they don't collide
+        const restored = saved.panels.map(p => ({
+          ...p,
+          id: makePanelId(),
+        }));
+        const maxZ = Math.max(...restored.map(p => p.zIndex || 1), 1);
+        nextZIndexRef.current = maxZ + 1;
+        setPanels(restored);
+        if (saved.canvasOffset) {
+          setCanvasOffset(saved.canvasOffset);
+          canvasOffsetRef.current = saved.canvasOffset;
+        }
+        if (saved.canvasZoom) {
+          setCanvasZoom(saved.canvasZoom);
+          canvasZoomRef.current = saved.canvasZoom;
+        }
+        // Skip the auto-center since we restored positions
+        initialLayoutDone.current = true;
+      } catch (err) {
+        console.error('[Layout] Failed to restore panel layout:', err);
+      } finally {
+        layoutSaveReady.current = true;
+      }
+    })();
+  }, []);
+
+  // ── Save panel layout on changes (debounced) ──
+  // Skip saving until restore attempt has completed to avoid overwriting saved layout
+  const layoutSaveReady = useRef(false);
+  useEffect(() => {
+    if (!layoutSaveReady.current) return;
+    clearTimeout(layoutSaveTimer.current);
+    layoutSaveTimer.current = setTimeout(() => {
+      const toSave = panels
+        .filter(p => !closingPanelIds.has(p.id))
+        .map(({ id, startFresh, ...rest }) => rest);
+      const payload = JSON.stringify({
+        panels: toSave,
+        canvasOffset,
+        canvasZoom,
+      });
+      window.foundry?.setSetting('panel_layout', payload);
+    }, 500);
+    return () => clearTimeout(layoutSaveTimer.current);
+  }, [panels, closingPanelIds, canvasOffset, canvasZoom]);
 
   // Center initial panels in viewport once canvas is visible
   const centerPanelsOnce = useCallback(() => {
@@ -383,6 +445,12 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const bringToFront = useCallback((panelId) => {
     const z = nextZIndexRef.current++;
     setPanels(prev => prev.map(p => p.id === panelId ? { ...p, zIndex: z } : p));
+  }, []);
+
+  const handleChatThreadChange = useCallback((panelId, threadId) => {
+    setPanels(prev => prev.map(p =>
+      p.id === panelId ? { ...p, threadId } : p
+    ));
   }, []);
 
   const togglePanel = useCallback((type) => {
@@ -892,6 +960,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               onPanelClose={() => removePanel(panel.id)}
               panelDragProps={dragProps}
               startFresh={!!panel.startFresh}
+              initialThreadId={panel.threadId}
+              onThreadChange={(threadId) => handleChatThreadChange(panel.id, threadId)}
             />
           ),
         };

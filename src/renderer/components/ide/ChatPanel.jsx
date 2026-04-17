@@ -30,7 +30,7 @@ function playChatCompleteSound() {
 }
 
 // ---- Main ChatPanel Component ---- //
-export default function ChatPanel({ onOpenSettings, projectPath, startFresh = false, panelDragProps, onPanelClose }) {
+export default function ChatPanel({ onOpenSettings, projectPath, startFresh = false, panelDragProps, onPanelClose, initialThreadId, onThreadChange }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [images, setImages] = useState([]);
@@ -76,6 +76,15 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   const blocksRef = useRef([]);
   const activeBlockIdxRef = useRef(-1);
   const currentStreamIdRef = useRef(null);
+
+  // Notify parent when thread changes so layout can persist it
+  const onThreadChangeRef = useRef(onThreadChange);
+  onThreadChangeRef.current = onThreadChange;
+  useEffect(() => {
+    if (onThreadChangeRef.current && currentThreadId) {
+      onThreadChangeRef.current(currentThreadId);
+    }
+  }, [currentThreadId]);
 
   // Throttle streaming UI updates to prevent UI freeze
   const rafRef = useRef(null);
@@ -136,10 +145,11 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
           return;
         }
 
-        const lastThreadId = await window.foundry?.getSetting('last_chat_thread_id');
+        // Use panel-specific thread if provided, otherwise fall back to global setting
+        const targetThreadId = initialThreadId || await window.foundry?.getSetting('last_chat_thread_id');
 
-        if (lastThreadId && threadList?.find(t => t.id === lastThreadId)) {
-          await switchToThread(lastThreadId);
+        if (targetThreadId && threadList?.find(t => t.id === targetThreadId)) {
+          await switchToThread(targetThreadId);
         } else if (threadList?.length > 0) {
           await switchToThread(threadList[0].id);
         } else {
