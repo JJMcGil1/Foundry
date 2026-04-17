@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
-import { FiSun, FiMoon, FiPlus, FiMinus, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw, FiMaximize2 } from 'react-icons/fi';
+import { FiSun, FiMoon, FiPlus, FiMinus, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw, FiMaximize2, FiLayout } from 'react-icons/fi';
 import { VscPlay, VscDebugStop } from 'react-icons/vsc';
 import { LuSquareCheckBig } from 'react-icons/lu';
 import { useToast } from './ToastProvider';
@@ -11,7 +11,7 @@ import ChatPanel from './ChatPanel';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
 import WhatsDonePanel from './WhatsDonePanel';
-import { SearchBar, ProjectControls, AddPanelPanel } from './titlebar';
+import { SearchBar, ProjectControls, AddPanelPanel, LayoutsPanel } from './titlebar';
 import styles from './IDELayout.module.css';
 import sidebarStyles from './Sidebar.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
@@ -55,6 +55,10 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [addPanelPos, setAddPanelPos] = useState({ top: 0, left: 0 });
   const addPanelBtnRef = useRef(null);
+  const [showLayouts, setShowLayouts] = useState(false);
+  const [layoutsPos, setLayoutsPos] = useState({ top: 0, left: 0 });
+  const layoutsBtnRef = useRef(null);
+  const [savedLayouts, setSavedLayouts] = useState([]);
   const isResizingRef = useRef(false);
   const dragAbortRef = useRef(null);
   const [closingPanelIds, setClosingPanelIds] = useState(new Set());
@@ -859,6 +863,135 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     return () => document.removeEventListener('keydown', handler);
   }, [showAddPanel]);
 
+  // ── Saved layouts: load from local db on mount ──
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await window.foundry?.getSetting('saved_panel_layouts');
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) setSavedLayouts(parsed);
+      } catch (err) {
+        console.error('[Layouts] Failed to load saved layouts:', err);
+      }
+    })();
+  }, []);
+
+  const persistLayouts = useCallback(async (next) => {
+    try {
+      await window.foundry?.setSetting('saved_panel_layouts', JSON.stringify(next));
+    } catch (err) {
+      console.error('[Layouts] Failed to persist layouts:', err);
+    }
+  }, []);
+
+  const snapshotCurrentLayout = useCallback(() => {
+    const snapPanels = panelsRef.current
+      .filter(p => !closingPanelIds.has(p.id))
+      .map(({ id, startFresh, ...rest }) => rest);
+    return {
+      panels: snapPanels,
+      canvasOffset: { ...canvasOffsetRef.current },
+      canvasZoom: canvasZoomRef.current,
+    };
+  }, [closingPanelIds]);
+
+  const handleSaveNewLayout = useCallback((name) => {
+    const snap = snapshotCurrentLayout();
+    const now = Date.now();
+    const layout = {
+      id: `layout-${now}-${Math.random().toString(36).slice(2, 8)}`,
+      name,
+      ...snap,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setSavedLayouts(prev => {
+      const next = [layout, ...prev];
+      persistLayouts(next);
+      return next;
+    });
+    addToast({ message: `Saved layout "${name}"`, type: 'success', sound: false });
+  }, [snapshotCurrentLayout, persistLayouts, addToast]);
+
+  const handleOverwriteLayout = useCallback((id) => {
+    const snap = snapshotCurrentLayout();
+    setSavedLayouts(prev => {
+      const next = prev.map(l =>
+        l.id === id ? { ...l, ...snap, updatedAt: Date.now() } : l
+      );
+      persistLayouts(next);
+      const target = next.find(l => l.id === id);
+      if (target) addToast({ message: `Updated layout "${target.name}"`, type: 'success', sound: false });
+      return next;
+    });
+  }, [snapshotCurrentLayout, persistLayouts, addToast]);
+
+  const handleRenameLayout = useCallback((id, name) => {
+    setSavedLayouts(prev => {
+      const next = prev.map(l =>
+        l.id === id ? { ...l, name, updatedAt: Date.now() } : l
+      );
+      persistLayouts(next);
+      return next;
+    });
+  }, [persistLayouts]);
+
+  const handleDeleteLayout = useCallback((id) => {
+    setSavedLayouts(prev => {
+      const target = prev.find(l => l.id === id);
+      const next = prev.filter(l => l.id !== id);
+      persistLayouts(next);
+      if (target) addToast({ message: `Deleted layout "${target.name}"`, type: 'info', sound: false });
+      return next;
+    });
+  }, [persistLayouts, addToast]);
+
+  const handleApplyLayout = useCallback((layout) => {
+    if (!layout || !Array.isArray(layout.panels)) return;
+    // Abort any in-flight drag/resize
+    abortActiveDrag();
+    // Close any open tabs tied to editor panel if layout removes it
+    const hasEditor = layout.panels.some(p => p.type === 'editor');
+    if (!hasEditor) {
+      setOpenTabs([]);
+      setActiveTab(null);
+    }
+    const restored = layout.panels.map(p => ({ ...p, id: makePanelId() }));
+    const maxZ = restored.length ? Math.max(...restored.map(p => p.zIndex || 1), 1) : 1;
+    nextZIndexRef.current = maxZ + 1;
+    setClosingPanelIds(new Set());
+    setPanels(restored);
+    if (layout.canvasOffset) {
+      setCanvasOffset(layout.canvasOffset);
+      canvasOffsetRef.current = layout.canvasOffset;
+    }
+    if (typeof layout.canvasZoom === 'number') {
+      setCanvasZoom(layout.canvasZoom);
+      canvasZoomRef.current = layout.canvasZoom;
+    }
+    initialLayoutDone.current = true;
+    addToast({ message: `Applied layout "${layout.name}"`, type: 'success', sound: false });
+  }, [abortActiveDrag, addToast]);
+
+  // ── Layouts dropdown positioning ──
+  const openLayoutsDropdown = useCallback(() => {
+    if (!showLayouts && layoutsBtnRef.current) {
+      const rect = layoutsBtnRef.current.getBoundingClientRect();
+      const left = rect.left + rect.width / 2 - 160;
+      setLayoutsPos({ top: rect.bottom + 8, left });
+    }
+    setShowLayouts(v => !v);
+  }, [showLayouts]);
+
+  // Close layouts on Escape
+  useEffect(() => {
+    if (!showLayouts) return;
+    const handler = (e) => { if (e.key === 'Escape') setShowLayouts(false); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [showLayouts]);
+
   // ── Open settings helper ──
   const handleOpenSettings = useCallback((section) => {
     setSettingsInitialSection(section || null);
@@ -1126,15 +1259,27 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             </button>
           </div>
           <div className={`${styles.titlebarCenter} titlebar-no-drag`}>
-            <button
-              ref={addPanelBtnRef}
-              className={`${styles.addPanelBtn} ${showAddPanel ? styles.addPanelBtnOpen : ''}`}
-              onClick={openAddPanelDropdown}
-              title="Add panel"
-            >
-              <FiPlus size={14} />
-              <span>Add Panel</span>
-            </button>
+            <div className={styles.centerGroup}>
+              <button
+                ref={addPanelBtnRef}
+                className={`${styles.centerGroupBtn} ${showAddPanel ? styles.centerGroupBtnOpen : ''}`}
+                onClick={openAddPanelDropdown}
+                title="Add panel"
+              >
+                <FiPlus size={14} />
+                <span>Add Panel</span>
+              </button>
+              <div className={styles.centerGroupDivider} />
+              <button
+                ref={layoutsBtnRef}
+                className={`${styles.centerGroupBtn} ${showLayouts ? styles.centerGroupBtnOpen : ''}`}
+                onClick={openLayoutsDropdown}
+                title="Layouts"
+              >
+                <FiLayout size={13} />
+                <span>Layouts</span>
+              </button>
+            </div>
           </div>
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
             <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
@@ -1158,6 +1303,19 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           dropdownPos={addPanelPos}
           items={addPanelItems}
           onAddPanel={addPanel}
+        />
+
+        <LayoutsPanel
+          isOpen={showLayouts}
+          onClose={() => setShowLayouts(false)}
+          dropdownPos={layoutsPos}
+          layouts={savedLayouts}
+          onApply={handleApplyLayout}
+          onSaveNew={handleSaveNewLayout}
+          onOverwrite={handleOverwriteLayout}
+          onRename={handleRenameLayout}
+          onDelete={handleDeleteLayout}
+          canSave={panels.filter(p => !closingPanelIds.has(p.id)).length > 0}
         />
 
         {/* ── Main panel area ── */}

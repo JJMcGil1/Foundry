@@ -165,6 +165,26 @@ async function initDatabase() {
     db.run('DROP TABLE IF EXISTS donezo_tags');
   } catch (e) { /* ignore */ }
 
+  // ---- Auto-prune stale chat threads on startup ---- //
+  // Any thread whose most recent message is older than 24h is deleted entirely.
+  // Threads with zero messages are also pruned if they have sat untouched for >24h.
+  // This keeps the sql.js wasm heap from ballooning past what it can load.
+  try {
+    const cleanupResult = cleanupStaleThreads();
+    if (cleanupResult.threadsDeleted > 0 || cleanupResult.messagesDeleted > 0) {
+      console.log(
+        `[Foundry DB] Pruned ${cleanupResult.threadsDeleted} stale threads ` +
+        `(${cleanupResult.messagesDeleted} messages) older than 24h`
+      );
+      // Reclaim disk space after a meaningful delete
+      if (cleanupResult.messagesDeleted > 100) {
+        db.run('VACUUM');
+      }
+    }
+  } catch (e) {
+    console.error('[Foundry DB] Stale-thread cleanup failed:', e);
+  }
+
   persistDb();
 
   // Auto-save every 30 seconds as a safety net against hard kills
@@ -172,8 +192,81 @@ async function initDatabase() {
     persistDb();
   }, 30000);
 
+  // Re-run stale-thread cleanup every 6 hours while the app is open,
+  // so long-running sessions don't accumulate unbounded history.
+  setInterval(() => {
+    try {
+      const res = cleanupStaleThreads();
+      if (res.threadsDeleted > 0) {
+        console.log(`[Foundry DB] Periodic prune: removed ${res.threadsDeleted} threads / ${res.messagesDeleted} msgs`);
+        persistDb();
+      }
+    } catch (e) {
+      console.error('[Foundry DB] Periodic cleanup failed:', e);
+    }
+  }, 6 * 60 * 60 * 1000);
+
   console.log('[Foundry DB] Initialized');
   return db;
+}
+
+// Delete any chat thread whose most recent message is older than `maxAgeMs`
+// (default 24h), plus any zero-message threads that haven't been touched in the
+// same window. Returns counts for logging.
+function cleanupStaleThreads(maxAgeMs = 24 * 60 * 60 * 1000) {
+  if (!db) return { threadsDeleted: 0, messagesDeleted: 0 };
+  const cutoff = Date.now() - maxAgeMs;
+
+  // Identify stale thread ids: every message in the thread is older than the cutoff.
+  const staleRes = db.exec(
+    `SELECT thread_id FROM chat_messages
+     GROUP BY thread_id
+     HAVING MAX(created_at) < ?`,
+    [cutoff]
+  );
+  const staleIds = staleRes.length ? staleRes[0].values.map(r => r[0]) : [];
+
+  let messagesDeleted = 0;
+  let threadsDeleted = 0;
+
+  if (staleIds.length) {
+    // Count messages first (for logging)
+    const countRes = db.exec(
+      `SELECT COUNT(*) FROM chat_messages WHERE thread_id IN (${staleIds.map(() => '?').join(',')})`,
+      staleIds
+    );
+    messagesDeleted = countRes.length ? countRes[0].values[0][0] : 0;
+
+    // Delete in chunks of 500 to keep bound params sane
+    const chunk = 500;
+    for (let i = 0; i < staleIds.length; i += chunk) {
+      const batch = staleIds.slice(i, i + chunk);
+      const placeholders = batch.map(() => '?').join(',');
+      db.run(`DELETE FROM chat_messages WHERE thread_id IN (${placeholders})`, batch);
+      db.run(`DELETE FROM chat_threads   WHERE id        IN (${placeholders})`, batch);
+    }
+    threadsDeleted += staleIds.length;
+  }
+
+  // Also sweep zero-message threads that have been sitting idle past the cutoff
+  const emptyRes = db.exec(
+    `SELECT id FROM chat_threads
+     WHERE last_modified < ?
+       AND id NOT IN (SELECT DISTINCT thread_id FROM chat_messages)`,
+    [cutoff]
+  );
+  const emptyIds = emptyRes.length ? emptyRes[0].values.map(r => r[0]) : [];
+  if (emptyIds.length) {
+    const chunk = 500;
+    for (let i = 0; i < emptyIds.length; i += chunk) {
+      const batch = emptyIds.slice(i, i + chunk);
+      const placeholders = batch.map(() => '?').join(',');
+      db.run(`DELETE FROM chat_threads WHERE id IN (${placeholders})`, batch);
+    }
+    threadsDeleted += emptyIds.length;
+  }
+
+  return { threadsDeleted, messagesDeleted };
 }
 
 function getProfile() {
@@ -488,4 +581,5 @@ module.exports = {
   getMessages,
   getMessageCount,
   deleteThreadMessages,
+  cleanupStaleThreads,
 };

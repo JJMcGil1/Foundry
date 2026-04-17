@@ -455,6 +455,94 @@
   color: var(--zinc-500);
 }
 
+/* ── Center titlebar grouped pill (Add Panel + Layouts) ── */
+.centerGroup {
+  display: flex;
+  align-items: stretch;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  overflow: hidden;
+  height: 30px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.centerGroup:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
+}
+
+:global([data-theme="light"]) .centerGroup {
+  background: rgba(255, 255, 255, 0.65);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), inset 0 0.5px 0 rgba(255, 255, 255, 0.8);
+}
+
+:global([data-theme="light"]) .centerGroup:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 0.5px 0 rgba(255, 255, 255, 0.9);
+}
+
+.centerGroupBtn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--zinc-300);
+  font-size: 12.5px;
+  font-weight: 500;
+  font-family: var(--font-sans);
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  outline: none;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.centerGroupBtn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--zinc-100);
+}
+
+.centerGroupBtn:active,
+.centerGroupBtnOpen {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--zinc-100);
+}
+
+:global([data-theme="light"]) .centerGroupBtn {
+  color: #52525b;
+}
+
+:global([data-theme="light"]) .centerGroupBtn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #27272a;
+}
+
+:global([data-theme="light"]) .centerGroupBtn:active,
+:global([data-theme="light"]) .centerGroupBtnOpen {
+  background: rgba(0, 0, 0, 0.08);
+  color: #27272a;
+}
+
+.centerGroupDivider {
+  width: 1px;
+  align-self: stretch;
+  margin: 7px 0;
+  background: rgba(255, 255, 255, 0.12);
+  flex-shrink: 0;
+}
+
+:global([data-theme="light"]) .centerGroupDivider {
+  background: rgba(0, 0, 0, 0.12);
+}
+
 /* ── Add Panel button (center of titlebar, pill style matching ProjectControls) ── */
 .addPanelBtn {
   display: flex;
