@@ -9,7 +9,8 @@
   overflow: hidden;
   height: 30px;
   gap: 0;
-  /* backdrop-filter removed for battery/GPU savings */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
 }
@@ -229,7 +230,7 @@
   position: fixed;
   width: 320px;
   max-height: 420px;
-  background: rgba(30, 30, 32, 0.92);
+  background: rgba(30, 30, 32, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow:
@@ -241,7 +242,8 @@
   display: flex;
   flex-direction: column;
   transform-origin: top left;
-  /* backdrop-filter removed for battery/GPU savings */
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 :global([data-theme="light"]) .dropdown {

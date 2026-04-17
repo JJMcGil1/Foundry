@@ -64,7 +64,7 @@
   flex-shrink: 0;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   padding: 0 4px;
-  background: rgba(17, 17, 19, 0.35);
+  background: rgba(17, 17, 19, 0.18);
 }
 
 .rightPanelTab {
@@ -924,7 +924,8 @@
   flex-direction: column;
   gap: 8px;
   pointer-events: auto;
-  /* backdrop-filter removed for battery/GPU savings */
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .commitCardHeader {

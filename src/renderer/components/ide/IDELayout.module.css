@@ -182,17 +182,18 @@
   display: none;
 }
 
-/* Static dark foundation */
+/* Deep foundation with subtle warmth */
 .canvas::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: linear-gradient(160deg, #0f0c18 0%, #0c0a10 50%, #0d0b12 100%);
+  background:
+    linear-gradient(160deg, #110d1a 0%, #0c0a10 35%, #0e0a0f 65%, #0d0b14 100%);
   pointer-events: none;
 }
 
-/* ── Static ocean background — zero GPU cost, same color palette ── */
+/* ── Rich flowing gradient background — zero GPU cost ── */
 .canvasBg {
   position: absolute;
   inset: 0;
@@ -200,23 +201,35 @@
   overflow: hidden;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 50% 40% at 15% 70%, rgba(249, 115, 22, 0.22) 0%, transparent 70%),
-    radial-gradient(ellipse 45% 35% at 80% 15%, rgba(167, 139, 250, 0.22) 0%, transparent 70%),
-    radial-gradient(ellipse 55% 45% at 45% 50%, rgba(99, 102, 241, 0.14) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 30% at 25% 25%, rgba(236, 72, 153, 0.10) 0%, transparent 70%),
-    radial-gradient(ellipse 30% 20% at 20% 30%, rgba(255, 255, 255, 0.02) 0%, transparent 70%),
-    radial-gradient(ellipse 25% 18% at 70% 60%, rgba(255, 255, 255, 0.015) 0%, transparent 70%);
+    /* Large warm glow — bottom left, like a sunset horizon */
+    radial-gradient(ellipse 90% 70% at 10% 85%, rgba(249, 115, 22, 0.28) 0%, rgba(249, 115, 22, 0.08) 40%, transparent 70%),
+    /* Secondary warm wash — bleeds across bottom */
+    radial-gradient(ellipse 120% 50% at 35% 95%, rgba(234, 88, 12, 0.15) 0%, transparent 60%),
+    /* Deep violet — top right, flowing diagonally */
+    radial-gradient(ellipse 80% 65% at 85% 10%, rgba(139, 92, 246, 0.30) 0%, rgba(124, 58, 237, 0.10) 45%, transparent 75%),
+    /* Indigo mid-field — bridges the warm and cool */
+    radial-gradient(ellipse 100% 80% at 50% 45%, rgba(99, 102, 241, 0.12) 0%, transparent 65%),
+    /* Subtle rose accent — left of center */
+    radial-gradient(ellipse 60% 50% at 25% 40%, rgba(236, 72, 153, 0.10) 0%, transparent 65%),
+    /* Soft amber midtone — center warmth */
+    radial-gradient(ellipse 70% 55% at 55% 70%, rgba(251, 146, 60, 0.08) 0%, transparent 60%),
+    /* Cool teal whisper — top left counterbalance */
+    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(45, 212, 191, 0.06) 0%, transparent 55%),
+    /* Atmospheric haze — overall depth */
+    radial-gradient(ellipse 130% 100% at 50% 50%, rgba(167, 139, 250, 0.04) 0%, transparent 80%);
 }
 
 /* ── Light mode background ── */
 :global([data-theme="light"]) .canvasBg {
   background:
-    radial-gradient(ellipse 50% 40% at 15% 70%, rgba(249, 115, 22, 0.20) 0%, transparent 70%),
-    radial-gradient(ellipse 45% 35% at 80% 15%, rgba(124, 58, 237, 0.20) 0%, transparent 70%),
-    radial-gradient(ellipse 55% 45% at 45% 50%, rgba(79, 70, 229, 0.12) 0%, transparent 70%),
-    radial-gradient(ellipse 40% 30% at 25% 25%, rgba(236, 72, 153, 0.10) 0%, transparent 70%),
-    radial-gradient(ellipse 30% 20% at 20% 30%, rgba(255, 255, 255, 0.04) 0%, transparent 70%),
-    radial-gradient(ellipse 25% 18% at 70% 60%, rgba(255, 255, 255, 0.03) 0%, transparent 70%);
+    radial-gradient(ellipse 90% 70% at 10% 85%, rgba(249, 115, 22, 0.22) 0%, rgba(249, 115, 22, 0.06) 40%, transparent 70%),
+    radial-gradient(ellipse 120% 50% at 35% 95%, rgba(234, 88, 12, 0.12) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 65% at 85% 10%, rgba(124, 58, 237, 0.22) 0%, rgba(124, 58, 237, 0.06) 45%, transparent 75%),
+    radial-gradient(ellipse 100% 80% at 50% 45%, rgba(79, 70, 229, 0.10) 0%, transparent 65%),
+    radial-gradient(ellipse 60% 50% at 25% 40%, rgba(236, 72, 153, 0.08) 0%, transparent 65%),
+    radial-gradient(ellipse 70% 55% at 55% 70%, rgba(251, 146, 60, 0.06) 0%, transparent 60%),
+    radial-gradient(ellipse 50% 40% at 15% 20%, rgba(45, 212, 191, 0.05) 0%, transparent 55%),
+    radial-gradient(ellipse 130% 100% at 50% 50%, rgba(124, 58, 237, 0.03) 0%, transparent 80%);
 }
 
 /* ── Light mode ── */
@@ -256,7 +269,9 @@
   pointer-events: auto;
   transition: box-shadow 0.25s ease, border-color 0.25s ease;
   animation: panelIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
-  background: rgba(17, 17, 19, 0.88);
+  background: rgba(17, 17, 19, 0.48);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .canvasPanelClosing {
@@ -304,7 +319,9 @@
 }
 
 :global([data-theme="light"]) .canvasPanel {
-  background: rgba(245, 245, 246, 0.92);
+  background: rgba(245, 245, 246, 0.55);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.06),
