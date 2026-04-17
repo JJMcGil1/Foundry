@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
 import {
   FiSearch, FiFile, FiChevronRight, FiChevronDown,
   FiX, FiFilter, FiMinimize2, FiMaximize2,
@@ -35,6 +35,7 @@ export default function SearchBar({ projectPath, onOpenFile }) {
   const [replaceResult, setReplaceResult] = useState(null);
   const [dismissedFiles, setDismissedFiles] = useState(new Set());
   const [closing, setClosing] = useState(false);
+  const [dropdownPos, setDropdownPos] = useState({ top: 52, right: 16 });
 
   const inputRef = useRef(null);
   const replaceInputRef = useRef(null);
@@ -96,6 +97,21 @@ export default function SearchBar({ projectPath, onOpenFile }) {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [close]);
+
+  // Position dropdown under the search input (anchored to its right edge)
+  useLayoutEffect(() => {
+    if (!open || !containerRef.current) return;
+    const updatePos = () => {
+      const rect = containerRef.current.getBoundingClientRect();
+      setDropdownPos({
+        top: rect.bottom + 6,
+        right: Math.max(8, window.innerWidth - rect.right),
+      });
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    return () => window.removeEventListener('resize', updatePos);
+  }, [open]);
 
   // Close on click outside
   useEffect(() => {
@@ -379,7 +395,11 @@ export default function SearchBar({ projectPath, onOpenFile }) {
       {showDropdown && (
         <>
           <div className={styles.overlay} onClick={close} />
-          <div className={`${styles.dropdown} ${closing ? styles.dropdownClosing : ''}`} onClick={(e) => e.stopPropagation()}>
+          <div
+            className={`${styles.dropdown} ${closing ? styles.dropdownClosing : ''}`}
+            style={{ top: dropdownPos.top, right: dropdownPos.right }}
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Tabs */}
             <div className={styles.tabs}>
               {TABS.map(tab => (

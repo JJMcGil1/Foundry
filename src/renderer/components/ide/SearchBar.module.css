@@ -3,11 +3,11 @@
    ======================================== */
 
 .searchBarWrapper {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  position: relative;
+  display: flex;
+  align-items: center;
   z-index: 10;
+  margin-right: 28px;
 }
 
 /* ---- The actual search input in the titlebar ---- */
@@ -109,8 +109,7 @@
 .dropdown {
   position: fixed;
   top: 52px;
-  left: 50%;
-  transform: translateX(-50%);
+  right: 16px;
   z-index: 1000;
   width: 560px;
   max-height: 480px;
@@ -124,6 +123,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transform-origin: top right;
   animation: dropdownIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -141,22 +141,22 @@
 @keyframes dropdownIn {
   from {
     opacity: 0;
-    transform: translateX(-50%) translateY(-8px) scale(0.98);
+    transform: translateY(-8px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes dropdownOut {
   from {
     opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
+    transform: translateY(0) scale(1);
   }
   to {
     opacity: 0;
-    transform: translateX(-50%) translateY(-8px) scale(0.97);
+    transform: translateY(-8px) scale(0.97);
   }
 }
 

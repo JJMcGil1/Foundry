@@ -11,7 +11,7 @@ import ChatPanel from './ChatPanel';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
 import WhatsDonePanel from './WhatsDonePanel';
-import { SearchBar, ProjectControls } from './titlebar';
+import { SearchBar, ProjectControls, AddPanelPanel } from './titlebar';
 import styles from './IDELayout.module.css';
 import sidebarStyles from './Sidebar.module.css';
 import foundryIconDark from '../../assets/foundry-icon-dark.svg';
@@ -53,7 +53,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     { id: makePanelId(), type: 'chat', x: 0, y: 0, width: 420, height: 600, zIndex: 1 },
   ]);
   const [showAddPanel, setShowAddPanel] = useState(false);
-  const addPanelRef = useRef(null);
+  const [addPanelPos, setAddPanelPos] = useState({ top: 0, left: 0 });
+  const addPanelBtnRef = useRef(null);
   const isResizingRef = useRef(false);
   const dragAbortRef = useRef(null);
   const [closingPanelIds, setClosingPanelIds] = useState(new Set());
@@ -434,7 +435,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         next.delete(panelId);
         return next;
       });
-    }, 180);
+    }, 260);
   }, [panels, closingPanelIds]);
 
   // ── Canvas: bring panel to front ──
@@ -839,14 +840,23 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     handleStartCommand(cmd);
   }, [startRunning, startCommand, project?.path, handleStopCommand, handleStartCommand, addToast]);
 
-  // ── Close add-panel dropdown on click outside ──
+  // ── Add-panel dropdown positioning ──
+  const openAddPanelDropdown = useCallback(() => {
+    if (!showAddPanel && addPanelBtnRef.current) {
+      const rect = addPanelBtnRef.current.getBoundingClientRect();
+      // Center the 320px dropdown beneath the button
+      const left = rect.left + rect.width / 2 - 160;
+      setAddPanelPos({ top: rect.bottom + 8, left });
+    }
+    setShowAddPanel(v => !v);
+  }, [showAddPanel]);
+
+  // Close add-panel on Escape
   useEffect(() => {
     if (!showAddPanel) return;
-    const handler = (e) => {
-      if (addPanelRef.current && !addPanelRef.current.contains(e.target)) setShowAddPanel(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    const handler = (e) => { if (e.key === 'Escape') setShowAddPanel(false); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   }, [showAddPanel]);
 
   // ── Open settings helper ──
@@ -1115,8 +1125,20 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               )}
             </button>
           </div>
-          <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
+          <div className={`${styles.titlebarCenter} titlebar-no-drag`}>
+            <button
+              ref={addPanelBtnRef}
+              className={`${styles.addPanelBtn} ${showAddPanel ? styles.addPanelBtnOpen : ''}`}
+              onClick={openAddPanelDropdown}
+              title="Add panel"
+            >
+              <FiPlus size={14} />
+              <span>Add Panel</span>
+            </button>
+          </div>
           <div className={`${styles.titlebarActions} titlebar-no-drag`}>
+            <SearchBar projectPath={project?.path} onOpenFile={handleOpenFile} />
+            <div className={styles.titlebarDivider} />
             <button
               className={styles.titlebarBtn}
               onClick={handleThemeToggle}
@@ -1127,39 +1149,16 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                 <FiMoon size={18} className={`${styles.themeIcon} ${currentTheme === 'dark' ? styles.themeIconHidden : ''}`} />
               </span>
             </button>
-            <div className={styles.titlebarDivider} />
-            {/* Add Panel button */}
-            <div className={styles.addPanelWrap} ref={addPanelRef}>
-              <button
-                className={`${styles.titlebarBtn} ${styles.addPanelBtn}`}
-                onClick={() => setShowAddPanel(v => !v)}
-                title="Add panel"
-              >
-                <FiPlus size={16} />
-                <span>Add Panel</span>
-              </button>
-              {showAddPanel && (
-                <div className={styles.addPanelDropdown}>
-                  {addPanelItems.length > 0 ? addPanelItems.map(item => {
-                    const ItemIcon = item.icon;
-                    return (
-                      <button
-                        key={item.type}
-                        className={styles.addPanelItem}
-                        onClick={() => { addPanel(item.type); setShowAddPanel(false); }}
-                      >
-                        <ItemIcon size={14} />
-                        <span>{item.title}</span>
-                      </button>
-                    );
-                  }) : (
-                    <div className={styles.addPanelEmpty}>All panels open</div>
-                  )}
-                </div>
-              )}
-            </div>
           </div>
         </div>
+
+        <AddPanelPanel
+          isOpen={showAddPanel}
+          onClose={() => setShowAddPanel(false)}
+          dropdownPos={addPanelPos}
+          items={addPanelItems}
+          onAddPanel={addPanel}
+        />
 
         {/* ── Main panel area ── */}
         <div className={styles.main}>
