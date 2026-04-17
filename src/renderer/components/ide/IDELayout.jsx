@@ -1,7 +1,8 @@
 import React, { useState, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
-import { VscFiles, VscSourceControl } from 'react-icons/vsc';
+import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
 import { FiSun, FiMoon, FiPlus, FiMinus, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw, FiMaximize2 } from 'react-icons/fi';
 import { VscPlay, VscDebugStop } from 'react-icons/vsc';
+import { LuSquareCheckBig } from 'react-icons/lu';
 import { useToast } from './ToastProvider';
 import { ActivityBar, FileTreeItem, GitPanel, WorkflowsPanel, MiniTooltipBtn } from './sidebar';
 import PanelHeader from './PanelHeader';
@@ -9,6 +10,7 @@ import { EditorArea } from './editor';
 import ChatPanel from './ChatPanel';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
+import WhatsDonePanel from './WhatsDonePanel';
 import { SearchBar, ProjectControls } from './titlebar';
 import styles from './IDELayout.module.css';
 import sidebarStyles from './Sidebar.module.css';
@@ -21,8 +23,10 @@ const PANEL_TYPES = {
   git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 300, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
   workflows: { title: 'GitHub Actions',       icon: FiGithub,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
   terminal:  { title: 'Terminal',        icon: FiTerminal,        defaultWidth: 600, defaultHeight: 350, minWidth: 300, minHeight: 150 },
+  whatsDone: { title: "What's Done",    icon: LuSquareCheckBig,  defaultWidth: 340, defaultHeight: 500, minWidth: 260, minHeight: 250, singleton: true },
   chat:      { title: 'Chat',           icon: FiMessageSquare,   defaultWidth: 420, defaultHeight: 600, minWidth: 280, minHeight: 300 },
   editor:    { title: 'Editor',         icon: VscFiles,          defaultWidth: 700, defaultHeight: 500, minWidth: 300, minHeight: 200, singleton: true },
+  settings:  { title: 'Settings',       icon: VscSettingsGear,   defaultWidth: 720, defaultHeight: 560, minWidth: 500, minHeight: 350, singleton: true },
 };
 
 const RESIZE_DIRS = ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'];
@@ -139,7 +143,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, []);
 
   // ── Existing IDE state ──
-  const [showSettings, setShowSettings] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState(null);
 
   // Try on mount — double rAF ensures layout is fully settled before measuring
@@ -152,19 +155,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     });
     return () => { cancelled = true; };
   }, [centerPanelsOnce]);
-
-  // Retry when settings closes (canvas goes from display:none to visible)
-  useEffect(() => {
-    if (!showSettings) {
-      let cancelled = false;
-      requestAnimationFrame(() => {
-        if (!cancelled) requestAnimationFrame(() => {
-          if (!cancelled) centerPanelsOnce();
-        });
-      });
-      return () => { cancelled = true; };
-    }
-  }, [showSettings, centerPanelsOnce]);
 
   const [startCommand, setStartCommand] = useState('');
   const [startRunning, setStartRunning] = useState(false);
@@ -766,10 +756,6 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
 
   // ── Activity bar handler ──
   const handleActivityClick = useCallback((panel) => {
-    if (panel === 'settings') {
-      setShowSettings(v => !v);
-      return;
-    }
     togglePanel(panel);
   }, [togglePanel]);
 
@@ -780,7 +766,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       if ((e.metaKey || e.ctrlKey) && e.key === 'b') { e.preventDefault(); togglePanel('files'); }
       if ((e.metaKey || e.ctrlKey) && e.key === 'j') { e.preventDefault(); togglePanel('chat'); }
       if ((e.metaKey || e.ctrlKey) && e.key === '`') { e.preventDefault(); togglePanel('terminal'); }
-      if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); setShowSettings(v => !v); }
+      if ((e.metaKey || e.ctrlKey) && e.key === ',') { e.preventDefault(); togglePanel('settings'); }
       if ((e.metaKey || e.ctrlKey) && (e.key === '=' || e.key === '+')) { e.preventDefault(); zoomTo(1.2); }
       if ((e.metaKey || e.ctrlKey) && e.key === '-') { e.preventDefault(); zoomTo(1 / 1.2); }
       if ((e.metaKey || e.ctrlKey) && e.key === '0') { e.preventDefault(); fitToView(); }
@@ -847,7 +833,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (!cmd.trim()) {
       addToast({ message: 'No start command configured. Set one in Workspace settings.', type: 'error' });
       setSettingsInitialSection('workspace');
-      setShowSettings(true);
+      togglePanel('settings');
       return;
     }
     handleStartCommand(cmd);
@@ -866,8 +852,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   // ── Open settings helper ──
   const handleOpenSettings = useCallback((section) => {
     setSettingsInitialSection(section || null);
-    setShowSettings(true);
-  }, []);
+    togglePanel('settings');
+  }, [togglePanel]);
 
   // ── Panel content renderer ──
   const renderPanelContent = (panel, dragProps) => {
@@ -956,6 +942,18 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           ),
         };
 
+      case 'whatsDone':
+        return {
+          header: 'own',
+          content: (
+            <WhatsDonePanel
+              projectPath={project?.path}
+              onClose={() => removePanel(panel.id)}
+              panelDragProps={dragProps}
+            />
+          ),
+        };
+
       case 'chat':
         return {
           header: 'own',
@@ -992,6 +990,48 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           ),
         };
 
+      case 'settings':
+        return {
+          header: 'own',
+          content: (
+            <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+              <PanelHeader
+                title="Settings"
+                icon={VscSettingsGear}
+                onClose={() => {
+                  removePanel(panel.id);
+                  setSettingsInitialSection(null);
+                  if (project?.path) {
+                    window.foundry?.getSetting(`start_command_${project.path}`).then((cmd) => {
+                      if (cmd !== undefined) setStartCommand(cmd || '');
+                    }).catch(() => {});
+                  }
+                }}
+                dragProps={dragProps}
+              />
+              <div style={{ flex: 1, overflow: 'hidden' }}>
+                <SettingsPage
+                  profile={profile}
+                  initialSection={settingsInitialSection}
+                  projectPath={project?.path}
+                  onProfileChange={onProfileChange}
+                  onCloneRepo={(result) => {
+                    setProject({ path: result.path, name: result.name });
+                    setFileTree(result.tree);
+                    setOpenTabs([]);
+                    setActiveTab(null);
+                    removePanel(panel.id);
+                    window.foundry?.setSetting('last_project_path', result.path);
+                    window.foundry?.gitStatus(result.path).then(status => {
+                      if (status) setGitStatus(status);
+                    });
+                  }}
+                />
+              </div>
+            </div>
+          ),
+        };
+
       default:
         return { header: 'own', content: null };
     }
@@ -1000,7 +1040,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   // ── Build add-panel menu items ──
   const addPanelItems = Object.entries(PANEL_TYPES)
     .filter(([type, config]) => {
-      if (type === 'editor') return false;
+      if (type === 'editor' || type === 'settings') return false;
       const activePanels = panels.filter(p => p.type === type);
       if (config.singleton && activePanels.length > 0) return false;
       if (type === 'chat' && activePanels.length >= 4) return false;
@@ -1029,7 +1069,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           activePanel={null}
           onPanelClick={handleActivityClick}
           profile={profile}
-          showSettings={showSettings}
+          showSettings={openPanelTypes.has('settings')}
           gitChangeCount={gitStatus?.files?.length || 0}
           openPanelTypes={openPanelTypes}
         />
@@ -1123,42 +1163,10 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
 
         {/* ── Main panel area ── */}
         <div className={styles.main}>
-          {/* Settings overlay */}
-          {showSettings && (
-            <div className={styles.settingsOverlay}>
-              <SettingsPage
-                profile={profile}
-                initialSection={settingsInitialSection}
-                projectPath={project?.path}
-                onClose={() => {
-                  setShowSettings(false);
-                  setSettingsInitialSection(null);
-                  if (project?.path) {
-                    window.foundry?.getSetting(`start_command_${project.path}`).then((cmd) => {
-                      if (cmd !== undefined) setStartCommand(cmd || '');
-                    }).catch(() => {});
-                  }
-                }}
-                onProfileChange={onProfileChange}
-                onCloneRepo={(result) => {
-                  setProject({ path: result.path, name: result.name });
-                  setFileTree(result.tree);
-                  setOpenTabs([]);
-                  setActiveTab(null);
-                  setShowSettings(false);
-                  window.foundry?.setSetting('last_project_path', result.path);
-                  window.foundry?.gitStatus(result.path).then(status => {
-                    if (status) setGitStatus(status);
-                  });
-                }}
-              />
-            </div>
-          )}
-
           {/* Canvas workspace */}
           <div
             ref={canvasRef}
-            className={`${styles.canvas} ${showSettings ? styles.canvasHidden : ''}`}
+            className={styles.canvas}
             onMouseDown={handleCanvasMouseDown}
           >
             <div className={styles.canvasBg} aria-hidden="true" />

@@ -159,27 +159,12 @@
   background: #0c0a10;
 }
 
-/* ── Settings overlay ── */
-.settingsOverlay {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  background: var(--surface-2);
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 /* ── Canvas workspace ── */
 .canvas {
   position: absolute;
   inset: 0;
   overflow: clip;
   background: #0c0a10;
-}
-
-.canvasHidden {
-  display: none;
 }
 
 /* Deep foundation with subtle warmth */

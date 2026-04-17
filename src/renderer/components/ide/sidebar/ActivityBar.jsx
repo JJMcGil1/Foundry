@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
-import { FiGithub, FiTerminal, FiMessageSquare } from 'react-icons/fi';
+import { FiTerminal } from 'react-icons/fi';
+import { RiChatAiLine } from 'react-icons/ri';
+import { LuSquareCheckBig, LuWorkflow } from 'react-icons/lu';
 import styles from '../ActivityBar.module.css';
 
 const panels = [
-  { id: 'chat',      icon: FiMessageSquare,  label: 'Chat',           size: 20 },
+  { id: 'chat',      icon: RiChatAiLine,     label: 'Chat',           size: 20 },
   { id: 'git',       icon: VscSourceControl, label: 'Source Control',  size: 24 },
   { id: 'terminal',  icon: FiTerminal,       label: 'Terminal',       size: 20 },
-  { id: 'workflows', icon: FiGithub,         label: 'GitHub Actions', size: 21 },
+  { id: 'whatsDone', icon: LuSquareCheckBig, label: "What's Done",    size: 20 },
+  { id: 'workflows', icon: LuWorkflow,         label: 'GitHub Actions', size: 20 },
   { id: 'files',     icon: VscFiles,         label: 'Explorer',       size: 24 },
 ];
 
