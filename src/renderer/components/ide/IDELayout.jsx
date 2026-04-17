@@ -115,7 +115,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         canvasZoom,
       });
       window.foundry?.setSetting('panel_layout', payload);
-    }, 500);
+    }, 2000);
     return () => clearTimeout(layoutSaveTimer.current);
   }, [panels, closingPanelIds, canvasOffset, canvasZoom]);
 
@@ -390,19 +390,25 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     setGitRefreshKey(k => k + 1);
   }, [project]);
 
-  // Poll git status
+  // Poll git status — 15s interval, paused when window is hidden
   useEffect(() => {
     if (!project) return;
     let running = false, cancelled = false;
-    const interval = setInterval(async () => {
-      if (running) return;
+    let interval = null;
+    const poll = async () => {
+      if (running || document.hidden) return;
       running = true;
       try {
         const status = await window.foundry?.gitStatus(project.path);
         if (!cancelled && status) setGitStatus(status);
       } finally { running = false; }
-    }, 3000);
-    return () => { cancelled = true; clearInterval(interval); };
+    };
+    const start = () => { if (!interval) interval = setInterval(poll, 15000); };
+    const stop = () => { clearInterval(interval); interval = null; };
+    const onVisibility = () => { document.hidden ? stop() : start(); };
+    start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { cancelled = true; stop(); document.removeEventListener('visibilitychange', onVisibility); };
   }, [project]);
 
   // ── Panel management ──
@@ -1155,13 +1161,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             className={`${styles.canvas} ${showSettings ? styles.canvasHidden : ''}`}
             onMouseDown={handleCanvasMouseDown}
           >
-            <div className={styles.canvasBg} aria-hidden="true">
-              <div className={styles.blobOrange} />
-              <div className={styles.blobViolet} />
-              <div className={styles.blobIndigo} />
-              <div className={styles.blobRose} />
-              <div className={styles.blobCaustic} />
-            </div>
+            <div className={styles.canvasBg} aria-hidden="true" />
             <div
               className={styles.canvasTransform}
               style={{ transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${canvasZoom})` }}

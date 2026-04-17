@@ -564,7 +564,7 @@
   font-weight: 500;
   z-index: 2;
   pointer-events: none;
-  will-change: opacity, transform, filter;
+  /* will-change removed — permanent GPU layer promotion wastes memory */
   transform-origin: center center;
   backface-visibility: hidden;
 }
@@ -733,7 +733,7 @@
   position: relative;
   overflow: hidden;
   transition: color 0.15s ease-out, background 0.15s ease-out, border-color 0.15s ease-out;
-  will-change: transform, opacity;
+  /* will-change removed — every list item gets its own GPU layer */
 }
 
 .changeItem:hover {
@@ -924,8 +924,7 @@
   flex-direction: column;
   gap: 8px;
   pointer-events: auto;
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* backdrop-filter removed for battery/GPU savings */
 }
 
 .commitCardHeader {

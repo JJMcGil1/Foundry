@@ -9,8 +9,7 @@
   overflow: hidden;
   height: 30px;
   gap: 0;
-  backdrop-filter: blur(12px) saturate(150%);
-  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  /* backdrop-filter removed for battery/GPU savings */
   transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
 }
@@ -242,8 +241,7 @@
   display: flex;
   flex-direction: column;
   transform-origin: top left;
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  /* backdrop-filter removed for battery/GPU savings */
 }
 
 :global([data-theme="light"]) .dropdown {

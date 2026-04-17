@@ -60,10 +60,11 @@ export default function SearchBar({ projectPath, onOpenFile }) {
     }, 180);
   }, [open, closing]);
 
-  // Cleanup timer on unmount
+  // Cleanup timers on unmount
   useEffect(() => {
     return () => {
       if (closingTimerRef.current) clearTimeout(closingTimerRef.current);
+      if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, []);
 

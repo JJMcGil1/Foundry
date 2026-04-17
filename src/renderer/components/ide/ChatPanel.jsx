@@ -251,10 +251,9 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   const startReconnectLoop = useCallback(() => {
     if (reconnectRef.current) return; // Already running
     reconnectAttemptsRef.current = 0;
-    reconnectRef.current = setInterval(async () => {
+    const tryReconnect = async () => {
       reconnectAttemptsRef.current++;
       if (reconnectAttemptsRef.current > MAX_RECONNECT_ATTEMPTS) {
-        clearInterval(reconnectRef.current);
         reconnectRef.current = null;
         return;
       }
@@ -262,7 +261,6 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         const retry = await window.foundry?.claudeGetToken();
         if (retry?.token) {
           setHasProvider(true);
-          clearInterval(reconnectRef.current);
           reconnectRef.current = null;
           const m = await window.foundry?.claudeGetModel();
           if (m) {
@@ -275,9 +273,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
             });
           }
           fetchModelOptions();
+          return;
         }
       } catch { /* keep retrying until max attempts */ }
-    }, 3000);
+      // Exponential backoff: 5s, 10s, 20s, 40s… capped at 60s
+      const delay = Math.min(5000 * Math.pow(2, reconnectAttemptsRef.current - 1), 60000);
+      reconnectRef.current = setTimeout(tryReconnect, delay);
+    };
+    reconnectRef.current = setTimeout(tryReconnect, 5000);
   }, []);
 
   // Fetch available models from the API and update modelOptions state.
@@ -323,7 +326,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       }
       if (connected) {
         if (reconnectRef.current) {
-          clearInterval(reconnectRef.current);
+          clearTimeout(reconnectRef.current);
           reconnectRef.current = null;
         }
         fetchModelOptions();
@@ -349,7 +352,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     return () => {
       window.removeEventListener('focus', handleFocus);
       document.removeEventListener('visibilitychange', handleVisibility);
-      if (reconnectRef.current) clearInterval(reconnectRef.current);
+      if (reconnectRef.current) clearTimeout(reconnectRef.current);
     };
   }, [checkProvider]);
 

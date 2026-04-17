@@ -24,7 +24,7 @@
   border-radius: 50%;
   background: radial-gradient(circle, rgba(167, 139, 250, 0.05) 0%, transparent 65%);
   pointer-events: none;
-  animation: breathe 10s ease-in-out infinite;
+  opacity: 0.65;
 }
 
 .ambientOrb2 {
@@ -37,12 +37,7 @@
   border-radius: 50%;
   background: radial-gradient(circle, rgba(124, 58, 237, 0.04) 0%, transparent 65%);
   pointer-events: none;
-  animation: breathe 12s ease-in-out infinite 3s;
-}
-
-@keyframes breathe {
-  0%, 100% { opacity: 0.5; transform: translateX(-50%) scale(1); }
-  50%      { opacity: 0.8; transform: translateX(-50%) scale(1.05); }
+  opacity: 0.65;
 }
 
 /* ---- Titlebar ---- */

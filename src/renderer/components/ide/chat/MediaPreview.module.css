@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  will-change: opacity;
+  /* will-change removed — modal overlay doesn't need permanent GPU layer */
 }
 
 .image {

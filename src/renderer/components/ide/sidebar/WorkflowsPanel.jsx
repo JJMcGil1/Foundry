@@ -110,21 +110,25 @@ export default function WorkflowsPanel({ projectPath, isActive }) {
     }
   }, [repoInfo]);
 
-  // Initial fetch + polling
+  // Initial fetch + polling (60s), paused when hidden
   useEffect(() => {
     if (!repoInfo) return;
     fetchRuns();
-    pollRef.current = setInterval(fetchRuns, 30000);
-    return () => clearInterval(pollRef.current);
+    const stop = () => { clearInterval(pollRef.current); pollRef.current = null; };
+    const start = () => { stop(); pollRef.current = setInterval(fetchRuns, 60000); };
+    const onVisibility = () => { document.hidden ? stop() : start(); };
+    start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
   }, [repoInfo, fetchRuns]);
 
-  // 1-second tick for smooth elapsed timers on in-progress runs
+  // 5-second tick for elapsed timers on in-progress runs
   useEffect(() => {
     const hasInProgress = runs.some(r => r.status === 'in_progress');
     if (hasInProgress) {
       tickRef.current = setInterval(() => {
         if (mountedRef.current) setTick(t => t + 1);
-      }, 1000);
+      }, 5000);
     } else {
       clearInterval(tickRef.current);
     }
