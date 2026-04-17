@@ -182,59 +182,192 @@
   display: none;
 }
 
-/* Static foundation layer — deep color-tinted base */
+/* Static dark foundation */
 .canvas::before {
   content: '';
   position: absolute;
   inset: 0;
   z-index: 0;
-  background:
-    /* Soft orange glow — bottom-left corner */
-    radial-gradient(ellipse 160% 140% at 5% 95%, rgba(249, 115, 22, 0.14) 0%, rgba(249, 115, 22, 0.05) 30%, transparent 60%),
-    /* Violet nebula — top-right, rich and saturated */
-    radial-gradient(ellipse 140% 130% at 90% 5%, rgba(167, 139, 250, 0.16) 0%, rgba(139, 92, 246, 0.06) 30%, transparent 60%),
-    /* Violet mist — left edge, for depth */
-    radial-gradient(ellipse 60% 100% at 0% 40%, rgba(139, 92, 246, 0.07) 0%, transparent 60%),
-    /* Subtle warm center — very diffuse */
-    radial-gradient(ellipse 200% 200% at 40% 70%, rgba(251, 146, 60, 0.04) 0%, transparent 50%),
-    /* Uniform dark base */
-    linear-gradient(160deg, #0f0c18 0%, #0c0a10 40%, #0c0a10 60%, #0d0b11 100%);
-}
-
-/* Animated floating blobs — slow drift for living feel */
-.canvas::after {
-  content: '';
-  position: absolute;
-  inset: -50%;
-  width: 200%;
-  height: 200%;
-  z-index: 0;
-  opacity: 0.5;
-  will-change: transform;
-  animation: canvasDrift 25s ease-in-out infinite alternate;
-  background:
-    /* Drifting orange orb — very diffuse */
-    radial-gradient(circle 800px at 30% 65%, rgba(249, 115, 22, 0.10) 0%, transparent 50%),
-    /* Drifting violet orb — very diffuse */
-    radial-gradient(circle 700px at 70% 35%, rgba(167, 139, 250, 0.10) 0%, transparent 50%),
-    /* Drifting warm accent — very subtle */
-    radial-gradient(circle 500px at 50% 50%, rgba(251, 146, 60, 0.05) 0%, transparent 45%);
+  background: linear-gradient(160deg, #0f0c18 0%, #0c0a10 50%, #0d0b12 100%);
   pointer-events: none;
 }
 
-@keyframes canvasDrift {
-  0% {
-    transform: translate(0%, 0%) rotate(0deg) scale(1);
-  }
-  33% {
-    transform: translate(3%, -2%) rotate(1deg) scale(1.02);
-  }
-  66% {
-    transform: translate(-2%, 3%) rotate(-0.5deg) scale(0.98);
-  }
-  100% {
-    transform: translate(1%, -1%) rotate(0.5deg) scale(1.01);
-  }
+/* ── Animated blob background ── */
+.canvasBg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* Blob base */
+.canvasBg > div {
+  position: absolute;
+  border-radius: 50%;
+  will-change: transform;
+}
+
+/* Orange warmth — bottom-left, slow wide drift */
+.blobOrange {
+  width: 1000px;
+  height: 1000px;
+  left: calc(8% - 500px);
+  top: calc(72% - 500px);
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.60) 0%, rgba(249, 115, 22, 0.18) 45%, transparent 70%);
+  filter: blur(90px);
+  opacity: 0.42;
+  animation: blobOrangeDrift 44s linear infinite, blobOrangeScale 37s linear infinite;
+}
+
+@keyframes blobOrangeDrift {
+  0%    { transform: translate(0px, 0px); }
+  8%    { transform: translate(100px, -80px); }
+  16%   { transform: translate(220px, -160px); }
+  24%   { transform: translate(320px, -80px); }
+  32%   { transform: translate(400px, 40px); }
+  40%   { transform: translate(360px, 160px); }
+  48%   { transform: translate(260px, 280px); }
+  56%   { transform: translate(160px, 260px); }
+  64%   { transform: translate(60px, 180px); }
+  72%   { transform: translate(-20px, 100px); }
+  80%   { transform: translate(-40px, 40px); }
+  88%   { transform: translate(-20px, -20px); }
+  100%  { transform: translate(0px, 0px); }
+}
+
+@keyframes blobOrangeScale {
+  0%, 100% { scale: 1; }
+  25%      { scale: 1.12; }
+  50%      { scale: 0.92; }
+  75%      { scale: 1.06; }
+}
+
+/* Violet nebula — top-right, medium drift */
+.blobViolet {
+  width: 900px;
+  height: 900px;
+  left: calc(88% - 450px);
+  top: calc(12% - 450px);
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.65) 0%, rgba(139, 92, 246, 0.20) 45%, transparent 70%);
+  filter: blur(80px);
+  opacity: 0.38;
+  animation: blobVioletDrift 36s linear infinite, blobVioletScale 31s linear infinite;
+}
+
+@keyframes blobVioletDrift {
+  0%    { transform: translate(0px, 0px); }
+  8%    { transform: translate(-80px, 60px); }
+  16%   { transform: translate(-160px, 140px); }
+  24%   { transform: translate(-260px, 80px); }
+  32%   { transform: translate(-360px, -20px); }
+  40%   { transform: translate(-300px, -100px); }
+  48%   { transform: translate(-220px, -180px); }
+  56%   { transform: translate(-160px, -240px); }
+  64%   { transform: translate(-80px, -200px); }
+  72%   { transform: translate(-20px, -140px); }
+  80%   { transform: translate(20px, -80px); }
+  88%   { transform: translate(20px, -30px); }
+  100%  { transform: translate(0px, 0px); }
+}
+
+@keyframes blobVioletScale {
+  0%, 100% { scale: 1; }
+  30%      { scale: 0.90; }
+  60%      { scale: 1.10; }
+  85%      { scale: 0.96; }
+}
+
+/* Indigo depth — center, very slow lazy orbit */
+.blobIndigo {
+  width: 1100px;
+  height: 1100px;
+  left: calc(48% - 550px);
+  top: calc(48% - 550px);
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.40) 0%, rgba(79, 70, 229, 0.12) 50%, transparent 72%);
+  filter: blur(110px);
+  opacity: 0.32;
+  animation: blobIndigoDrift 58s linear infinite, blobIndigoScale 47s linear infinite;
+}
+
+@keyframes blobIndigoDrift {
+  0%    { transform: translate(0px, 0px); }
+  7%    { transform: translate(70px, -90px); }
+  14%   { transform: translate(140px, -180px); }
+  21%   { transform: translate(60px, -260px); }
+  28%   { transform: translate(-40px, -320px); }
+  35%   { transform: translate(-140px, -260px); }
+  42%   { transform: translate(-260px, -140px); }
+  50%   { transform: translate(-260px, -20px); }
+  57%   { transform: translate(-240px, 80px); }
+  64%   { transform: translate(-200px, 180px); }
+  71%   { transform: translate(-100px, 220px); }
+  78%   { transform: translate(20px, 200px); }
+  85%   { transform: translate(80px, 140px); }
+  92%   { transform: translate(60px, 60px); }
+  100%  { transform: translate(0px, 0px); }
+}
+
+@keyframes blobIndigoScale {
+  0%, 100% { scale: 1; }
+  20%      { scale: 1.08; }
+  45%      { scale: 0.88; }
+  70%      { scale: 1.14; }
+  90%      { scale: 0.95; }
+}
+
+/* Rose warmth — upper-left, fastest cycle */
+.blobRose {
+  width: 700px;
+  height: 700px;
+  left: calc(22% - 350px);
+  top: calc(22% - 350px);
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.35) 0%, rgba(217, 70, 239, 0.10) 50%, transparent 70%);
+  filter: blur(85px);
+  opacity: 0.22;
+  animation: blobRoseDrift 29s linear infinite, blobRoseScale 23s linear infinite;
+}
+
+@keyframes blobRoseDrift {
+  0%    { transform: translate(0px, 0px); }
+  10%   { transform: translate(100px, 40px); }
+  20%   { transform: translate(160px, 100px); }
+  30%   { transform: translate(120px, 180px); }
+  40%   { transform: translate(40px, 240px); }
+  50%   { transform: translate(-60px, 220px); }
+  60%   { transform: translate(-120px, 160px); }
+  70%   { transform: translate(-100px, 80px); }
+  80%   { transform: translate(-60px, -20px); }
+  90%   { transform: translate(-20px, -60px); }
+  100%  { transform: translate(0px, 0px); }
+}
+
+/* ── Light mode blobs ── */
+:global([data-theme="light"]) .blobOrange {
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.50) 0%, rgba(251, 146, 60, 0.16) 45%, transparent 70%);
+  opacity: 0.55;
+}
+
+:global([data-theme="light"]) .blobViolet {
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.55) 0%, rgba(139, 92, 246, 0.18) 45%, transparent 70%);
+  opacity: 0.50;
+}
+
+:global([data-theme="light"]) .blobIndigo {
+  background: radial-gradient(circle, rgba(79, 70, 229, 0.30) 0%, rgba(99, 102, 241, 0.10) 50%, transparent 72%);
+  opacity: 0.40;
+}
+
+:global([data-theme="light"]) .blobRose {
+  background: radial-gradient(circle, rgba(236, 72, 153, 0.28) 0%, rgba(217, 70, 239, 0.08) 50%, transparent 70%);
+  opacity: 0.30;
+}
+
+@keyframes blobRoseScale {
+  0%, 100% { scale: 1; }
+  35%      { scale: 1.15; }
+  65%      { scale: 0.88; }
+  85%      { scale: 1.04; }
 }
 
 /* ── Light mode ── */
@@ -247,25 +380,7 @@
 }
 
 :global([data-theme="light"]) .canvas::before {
-  background:
-    /* Soft peach glow — bottom-left corner */
-    radial-gradient(ellipse 160% 140% at 5% 95%, rgba(249, 115, 22, 0.22) 0%, rgba(251, 146, 60, 0.08) 30%, transparent 60%),
-    /* Rich violet wash — top-right */
-    radial-gradient(ellipse 140% 130% at 90% 5%, rgba(124, 58, 237, 0.24) 0%, rgba(139, 92, 246, 0.08) 30%, transparent 60%),
-    /* Violet accent — left edge */
-    radial-gradient(ellipse 60% 100% at 0% 40%, rgba(124, 58, 237, 0.12) 0%, transparent 60%),
-    /* Subtle warm center — very diffuse */
-    radial-gradient(ellipse 200% 200% at 40% 70%, rgba(251, 146, 60, 0.06) 0%, transparent 50%),
-    /* Uniform light base */
-    linear-gradient(160deg, #d4cce2 0%, #ddd8e8 40%, #ddd8e8 60%, #dbd6e4 100%);
-}
-
-:global([data-theme="light"]) .canvas::after {
-  opacity: 0.6;
-  background:
-    radial-gradient(circle 800px at 30% 65%, rgba(249, 115, 22, 0.18) 0%, transparent 50%),
-    radial-gradient(circle 700px at 70% 35%, rgba(124, 58, 237, 0.16) 0%, transparent 50%),
-    radial-gradient(circle 500px at 50% 50%, rgba(251, 146, 60, 0.08) 0%, transparent 45%);
+  background: linear-gradient(160deg, #d4cce2 0%, #ddd8e8 50%, #dbd6e4 100%);
 }
 
 .canvasTransform {

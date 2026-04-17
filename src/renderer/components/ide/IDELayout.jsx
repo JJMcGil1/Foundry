@@ -54,6 +54,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const dragAbortRef = useRef(null);
   const [closingPanelIds, setClosingPanelIds] = useState(new Set());
 
+
   useEffect(() => { panelsRef.current = panels; }, [panels]);
 
   // Center initial panels in viewport once canvas is visible
@@ -378,20 +379,20 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     }, 180);
   }, [panels, closingPanelIds]);
 
-  const togglePanel = useCallback((type) => {
-    const existing = panels.find(p => p.type === type && !closingPanelIds.has(p.id));
-    if (existing) {
-      removePanel(existing.id);
-    } else {
-      addPanel(type);
-    }
-  }, [panels, addPanel, removePanel, closingPanelIds]);
-
   // ── Canvas: bring panel to front ──
   const bringToFront = useCallback((panelId) => {
     const z = nextZIndexRef.current++;
     setPanels(prev => prev.map(p => p.id === panelId ? { ...p, zIndex: z } : p));
   }, []);
+
+  const togglePanel = useCallback((type) => {
+    const existing = panels.find(p => p.type === type && !closingPanelIds.has(p.id));
+    if (existing) {
+      bringToFront(existing.id);
+    } else {
+      addPanel(type);
+    }
+  }, [panels, addPanel, bringToFront, closingPanelIds]);
 
   // ── Canvas: abort any active drag/resize/pan operation ──
   const abortActiveDrag = useCallback(() => {
@@ -407,7 +408,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     );
   }, []);
 
-  // ── Canvas: panel drag (move) ──
+  // ── Canvas: panel drag (move) with snapping ──
+  const SNAP_THRESHOLD = 8; // screen pixels
   const handlePanelDrag = useCallback((e, panelId) => {
     if (e.target.closest('button') || e.target.closest('input') || e.target.closest('select') || e.target.closest('textarea')) return;
     if (e.button !== 0) return;
@@ -421,16 +423,81 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (!panel) return;
     const startPanelX = panel.x;
     const startPanelY = panel.y;
+    const panelWidth = panel.width;
+    const panelHeight = panel.height;
     const panelEl = document.querySelector(`[data-panel-id="${panelId}"]`);
     if (panelEl) panelEl.classList.add(styles.canvasPanelDragging);
     const controller = new AbortController();
     dragAbortRef.current = controller;
     const opts = { signal: controller.signal };
     const handleMove = (ev) => {
-      const dx = (ev.clientX - startX) / canvasZoomRef.current;
-      const dy = (ev.clientY - startY) / canvasZoomRef.current;
+      const zoom = canvasZoomRef.current;
+      const offset = canvasOffsetRef.current;
+      const threshold = SNAP_THRESHOLD / zoom;
+      const dx = (ev.clientX - startX) / zoom;
+      const dy = (ev.clientY - startY) / zoom;
+      const rawX = startPanelX + dx;
+      const rawY = startPanelY + dy;
+
+      // Visible canvas edges in canvas-space
+      const visLeft = -offset.x / zoom;
+      const visTop = -offset.y / zoom;
+
+      let snappedX = rawX;
+      let snappedY = rawY;
+      let bestDX = threshold;
+      let bestDY = threshold;
+      let snapX = null;
+      let snapY = null;
+
+      // Snap to canvas left edge (activity bar boundary)
+      {
+        const d = Math.abs(rawX - visLeft);
+        if (d < bestDX) { bestDX = d; snappedX = visLeft; snapX = visLeft; }
+      }
+      // Snap to canvas top edge (titlebar boundary)
+      {
+        const d = Math.abs(rawY - visTop);
+        if (d < bestDY) { bestDY = d; snappedY = visTop; snapY = visTop; }
+      }
+
+      // Panel-to-panel snapping
+      for (const other of panelsRef.current) {
+        if (other.id === panelId) continue;
+        const oL = other.x, oR = other.x + other.width;
+        const oCX = other.x + other.width / 2;
+        const oT = other.y, oB = other.y + other.height;
+        const oCY = other.y + other.height / 2;
+
+        // X-axis snap candidates: [drag-edge, target, resulting-x]
+        const xTests = [
+          [rawX,                    oL,   oL],
+          [rawX,                    oR,   oR],
+          [rawX + panelWidth,       oR,   oR - panelWidth],
+          [rawX + panelWidth,       oL,   oL - panelWidth],
+          [rawX + panelWidth / 2,   oCX,  oCX - panelWidth / 2],
+        ];
+        for (const [edge, target, newX] of xTests) {
+          const d = Math.abs(edge - target);
+          if (d < bestDX) { bestDX = d; snappedX = newX; snapX = target; }
+        }
+
+        // Y-axis snap candidates
+        const yTests = [
+          [rawY,                     oT,   oT],
+          [rawY,                     oB,   oB],
+          [rawY + panelHeight,       oB,   oB - panelHeight],
+          [rawY + panelHeight,       oT,   oT - panelHeight],
+          [rawY + panelHeight / 2,   oCY,  oCY - panelHeight / 2],
+        ];
+        for (const [edge, target, newY] of yTests) {
+          const d = Math.abs(edge - target);
+          if (d < bestDY) { bestDY = d; snappedY = newY; snapY = target; }
+        }
+      }
+
       setPanels(prev => prev.map(p =>
-        p.id === panelId ? { ...p, x: startPanelX + dx, y: startPanelY + dy } : p
+        p.id === panelId ? { ...p, x: snappedX, y: snappedY } : p
       ));
     };
     const finish = () => {
@@ -1018,6 +1085,12 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             className={`${styles.canvas} ${showSettings ? styles.canvasHidden : ''}`}
             onMouseDown={handleCanvasMouseDown}
           >
+            <div className={styles.canvasBg} aria-hidden="true">
+              <div className={styles.blobOrange} />
+              <div className={styles.blobViolet} />
+              <div className={styles.blobIndigo} />
+              <div className={styles.blobRose} />
+            </div>
             <div
               className={styles.canvasTransform}
               style={{ transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${canvasZoom})` }}
