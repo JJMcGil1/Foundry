@@ -1778,12 +1778,24 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
   /**
    * Resolve the best available credential. Returns { token, source, authHeader }.
+   * - source 'oauth_token':  Long-lived OAuth token captured from `claude setup-token`
    * - source 'subscription': OAuth token from Claude Code subscription (keychain)
-   * - source 'api_key': Direct Anthropic API key from settings
+   * - source 'api_key':      Direct Anthropic API key from settings
    * authHeader is the correct header object to use for the Anthropic API.
    */
   async function resolveClaudeCredential() {
-    // Priority 1: Claude Code subscription (OAuth from keychain)
+    // Priority 1: Captured long-lived OAuth token (set up via in-app login)
+    const storedOauth = getSetting('claude_oauth_token');
+    if (storedOauth) {
+      return {
+        token: storedOauth,
+        source: 'oauth_token',
+        subscriptionType: 'subscription',
+        authHeader: { 'Authorization': `Bearer ${storedOauth}` },
+      };
+    }
+
+    // Priority 2: Claude Code subscription (OAuth from keychain)
     const oauthCreds = await readClaudeKeychainCredentials();
     if (oauthCreds?.accessToken) {
       // Check if token is expired (with 60s buffer)
@@ -1802,7 +1814,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       };
     }
 
-    // Priority 2: Manual API key
+    // Priority 3: Manual API key
     const savedKey = getSetting('claude_api_key');
     if (savedKey) {
       return {
@@ -1825,30 +1837,46 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       tokenPreview: null,
       subscriptionType: null,
       expired: false,
+      version: null,
+      binaryPath: null,
     };
 
     try {
-      // Check if Claude Code CLI binary exists — use async exec to avoid blocking main thread
-      try {
-        await execAsync('which claude 2>/dev/null || where claude 2>/dev/null', { timeout: 3000 });
+      // Resolve binary + version (covers homebrew, ~/.local/bin, npm global)
+      const bin = await resolveClaudeBinary();
+      if (bin) {
         result.installed = true;
-      } catch {
-        // Also check ~/.claude directory existence as a signal
+        result.binaryPath = bin;
+        try {
+          const { stdout } = await execFileAsync(bin, ['--version'], { timeout: 5000 });
+          const m = stdout.trim().match(/\d+\.\d+\.\d+/);
+          result.version = m ? m[0] : stdout.trim();
+        } catch { /* ignore */ }
+      } else {
+        // ~/.claude directory existence as a secondary signal
         try {
           await fs.promises.access(path.join(os.homedir(), '.claude'));
           result.installed = true;
         } catch { /* not found */ }
       }
 
-      // Check keychain for OAuth credentials
+      // Priority 1: in-app captured OAuth token
+      const storedOauth = getSetting('claude_oauth_token');
+      if (storedOauth) {
+        result.authenticated = true;
+        result.authSource = 'oauth_token';
+        result.subscriptionType = 'subscription';
+        result.tokenPreview = storedOauth.substring(0, 16) + '...' + storedOauth.slice(-4);
+        return result;
+      }
+
+      // Priority 2: keychain (macOS)
       const oauthCreds = await readClaudeKeychainCredentials();
       if (oauthCreds?.accessToken) {
-        result.installed = true;
         result.authenticated = true;
         result.authSource = 'subscription';
         result.subscriptionType = oauthCreds.subscriptionType;
         result.tokenPreview = oauthCreds.accessToken.substring(0, 16) + '...' + oauthCreds.accessToken.slice(-4);
-        // Check expiry
         if (oauthCreds.expiresAt && Date.now() > oauthCreds.expiresAt - 60000) {
           result.expired = true;
         }
@@ -1962,8 +1990,16 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
    * Stream chat via Claude CLI subprocess (for subscription OAuth).
    * Uses `claude -p` with `--output-format stream-json --verbose --include-partial-messages`.
    * The CLI handles OAuth auth, token refresh, and API routing internally.
+   *
+   * Model / context / effort wiring (per Claude Code v2.1.111+ docs, April 2026):
+   * - 1M context is enabled via the `[1m]` alias suffix (e.g. `opus[1m]` or
+   *   `claude-opus-4-7[1m]`), NOT via ANTHROPIC_BETAS. Max/Team/Enterprise plans
+   *   auto-upgrade Opus to 1M without the suffix; we append it anyway for other tiers.
+   * - `--effort low|medium|high|xhigh|max` sets reasoning depth. `xhigh` is Opus 4.7 only
+   *   (older models fall back to the highest supported level — safe to pass).
+   * - Opus 4.7 always uses adaptive thinking; fixed `MAX_THINKING_TOKENS` budget does not apply.
    */
-  async function streamViaCLI(event, messages, images, model, streamId, workspacePath, thinkingBudget) {
+  async function streamViaCLI(event, messages, images, model, streamId, workspacePath, effortLevel) {
     const claudeBin = await resolveClaudeBinary();
     if (!claudeBin) {
       return { error: 'Claude CLI not found. Install Claude Code or add an API key in Settings → Providers.' };
@@ -2016,7 +2052,16 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
     // The CLI accepts aliases (sonnet, opus, haiku) and auto-resolves to latest.
     // If a full model ID was passed, use it as-is — the CLI handles both.
-    const modelAlias = model || 'sonnet';
+    const baseModel = model || 'sonnet';
+
+    // Append [1m] alias suffix if 1M context is enabled AND the model supports it.
+    // Opus 4.7/4.6 and Sonnet 4.6 are 1M-capable; Haiku is not.
+    const disable1M = getSetting('claude_disable_1m') === 'true';
+    const supports1M = /claude-(opus|sonnet)-4/.test(baseModel)
+      || baseModel === 'opus' || baseModel === 'sonnet';
+    const modelAlias = (!disable1M && supports1M && !baseModel.includes('[1m]'))
+      ? `${baseModel}[1m]`
+      : baseModel;
 
     // Read auto-approve setting — default ON (null means never set, treat as true)
     const autoApproveRaw = getSetting('claude_auto_approve_permissions');
@@ -2032,14 +2077,12 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       '--no-session-persistence',
     ];
 
-    // Map thinking budget to CLI --effort level
-    if (typeof thinkingBudget === 'number') {
-      let effort;
-      if (thinkingBudget <= 0) effort = 'low';
-      else if (thinkingBudget <= 4000) effort = 'low';
-      else if (thinkingBudget <= 10000) effort = 'medium';
-      else effort = 'high';
-      args.push('--effort', effort);
+    // --effort: pass the level string directly. CLI accepts low/medium/high/xhigh/max.
+    // Unsupported levels gracefully fall back to the highest-supported level per Claude Code docs,
+    // so we can pass e.g. 'xhigh' on Sonnet without erroring (it runs as 'high').
+    if (effortLevel && effortLevel !== 'off') {
+      const valid = new Set(['low', 'medium', 'high', 'xhigh', 'max']);
+      if (valid.has(effortLevel)) args.push('--effort', effortLevel);
     }
 
     // If images are attached, add the temp directory so CLI can read them
@@ -2059,6 +2102,21 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
       delete cleanEnv.CLAUDE_CODE_OAUTH_TOKEN;
       Object.keys(cleanEnv).forEach(k => { if (k.startsWith('CLAUDE_CODE_')) delete cleanEnv[k]; });
+
+      // If user authed via in-app `claude setup-token`, use that token directly
+      // (bypasses keychain, works cross-platform).
+      const storedOauth = getSetting('claude_oauth_token');
+      if (storedOauth) {
+        cleanEnv.CLAUDE_CODE_OAUTH_TOKEN = storedOauth;
+      }
+
+      // 1M context is controlled via the `[1m]` alias suffix on the model (set above),
+      // not via ANTHROPIC_BETAS. Claude Code v2.1.111+ recognizes the suffix and sets
+      // the correct beta header internally. We only need to propagate the user's
+      // disable preference via CLAUDE_CODE_DISABLE_1M_CONTEXT as a belt-and-suspenders.
+      if (getSetting('claude_disable_1m') === 'true') {
+        cleanEnv.CLAUDE_CODE_DISABLE_1M_CONTEXT = '1';
+      }
 
       // Set cwd to workspace path so Claude CLI tools (Bash, etc.) operate in the project directory
       const effectiveCwd = workspacePath && fs.existsSync(workspacePath) ? workspacePath : undefined;
@@ -2151,8 +2209,18 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
   /**
    * Stream chat via direct HTTPS to Anthropic API (for API key auth only).
+   *
+   * Model dispatch matrix (per Anthropic docs, April 2026):
+   * - Opus 4.7:                adaptive thinking ONLY. `budget_tokens` returns 400.
+   *                            `temperature`/`top_p`/`top_k` return 400. Use `output_config.effort`.
+   *                            1M context supported. Default effort: xhigh.
+   * - Opus 4.6 / Sonnet 4.6:   adaptive thinking preferred. `budget_tokens` deprecated but accepted.
+   *                            1M context supported via `context-1m-2025-08-07` beta header.
+   *                            Use `output_config.effort` instead of budget_tokens.
+   * - Older (Opus 4.5, etc):   manual thinking with `budget_tokens`. No `output_config.effort`.
+   * - Haiku:                   no thinking, no effort, 200K context.
    */
-  function streamViaAPI(event, messages, model, streamId, apiKey, thinkingBudget) {
+  function streamViaAPI(event, messages, model, streamId, apiKey, effortLevel) {
     const abortController = new AbortController();
     const win = BrowserWindow.fromWebContents(event.sender);
     activeStreams.set(streamId, { abort: () => abortController.abort(), windowId: win?.id });
@@ -2160,34 +2228,80 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     // Resolve aliases for the Anthropic API (it doesn't accept short aliases)
     const resolvedModel = ALIAS_TO_MODEL[model] || model || 'claude-sonnet-4-6';
 
-    // Enable extended thinking for supported models (unless explicitly turned off)
-    const supportsThinking = /claude-(sonnet|opus)-4/.test(resolvedModel) || /claude-3-7/.test(resolvedModel);
-    const budget = typeof thinkingBudget === 'number' ? thinkingBudget : 10000;
-    const useThinking = supportsThinking && budget > 0;
+    const isOpus47 = /claude-opus-4-7/.test(resolvedModel);
+    const isOpus46 = /claude-opus-4-6/.test(resolvedModel);
+    const isSonnet46 = /claude-sonnet-4-6/.test(resolvedModel);
+    const isHaiku = /claude-haiku/.test(resolvedModel);
+    const isModernFamily = isOpus47 || isOpus46 || isSonnet46; // adaptive-thinking + effort family
+    const isOlderThinking = /claude-(sonnet|opus)-4/.test(resolvedModel) && !isModernFamily; // 4.5 etc.
+
+    const supports1M = /claude-(opus|sonnet)-4/.test(resolvedModel) && !isHaiku;
+    const disable1M = getSetting('claude_disable_1m') === 'true';
+    const use1M = supports1M && !disable1M;
+
+    // Normalize effort. Valid: off/low/medium/high/xhigh/max. Null → use model default.
+    const rawEffort = typeof effortLevel === 'string' ? effortLevel.toLowerCase() : null;
+    const validEfforts = new Set(['off', 'low', 'medium', 'high', 'xhigh', 'max']);
+    let effort = validEfforts.has(rawEffort) ? rawEffort : null;
+    // Per-model fallback: xhigh is Opus-4.7-only; demote on other models.
+    if (effort === 'xhigh' && !isOpus47) effort = 'high';
+    // Haiku has no effort support — drop it.
+    if (isHaiku) effort = null;
+
+    // Token headroom: Opus 4.7 at xhigh/max benefits from large max_tokens (docs say start at 64k).
+    let maxTokens = 8192;
+    if (isOpus47 && (effort === 'xhigh' || effort === 'max')) maxTokens = 64000;
+    else if (isOpus47) maxTokens = 32000;
+    else if (effort === 'max' || effort === 'high') maxTokens = 16384;
+
     const requestBody = {
       model: resolvedModel,
-      max_tokens: useThinking ? Math.max(16384, budget + 8192) : 8192,
+      max_tokens: maxTokens,
       stream: true,
       messages: messages.map(m => ({
         role: m.role,
-        content: m.content, // Already properly formatted — string or content blocks array
+        content: m.content,
       })),
     };
-    if (useThinking) {
-      requestBody.thinking = { type: 'enabled', budget_tokens: budget };
+
+    // Thinking mode
+    if (effort !== 'off') {
+      if (isOpus47) {
+        // Adaptive-only. Summarized display so we can still show thinking blocks.
+        requestBody.thinking = { type: 'adaptive', display: 'summarized' };
+      } else if (isOpus46 || isSonnet46) {
+        requestBody.thinking = { type: 'adaptive', display: 'summarized' };
+      } else if (isOlderThinking) {
+        // Legacy: fixed budget_tokens for 4.5 etc.
+        const legacyBudgets = { low: 4000, medium: 10000, high: 32000, max: 60000 };
+        const budget = legacyBudgets[effort] || 10000;
+        requestBody.thinking = { type: 'enabled', budget_tokens: budget };
+        requestBody.max_tokens = Math.max(maxTokens, budget + 8192);
+      }
     }
+
+    // Effort parameter (new API — output_config.effort). Modern family only.
+    if (effort && effort !== 'off' && isModernFamily) {
+      requestBody.output_config = { effort };
+    }
+
     const postData = JSON.stringify(requestBody);
+
+    const apiHeaders = {
+      'Content-Type': 'application/json',
+      'anthropic-version': '2023-06-01',
+      'x-api-key': apiKey,
+    };
+    if (use1M) {
+      apiHeaders['anthropic-beta'] = 'context-1m-2025-08-07';
+    }
 
     return new Promise((resolve) => {
       const req = https.request({
         hostname: 'api.anthropic.com',
         path: '/v1/messages',
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'anthropic-version': '2023-06-01',
-          'x-api-key': apiKey,
-        },
+        headers: apiHeaders,
         signal: abortController.signal,
       }, (res) => {
         if (res.statusCode !== 200) {
@@ -2269,7 +2383,8 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
   // Main chat handler — routes to CLI (subscription) or API (key) based on auth source
   const MAX_CONCURRENT_STREAMS = 3; // Prevent unbounded subprocess spawning
 
-  ipcMain.handle('claude:chat', async (event, { messages, images, model, streamId, workspacePath, thinkingBudget }) => {
+  ipcMain.handle('claude:chat', async (event, params) => {
+    const { messages, images, model, streamId, workspacePath, effortLevel, thinkingBudget } = params || {};
     // Enforce per-window concurrency limit
     const callingWin = BrowserWindow.fromWebContents(event.sender);
     const callingWinId = callingWin?.id;
@@ -2283,12 +2398,22 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       return { error: 'No Claude credentials found. Connect your Claude Code subscription or add an API key in Settings → Providers.' };
     }
 
-    if (cred.source === 'subscription') {
+    // Backwards-compat: older renderers may still send thinkingBudget (integer). Derive effort.
+    let effort = effortLevel;
+    if (!effort && typeof thinkingBudget === 'number') {
+      if (thinkingBudget <= 0) effort = 'off';
+      else if (thinkingBudget <= 4000) effort = 'low';
+      else if (thinkingBudget <= 10000) effort = 'medium';
+      else if (thinkingBudget <= 32000) effort = 'high';
+      else effort = 'xhigh';
+    }
+
+    if (cred.source === 'subscription' || cred.source === 'oauth_token') {
       // Subscription OAuth → use Claude CLI subprocess (handles auth internally)
-      return streamViaCLI(event, messages, images, model, streamId, workspacePath, thinkingBudget);
+      return streamViaCLI(event, messages, images, model, streamId, workspacePath, effort);
     } else {
       // API key → direct HTTPS to Anthropic API
-      return streamViaAPI(event, messages, model, streamId, cred.token, thinkingBudget);
+      return streamViaAPI(event, messages, model, streamId, cred.token, effort);
     }
   });
 
@@ -2355,12 +2480,23 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
           const tierMatch = m.id.match(/claude-(opus|sonnet|haiku)/);
           const tier = tierMatch ? tierMatch[1] : null;
           const label = (m.display_name || m.id).replace(/^Claude\s+/i, '');
+          const isOpus47 = /claude-opus-4-7/.test(m.id);
+          const isModernFamily = /claude-(opus-4-[67]|sonnet-4-6)/.test(m.id);
+          const is1MEligible = tier !== 'haiku' && /claude-(opus|sonnet)-4/.test(m.id);
+          const supportedEfforts = isOpus47
+            ? ['low', 'medium', 'high', 'xhigh', 'max']
+            : isModernFamily
+              ? ['low', 'medium', 'high', 'max']
+              : [];
           return {
             id: m.id,
             resolvedId: m.id,
             label,
             desc: TIER_DESC[tier] || '',
             supportsThinking: Boolean(tier) && /claude-(opus|sonnet)-[4-9]/.test(m.id),
+            supports1M: is1MEligible,
+            supportedEfforts,
+            defaultEffort: isOpus47 ? 'xhigh' : (isModernFamily ? 'high' : null),
           };
         });
     }
@@ -2385,6 +2521,246 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       console.error('[fetchModels] fetch error:', err.message);
       return { models: null, error: err.message };
     }
+  });
+
+  // ---- Claude CLI: In-App Login (PTY) + Install/Update ---- //
+
+  // Only one login PTY at a time — tracked at handler scope.
+  let claudeLoginPty = null;
+  let claudeLoginBuffer = '';
+  let claudeLoginTimeout = null;
+  let claudeLoginWinId = null;
+
+  function cleanupClaudeLogin() {
+    if (claudeLoginTimeout) { clearTimeout(claudeLoginTimeout); claudeLoginTimeout = null; }
+    if (claudeLoginPty) {
+      try { claudeLoginPty.kill(); } catch { /* ignore */ }
+      claudeLoginPty = null;
+    }
+    claudeLoginBuffer = '';
+  }
+
+  function emitLoginEvent(channel, payload) {
+    if (claudeLoginWinId == null) return;
+    const win = BrowserWindow.fromId(claudeLoginWinId);
+    if (win && !win.isDestroyed()) {
+      win.webContents.send(channel, payload);
+    }
+  }
+
+  // Best-effort npm resolution — respects user's node/nvm installs.
+  async function resolveNpmBinary() {
+    const candidates = process.platform === 'win32'
+      ? ['npm.cmd']
+      : [
+          '/opt/homebrew/bin/npm',
+          '/usr/local/bin/npm',
+          path.join(os.homedir(), '.volta', 'bin', 'npm'),
+          path.join(os.homedir(), '.nvm', 'versions', 'node'),
+        ];
+    for (const p of candidates) {
+      if (p.endsWith('.nvm/versions/node')) {
+        // nvm: pick highest version
+        try {
+          const versions = fs.readdirSync(p).filter(d => d.startsWith('v'));
+          if (versions.length) {
+            versions.sort();
+            const npmPath = path.join(p, versions[versions.length - 1], 'bin', 'npm');
+            if (fs.existsSync(npmPath)) return npmPath;
+          }
+        } catch { /* ignore */ }
+        continue;
+      }
+      try {
+        const stat = await fs.promises.stat(p);
+        if (stat.isFile()) return p;
+      } catch { /* continue */ }
+    }
+    try {
+      const { stdout } = await execAsync(
+        process.platform === 'win32' ? 'where npm 2>NUL' : 'which npm 2>/dev/null',
+        { timeout: 5000 }
+      );
+      return stdout.trim().split('\n')[0] || null;
+    } catch { return null; }
+  }
+
+  // Start in-app OAuth login. Spawns `claude setup-token` in a PTY.
+  // Output is streamed to renderer via 'claude:loginOutput'.
+  // Renderer writes user input via 'claude:loginInput' (paste auth code).
+  // On completion, token is captured from stdout and saved.
+  // Result is delivered via 'claude:loginResult'.
+  ipcMain.handle('claude:startLogin', async (event) => {
+    cleanupClaudeLogin();
+
+    const bin = await resolveClaudeBinary();
+    if (!bin) {
+      return { success: false, error: 'Claude Code CLI not installed. Click "Install CLI" first.' };
+    }
+
+    const ownerWin = BrowserWindow.fromWebContents(event.sender);
+    claudeLoginWinId = ownerWin?.id ?? null;
+
+    // Strip env vars that would confuse setup-token (it would think it's nested,
+    // or use a pre-existing token instead of starting fresh).
+    const cleanEnv = { ...process.env };
+    delete cleanEnv.CLAUDECODE;
+    delete cleanEnv.CLAUDE_CODE_ENTRYPOINT;
+    delete cleanEnv.CLAUDE_CODE_OAUTH_TOKEN;
+    delete cleanEnv.ANTHROPIC_AUTH_TOKEN;
+    delete cleanEnv.ANTHROPIC_API_KEY;
+    Object.keys(cleanEnv).forEach(k => { if (k.startsWith('CLAUDE_CODE_')) delete cleanEnv[k]; });
+    cleanEnv.TERM = 'xterm-256color';
+    cleanEnv.COLORTERM = 'truecolor';
+
+    try {
+      claudeLoginPty = pty.spawn(bin, ['setup-token'], {
+        name: 'xterm-256color',
+        cols: 100,
+        rows: 30,
+        env: cleanEnv,
+      });
+    } catch (err) {
+      return { success: false, error: `Failed to start login: ${err.message}` };
+    }
+
+    // 5 minute overall timeout
+    claudeLoginTimeout = setTimeout(() => {
+      emitLoginEvent('claude:loginResult', { success: false, error: 'Login timed out after 5 minutes' });
+      cleanupClaudeLogin();
+    }, 5 * 60 * 1000);
+
+    claudeLoginPty.onData((data) => {
+      claudeLoginBuffer += data;
+      emitLoginEvent('claude:loginOutput', data);
+    });
+
+    claudeLoginPty.onExit(({ exitCode }) => {
+      if (claudeLoginTimeout) { clearTimeout(claudeLoginTimeout); claudeLoginTimeout = null; }
+      const output = claudeLoginBuffer;
+      claudeLoginPty = null;
+
+      // Capture long-lived OAuth token (sk-ant-oat01-...) emitted by `setup-token`.
+      // Regex is conservative — token format is sk-ant- + 4-char type + 64+ char body.
+      const tokenMatch = output.match(/sk-ant-[a-zA-Z0-9_-]{20,}/);
+      if (tokenMatch) {
+        const token = tokenMatch[0];
+        setSetting('claude_oauth_token', token);
+        emitLoginEvent('claude:loginResult', {
+          success: true,
+          tokenPreview: token.substring(0, 16) + '...' + token.slice(-4),
+        });
+      } else {
+        emitLoginEvent('claude:loginResult', {
+          success: false,
+          error: exitCode === 0
+            ? 'Login completed but no token was detected. Try again.'
+            : `Login exited with code ${exitCode}`,
+        });
+      }
+      claudeLoginBuffer = '';
+    });
+
+    return { success: true };
+  });
+
+  ipcMain.on('claude:loginInput', (_event, data) => {
+    if (claudeLoginPty && typeof data === 'string') {
+      try { claudeLoginPty.write(data); } catch { /* ignore */ }
+    }
+  });
+
+  ipcMain.handle('claude:cancelLogin', async () => {
+    cleanupClaudeLogin();
+    return { success: true };
+  });
+
+  ipcMain.handle('claude:logout', async () => {
+    setSetting('claude_oauth_token', '');
+    return { success: true };
+  });
+
+  // Install or update Claude Code CLI via npm. Streams output via 'claude:cliInstallOutput'.
+  ipcMain.handle('claude:installOrUpdateCli', async (event) => {
+    const ownerWin = BrowserWindow.fromWebContents(event.sender);
+    const winId = ownerWin?.id;
+
+    const emit = (line) => {
+      const win = winId != null ? BrowserWindow.fromId(winId) : null;
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('claude:cliInstallOutput', line);
+      }
+    };
+
+    const npmBin = await resolveNpmBinary();
+    if (!npmBin) {
+      const msg = 'npm not found. Install Node.js (https://nodejs.org) first, then retry.';
+      emit(msg + '\n');
+      return { success: false, error: msg };
+    }
+
+    // Force install into ~/.local (a path resolveClaudeBinary already searches).
+    // This bypasses any weird user-level npmrc prefix (e.g. leftover from other
+    // Electron apps that bundle node and set a global prefix inside their .app).
+    const foundryPrefix = path.join(os.homedir(), '.local');
+    try {
+      await fs.promises.mkdir(path.join(foundryPrefix, 'bin'), { recursive: true });
+      await fs.promises.mkdir(path.join(foundryPrefix, 'lib'), { recursive: true });
+    } catch { /* ignore */ }
+
+    emit(`$ npm install -g --prefix="${foundryPrefix}" @anthropic-ai/claude-code@latest\n\n`);
+
+    return new Promise((resolve) => {
+      let proc;
+      try {
+        proc = spawn(
+          npmBin,
+          ['install', '-g', `--prefix=${foundryPrefix}`, '@anthropic-ai/claude-code@latest'],
+          {
+            env: {
+              ...process.env,
+              npm_config_yes: 'true',
+              // Override any user-level prefix config (e.g. from a stray ~/.npmrc)
+              npm_config_prefix: foundryPrefix,
+              // Prevent npm from looking at a broken global prefix for existing deps
+              npm_config_global: 'true',
+            },
+          }
+        );
+      } catch (err) {
+        emit(`Failed to spawn npm: ${err.message}\n`);
+        resolve({ success: false, error: err.message });
+        return;
+      }
+
+      proc.stdout.on('data', (chunk) => emit(chunk.toString()));
+      proc.stderr.on('data', (chunk) => emit(chunk.toString()));
+
+      proc.on('error', (err) => {
+        emit(`\nError: ${err.message}\n`);
+        resolve({ success: false, error: err.message });
+      });
+
+      proc.on('close', async (code) => {
+        if (code === 0) {
+          // Re-detect so the UI can pick up the new version.
+          let version = null;
+          try {
+            const bin = await resolveClaudeBinary();
+            if (bin) {
+              const { stdout } = await execFileAsync(bin, ['--version'], { timeout: 5000 });
+              const m = stdout.trim().match(/\d+\.\d+\.\d+/);
+              version = m ? m[0] : stdout.trim();
+            }
+          } catch { /* ignore */ }
+          emit(`\nInstalled Claude Code${version ? ' v' + version : ''}.\n`);
+          resolve({ success: true, version });
+        } else {
+          emit(`\nnpm exited with code ${code}. If this is a permissions error, try:\n  sudo npm install -g @anthropic-ai/claude-code@latest\n`);
+          resolve({ success: false, error: `npm exited with code ${code}` });
+        }
+      });
+    });
   });
 
   // ---- Chat Threads & Messages ---- //

@@ -700,13 +700,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
 
     const model = modelKey;
 
-    // Resolve thinking budget from current level
-    let thinkingBudget;
+    // Resolve effort level (Anthropic's new API parameter — replaces budget_tokens for Opus 4.7).
+    // Persisted value is a string: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'.
+    let effortLevel;
     try {
-      const level = await window.foundry?.getSetting('claude_thinking_level');
-      const budgetMap = { off: 0, low: 4000, medium: 10000, high: 32000 };
-      thinkingBudget = budgetMap[level] ?? 10000;
-    } catch { thinkingBudget = 10000; }
+      const saved = await window.foundry?.getSetting('claude_thinking_level');
+      const valid = ['off', 'low', 'medium', 'high', 'xhigh', 'max'];
+      effortLevel = valid.includes(saved) ? saved : null; // null = let main pick model-appropriate default
+    } catch { effortLevel = null; }
 
     const result = await window.foundry?.claudeChat({
       messages: apiMessages,
@@ -718,7 +719,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       model: model || 'claude-sonnet-4-6',
       streamId,
       workspacePath: projectPath || null,
-      thinkingBudget,
+      effortLevel,
     });
 
     if (result?.error) {

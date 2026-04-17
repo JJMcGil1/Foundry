@@ -328,15 +328,22 @@ const ChatInput = forwardRef(function ChatInput({
                     exit={{ opacity: 0, y: 4 }}
                     transition={{ duration: 0.15 }}
                   >
-                    {THINKING_LEVELS.map(opt => (
-                      <button
-                        key={opt.key}
-                        className={`${styles.modelOption} ${thinkingLevel === opt.key ? styles.modelOptionActive : ''}`}
-                        onClick={() => { onThinkingLevelChange(opt.key); setShowThinkingDropdown(false); }}
-                      >
-                        <span className={styles.modelOptionLabel}>{opt.label}</span>
-                      </button>
-                    ))}
+                    {THINKING_LEVELS
+                      .filter(opt => {
+                        if (opt.key === 'off') return true; // always show off
+                        const allowed = currentModel.supportedEfforts;
+                        return !allowed || allowed.length === 0 || allowed.includes(opt.key);
+                      })
+                      .map(opt => (
+                        <button
+                          key={opt.key}
+                          className={`${styles.modelOption} ${thinkingLevel === opt.key ? styles.modelOptionActive : ''}`}
+                          onClick={() => { onThinkingLevelChange(opt.key); setShowThinkingDropdown(false); }}
+                          title={opt.desc}
+                        >
+                          <span className={styles.modelOptionLabel}>{opt.label}</span>
+                        </button>
+                      ))}
                   </motion.div>
                 )}
               </AnimatePresence>

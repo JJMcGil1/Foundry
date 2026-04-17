@@ -11,12 +11,34 @@ export const SECTIONS = [
 
 // Fallback model list shown before dynamic discovery completes (or for subscription-only users
 // who can't use the /v1/models API — Anthropic rejects subscription OAuth tokens for that endpoint).
-// Keep this current: update when Anthropic releases new models.
+// `supports1M` → eligible for the 1M context window (Opus 4.7/4.6, Sonnet 4.6).
+// `supportedEfforts` → subset of ['low','medium','high','xhigh','max'] accepted by that model.
+// `defaultEffort` → what the API picks if effort is omitted (per Anthropic docs).
 export const CLAUDE_MODELS_DEFAULT = [
-  { id: 'claude-opus-4-7', label: 'Opus 4.7', desc: 'Most capable', resolvedId: 'claude-opus-4-7', supportsThinking: true },
-  { id: 'claude-opus-4-6', label: 'Opus 4.6', desc: 'Most capable', resolvedId: 'claude-opus-4-6', supportsThinking: true },
-  { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', desc: 'Balanced', resolvedId: 'claude-sonnet-4-6', supportsThinking: true },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', desc: 'Fastest', resolvedId: 'claude-haiku-4-5-20251001', supportsThinking: false },
+  {
+    id: 'claude-opus-4-7', label: 'Opus 4.7', desc: 'Most capable — 1M context, adaptive thinking',
+    resolvedId: 'claude-opus-4-7', supportsThinking: true, supports1M: true,
+    supportedEfforts: ['low', 'medium', 'high', 'xhigh', 'max'],
+    defaultEffort: 'xhigh',
+  },
+  {
+    id: 'claude-opus-4-6', label: 'Opus 4.6', desc: 'Most capable — 1M context',
+    resolvedId: 'claude-opus-4-6', supportsThinking: true, supports1M: true,
+    supportedEfforts: ['low', 'medium', 'high', 'max'],
+    defaultEffort: 'high',
+  },
+  {
+    id: 'claude-sonnet-4-6', label: 'Sonnet 4.6', desc: 'Balanced — 1M context',
+    resolvedId: 'claude-sonnet-4-6', supportsThinking: true, supports1M: true,
+    supportedEfforts: ['low', 'medium', 'high', 'max'],
+    defaultEffort: 'high',
+  },
+  {
+    id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', desc: 'Fastest — 200K context',
+    resolvedId: 'claude-haiku-4-5-20251001', supportsThinking: false, supports1M: false,
+    supportedEfforts: [],
+    defaultEffort: null,
+  },
 ];
 
 // Legacy short aliases stored before v1.0.47 — map to canonical full model IDs
@@ -26,11 +48,15 @@ export const LEGACY_ALIAS_MAP = {
   'haiku': 'claude-haiku-4-5-20251001',
 };
 
+// Effort levels (Anthropic API `output_config.effort`). Opus 4.7 supports all five;
+// Opus 4.6 / Sonnet 4.6 skip `xhigh` (falls back to `high`).
 export const THINKING_LEVELS = [
-  { key: 'off', label: 'Off', budget: 0, desc: 'No extended thinking' },
-  { key: 'low', label: 'Low', budget: 4000, desc: '4k token budget' },
-  { key: 'medium', label: 'Medium', budget: 10000, desc: '10k token budget' },
-  { key: 'high', label: 'High', budget: 32000, desc: '32k token budget' },
+  { key: 'off',    label: 'Off',     desc: 'No extended reasoning' },
+  { key: 'low',    label: 'Low',     desc: 'Fastest, cheapest — for scoped tasks' },
+  { key: 'medium', label: 'Medium',  desc: 'Balanced speed, cost, and quality' },
+  { key: 'high',   label: 'High',    desc: 'Deep reasoning — most tasks' },
+  { key: 'xhigh',  label: 'XHigh',   desc: 'Extended reasoning — Opus 4.7 only' },
+  { key: 'max',    label: 'Max',     desc: 'Unconstrained — deepest thinking' },
 ];
 
 /* ── Language color map ── */

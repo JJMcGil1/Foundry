@@ -154,6 +154,28 @@ contextBridge.exposeInMainWorld('foundry', {
   claudeGetModel: () => ipcRenderer.invoke('claude:getModel'),
   claudeSetModel: (model) => ipcRenderer.invoke('claude:setModel', model),
   claudeFetchModels: () => ipcRenderer.invoke('claude:fetchModels'),
+  // In-app Login (PTY)
+  claudeStartLogin: () => ipcRenderer.invoke('claude:startLogin'),
+  claudeLoginInput: (data) => ipcRenderer.send('claude:loginInput', data),
+  claudeCancelLogin: () => ipcRenderer.invoke('claude:cancelLogin'),
+  claudeLogout: () => ipcRenderer.invoke('claude:logout'),
+  onClaudeLoginOutput: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('claude:loginOutput', handler);
+    return () => ipcRenderer.removeListener('claude:loginOutput', handler);
+  },
+  onClaudeLoginResult: (callback) => {
+    const handler = (_event, result) => callback(result);
+    ipcRenderer.on('claude:loginResult', handler);
+    return () => ipcRenderer.removeListener('claude:loginResult', handler);
+  },
+  // CLI Install / Update
+  claudeInstallOrUpdateCli: () => ipcRenderer.invoke('claude:installOrUpdateCli'),
+  onClaudeCliInstallOutput: (callback) => {
+    const handler = (_event, data) => callback(data);
+    ipcRenderer.on('claude:cliInstallOutput', handler);
+    return () => ipcRenderer.removeListener('claude:cliInstallOutput', handler);
+  },
   onClaudeStream: (callback) => {
     const handler = (_event, streamId, data) => callback(streamId, data);
     ipcRenderer.on('claude:stream', handler);

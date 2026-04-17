@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { FiCheck, FiEye, FiEyeOff, FiExternalLink, FiAlertCircle, FiCpu, FiKey, FiRefreshCw, FiLogOut, FiLock, FiChevronDown } from 'react-icons/fi';
+import { FiCheck, FiEye, FiEyeOff, FiExternalLink, FiAlertCircle, FiCpu, FiKey, FiRefreshCw, FiLogOut, FiLock, FiChevronDown, FiDownload, FiLogIn, FiX, FiCopy } from 'react-icons/fi';
 import { CLAUDE_MODELS_DEFAULT, LEGACY_ALIAS_MAP } from './settingsUtils';
 import styles from '../SettingsPage.module.css';
 
 export default function ProvidersSection({ isActive }) {
-  const [claudeCliStatus, setClaudeCliStatus] = useState({ installed: false, authenticated: false });
+  const [claudeCliStatus, setClaudeCliStatus] = useState({ installed: false, authenticated: false, version: null });
   const [claudeApiKey, setClaudeApiKey] = useState('');
   const [claudeApiKeyInitial, setClaudeApiKeyInitial] = useState('');
   const [showClaudeKey, setShowClaudeKey] = useState(false);
@@ -14,21 +14,39 @@ export default function ProvidersSection({ isActive }) {
   const [claudeKeySaved, setClaudeKeySaved] = useState(false);
   const [claudeDetecting, setClaudeDetecting] = useState(false);
   const [autoApprovePermissions, setAutoApprovePermissions] = useState(true);
+  const [enable1MContext, setEnable1MContext] = useState(true);
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [claudeModels, setClaudeModels] = useState(CLAUDE_MODELS_DEFAULT);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsRequireApiKey, setModelsRequireApiKey] = useState(false);
 
+  // In-app login (PTY) state
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginOutput, setLoginOutput] = useState('');
+  const [loginActive, setLoginActive] = useState(false);
+  const [loginResult, setLoginResult] = useState(null); // { success, error?, tokenPreview? }
+  const [loginInput, setLoginInput] = useState('');
+  const [authUrl, setAuthUrl] = useState('');
+  const loginTermRef = useRef(null);
+
+  // Install / update state
+  const [installOpen, setInstallOpen] = useState(false);
+  const [installOutput, setInstallOutput] = useState('');
+  const [installActive, setInstallActive] = useState(false);
+  const [installResult, setInstallResult] = useState(null); // { success, error? }
+  const installTermRef = useRef(null);
+
   const providersLoadedRef = useRef(false);
 
   // Pre-load local settings on mount
   useEffect(() => {
     async function preload() {
-      const [apiKey, model, autoApproveRaw] = await Promise.all([
+      const [apiKey, model, autoApproveRaw, disable1MRaw] = await Promise.all([
         window.foundry?.claudeGetApiKey(),
         window.foundry?.claudeGetModel(),
         window.foundry?.getSetting('claude_auto_approve_permissions'),
+        window.foundry?.getSetting('claude_disable_1m'),
       ]);
       if (apiKey) {
         setClaudeApiKey(apiKey);
@@ -37,6 +55,8 @@ export default function ProvidersSection({ isActive }) {
       }
       if (model) setSelectedModel(LEGACY_ALIAS_MAP[model] || model);
       setAutoApprovePermissions(autoApproveRaw === null || autoApproveRaw === undefined || autoApproveRaw === 'true');
+      // Default ON (1M context enabled) unless explicitly disabled.
+      setEnable1MContext(disable1MRaw !== 'true');
     }
     preload();
   }, []);
@@ -71,6 +91,12 @@ export default function ProvidersSection({ isActive }) {
   const handleAutoApproveToggle = async (val) => {
     setAutoApprovePermissions(val);
     await window.foundry?.setSetting('claude_auto_approve_permissions', String(val));
+  };
+
+  const handle1MContextToggle = async (val) => {
+    setEnable1MContext(val);
+    // Storage is inverted — we store the disable flag so "unset" defaults to enabled.
+    await window.foundry?.setSetting('claude_disable_1m', val ? 'false' : 'true');
   };
 
   const handleSaveClaudeKey = async () => {
@@ -113,6 +139,106 @@ export default function ProvidersSection({ isActive }) {
       if (cliStatus) setClaudeCliStatus(cliStatus);
     } catch { /* ignore */ }
     setClaudeDetecting(false);
+  };
+
+  // ---- In-app Login (PTY) ---- //
+
+  // Strip ANSI escape sequences for readable display.
+  const stripAnsi = (s) => s.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '').replace(/\x1B\][^\x07]*\x07/g, '');
+
+  useEffect(() => {
+    if (!loginOpen) return;
+    const offOut = window.foundry?.onClaudeLoginOutput?.((data) => {
+      setLoginOutput(prev => {
+        const next = prev + data;
+        // Auto-extract OAuth URL if present so user can click it
+        const urlMatch = stripAnsi(next).match(/https:\/\/(?:claude\.ai|console\.anthropic\.com)\/[^\s"']+/);
+        if (urlMatch) setAuthUrl(urlMatch[0]);
+        return next;
+      });
+    });
+    const offRes = window.foundry?.onClaudeLoginResult?.((result) => {
+      setLoginActive(false);
+      setLoginResult(result);
+      if (result?.success) {
+        handleRefreshCliStatus();
+      }
+    });
+    return () => { offOut?.(); offRes?.(); };
+  }, [loginOpen]);
+
+  useEffect(() => {
+    if (loginTermRef.current) {
+      loginTermRef.current.scrollTop = loginTermRef.current.scrollHeight;
+    }
+  }, [loginOutput]);
+
+  const startLogin = async () => {
+    setLoginOutput('');
+    setLoginResult(null);
+    setAuthUrl('');
+    setLoginInput('');
+    setLoginOpen(true);
+    setLoginActive(true);
+    const res = await window.foundry?.claudeStartLogin();
+    if (!res?.success) {
+      setLoginActive(false);
+      setLoginResult({ success: false, error: res?.error || 'Failed to start login' });
+    }
+  };
+
+  const cancelLogin = async () => {
+    await window.foundry?.claudeCancelLogin?.();
+    setLoginActive(false);
+  };
+
+  const closeLogin = async () => {
+    if (loginActive) await cancelLogin();
+    setLoginOpen(false);
+  };
+
+  const submitLoginInput = () => {
+    if (!loginInput || !loginActive) return;
+    // Send trimmed code + newline to the PTY
+    window.foundry?.claudeLoginInput?.(loginInput.trim() + '\r');
+    setLoginInput('');
+  };
+
+  const handleDisconnectSubscription = async () => {
+    await window.foundry?.claudeLogout?.();
+    await handleRefreshCliStatus();
+  };
+
+  // ---- Install / Update CLI ---- //
+
+  useEffect(() => {
+    if (!installOpen) return;
+    const off = window.foundry?.onClaudeCliInstallOutput?.((data) => {
+      setInstallOutput(prev => prev + data);
+    });
+    return () => { off?.(); };
+  }, [installOpen]);
+
+  useEffect(() => {
+    if (installTermRef.current) {
+      installTermRef.current.scrollTop = installTermRef.current.scrollHeight;
+    }
+  }, [installOutput]);
+
+  const startInstallOrUpdate = async () => {
+    setInstallOutput('');
+    setInstallResult(null);
+    setInstallActive(true);
+    setInstallOpen(true);
+    const res = await window.foundry?.claudeInstallOrUpdateCli?.();
+    setInstallActive(false);
+    setInstallResult(res);
+    if (res?.success) handleRefreshCliStatus();
+  };
+
+  const closeInstall = () => {
+    if (installActive) return; // wait for it to finish
+    setInstallOpen(false);
   };
 
   const handleModelChange = async (modelId) => {
@@ -167,7 +293,9 @@ export default function ProvidersSection({ isActive }) {
           <div className={styles.providerStatusRow}>
             <div className={`${styles.statusDot} ${claudeCliStatus.installed ? styles.statusDotGreen : styles.statusDotGray}`} />
             <span className={styles.providerStatusText}>
-              {claudeCliStatus.installed ? 'Claude Code detected' : 'Claude Code not found'}
+              {claudeCliStatus.installed
+                ? `Claude Code detected${claudeCliStatus.version ? ` (v${claudeCliStatus.version})` : ''}`
+                : 'Claude Code not found'}
             </span>
           </div>
           {claudeCliStatus.installed && (
@@ -183,19 +311,63 @@ export default function ProvidersSection({ isActive }) {
                 {claudeCliStatus.authenticated && !claudeCliStatus.expired
                   ? `Authenticated${claudeCliStatus.subscriptionType ? ` — ${claudeCliStatus.subscriptionType.charAt(0).toUpperCase() + claudeCliStatus.subscriptionType.slice(1)} plan` : ''}`
                   : claudeCliStatus.authenticated && claudeCliStatus.expired
-                    ? 'Session expired — run `claude login` to refresh'
-                    : 'Not authenticated — run `claude login` in terminal'}
+                    ? 'Session expired — sign in again'
+                    : 'Not authenticated'}
               </span>
             </div>
           )}
+
+          {/* Action row: Install/Update + Sign In / Sign Out */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+            <button
+              className={`${styles.saveBtn} ${styles.saveBtnActive}`}
+              onClick={startInstallOrUpdate}
+              disabled={installActive}
+              style={{ flex: '0 0 auto' }}
+            >
+              <FiDownload size={14} />
+              {claudeCliStatus.installed ? 'Update CLI' : 'Install CLI'}
+            </button>
+            {claudeCliStatus.installed && !claudeCliStatus.authenticated && (
+              <button
+                className={`${styles.saveBtn} ${styles.saveBtnActive}`}
+                onClick={startLogin}
+                style={{ flex: '0 0 auto' }}
+              >
+                <FiLogIn size={14} />
+                Sign In with Claude Code
+              </button>
+            )}
+            {claudeCliStatus.authenticated && claudeCliStatus.authSource === 'oauth_token' && (
+              <button
+                className={styles.ghDisconnectBtn}
+                onClick={handleDisconnectSubscription}
+                style={{ flex: '0 0 auto' }}
+              >
+                <FiLogOut size={12} />
+                Sign Out
+              </button>
+            )}
+            {claudeCliStatus.installed && claudeCliStatus.authenticated && claudeCliStatus.expired && (
+              <button
+                className={`${styles.saveBtn} ${styles.saveBtnActive}`}
+                onClick={startLogin}
+                style={{ flex: '0 0 auto' }}
+              >
+                <FiRefreshCw size={14} />
+                Re-authenticate
+              </button>
+            )}
+          </div>
+
           {!claudeCliStatus.installed && (
-            <p className={styles.providerHint}>
-              Install Claude Code to use your existing subscription.{' '}
+            <p className={styles.providerHint} style={{ marginTop: 8 }}>
+              Claude Code is installed via npm (requires Node.js).{' '}
               <button
                 className={styles.link}
                 onClick={() => window.foundry?.openExternal('https://docs.anthropic.com/en/docs/claude-code/getting-started')}
               >
-                Get Claude Code <FiExternalLink size={10} />
+                Learn more <FiExternalLink size={10} />
               </button>
             </p>
           )}
@@ -219,6 +391,28 @@ export default function ProvidersSection({ isActive }) {
               </button>
             </div>
           )}
+
+          {/* 1M context window toggle */}
+          <div className={styles.autoApproveRow}>
+            <div className={styles.autoApproveInfo}>
+              <span className={styles.autoApproveLabel}>1M context window</span>
+              <span className={styles.providerHint}>
+                Use the 1M-token context window on Opus 4.7 / 4.6 and Sonnet 4.6.
+                Via the CLI, the <code>[1m]</code> alias suffix is appended automatically
+                (Max / Team / Enterprise plans include it; Pro needs extra usage).
+                Via direct API key, the <code>context-1m-2025-08-07</code> beta header is sent.
+                Haiku stays at 200K.
+              </span>
+            </div>
+            <button
+              className={`${styles.toggleSwitch} ${enable1MContext ? styles.toggleSwitchOn : ''}`}
+              onClick={() => handle1MContextToggle(!enable1MContext)}
+              aria-pressed={enable1MContext}
+              title={enable1MContext ? 'Disable 1M context' : 'Enable 1M context'}
+            >
+              <span className={styles.toggleThumb} />
+            </button>
+          </div>
         </div>
 
         {/* Divider */}
@@ -348,6 +542,171 @@ export default function ProvidersSection({ isActive }) {
           </div>
         )}
       </div>
+
+      {/* ---- Sign-In Modal (PTY) ---- */}
+      {loginOpen && (
+        <div className={styles.modalBackdrop} onClick={(e) => { if (e.target === e.currentTarget) closeLogin(); }}>
+          <div className={styles.modal} style={{ width: 640, maxHeight: '80vh' }}>
+            <div className={styles.modalHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className={styles.modalTitle}>Sign in with Claude Code</span>
+              <button className={styles.providerRefreshBtn} onClick={closeLogin} title="Close">
+                <FiX size={13} />
+              </button>
+            </div>
+
+            <div style={{ padding: '12px 20px', fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+              {authUrl ? (
+                <>
+                  1. Click the link below to authorize in your browser.<br />
+                  2. Copy the code you receive and paste it below.
+                </>
+              ) : (
+                'Starting authentication…'
+              )}
+            </div>
+
+            {authUrl && (
+              <div style={{ padding: '0 20px 12px', display: 'flex', gap: 6, alignItems: 'center' }}>
+                <button
+                  className={styles.link}
+                  onClick={() => window.foundry?.openExternal(authUrl)}
+                  style={{ fontSize: 12, textAlign: 'left', wordBreak: 'break-all' }}
+                >
+                  {authUrl} <FiExternalLink size={10} />
+                </button>
+                <button
+                  className={styles.providerRefreshBtn}
+                  onClick={() => navigator.clipboard?.writeText(authUrl)}
+                  title="Copy URL"
+                >
+                  <FiCopy size={11} />
+                </button>
+              </div>
+            )}
+
+            <div
+              ref={loginTermRef}
+              style={{
+                margin: '0 20px',
+                padding: 12,
+                background: '#0a0a0c',
+                border: '1px solid #2a2a2e',
+                borderRadius: 6,
+                fontFamily: 'var(--font-mono, ui-monospace, Menlo, monospace)',
+                fontSize: 11,
+                color: '#d0d0d0',
+                maxHeight: 220,
+                minHeight: 120,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {loginOutput ? stripAnsi(loginOutput) : 'Waiting for claude setup-token…\n'}
+            </div>
+
+            {loginActive && (
+              <div style={{ display: 'flex', gap: 8, padding: '12px 20px' }}>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="Paste authorization code here…"
+                  value={loginInput}
+                  onChange={(e) => setLoginInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && loginInput.trim()) submitLoginInput(); }}
+                  autoFocus
+                />
+                <button
+                  className={`${styles.saveBtn} ${loginInput.trim() ? styles.saveBtnActive : ''}`}
+                  onClick={submitLoginInput}
+                  disabled={!loginInput.trim()}
+                >
+                  Submit
+                </button>
+              </div>
+            )}
+
+            {loginResult && (
+              <div style={{ padding: '0 20px 12px' }}>
+                {loginResult.success ? (
+                  <div className={styles.ghBadge} style={{ padding: '6px 10px', fontSize: 12 }}>
+                    <FiCheck size={12} />
+                    Authenticated — token {loginResult.tokenPreview}
+                  </div>
+                ) : (
+                  <div className={styles.ghError}>
+                    <FiAlertCircle size={13} />
+                    <span>{loginResult.error}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className={styles.modalActions}>
+              <button className={styles.modalCancelBtn} onClick={closeLogin}>
+                {loginActive ? 'Cancel' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- Install / Update CLI Modal ---- */}
+      {installOpen && (
+        <div className={styles.modalBackdrop} onClick={(e) => { if (e.target === e.currentTarget && !installActive) closeInstall(); }}>
+          <div className={styles.modal} style={{ width: 640, maxHeight: '80vh' }}>
+            <div className={styles.modalHeader} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span className={styles.modalTitle}>
+                {claudeCliStatus.installed ? 'Update Claude Code CLI' : 'Install Claude Code CLI'}
+              </span>
+              <button
+                className={styles.providerRefreshBtn}
+                onClick={closeInstall}
+                disabled={installActive}
+                title={installActive ? 'Running…' : 'Close'}
+              >
+                <FiX size={13} />
+              </button>
+            </div>
+
+            <div
+              ref={installTermRef}
+              style={{
+                margin: '16px 20px',
+                padding: 12,
+                background: '#0a0a0c',
+                border: '1px solid #2a2a2e',
+                borderRadius: 6,
+                fontFamily: 'var(--font-mono, ui-monospace, Menlo, monospace)',
+                fontSize: 11,
+                color: '#d0d0d0',
+                maxHeight: 320,
+                minHeight: 200,
+                overflow: 'auto',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {installOutput || 'Starting…'}
+            </div>
+
+            {installResult && !installResult.success && (
+              <div style={{ padding: '0 20px 12px' }}>
+                <div className={styles.ghError}>
+                  <FiAlertCircle size={13} />
+                  <span>{installResult.error}</span>
+                </div>
+              </div>
+            )}
+
+            <div className={styles.modalActions}>
+              <button className={styles.modalCancelBtn} onClick={closeInstall} disabled={installActive}>
+                {installActive ? 'Running…' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
