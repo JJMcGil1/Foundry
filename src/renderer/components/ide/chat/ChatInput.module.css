@@ -103,6 +103,9 @@
   border-radius: 100px;
   overflow: hidden;
   transition: border-color 0.15s ease;
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.08),
+    0 3px 8px rgba(0, 0, 0, 0.06);
 }
 
 .combinedPill:hover {
@@ -195,12 +198,8 @@
 .modelOptionActive {
   color: var(--zinc-100);
   font-weight: 500;
-}
-
-.modelOptionCheck {
-  width: 14px;
-  color: var(--zinc-400);
-  flex-shrink: 0;
+  background: var(--surface-3);
+  border-radius: 6px;
 }
 
 .modelOptionLabel {
@@ -485,4 +484,28 @@
 
 :global([data-theme="light"]) .inputWrapper {
   background: rgba(255, 255, 255, 0.55);
+}
+
+:global([data-theme="light"]) .combinedPill {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 1px 3px rgba(0, 0, 0, 0.06),
+    0 3px 8px rgba(0, 0, 0, 0.04);
+}
+
+:global([data-theme="light"]) .combinedPill:hover {
+  border-color: rgba(0, 0, 0, 0.15);
+}
+
+:global([data-theme="light"]) .combinedPillSection:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+:global([data-theme="light"]) .modelOptionActive {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+:global([data-theme="light"]) .modelOption:hover {
+  background: rgba(0, 0, 0, 0.04);
 }

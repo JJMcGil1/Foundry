@@ -830,7 +830,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   }, []);
 
   return (
-    <>
+    <div className={styles.panel}>
       <ChatHeader
         threads={threads}
         currentThreadId={currentThreadId}
@@ -903,6 +903,6 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
           setQueueSize(0);
         }}
       />
-    </>
+    </div>
   );
 }

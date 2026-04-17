@@ -320,16 +320,6 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     refreshGit();
   };
 
-  if (!gitStatus.isRepo) {
-    return (
-      <div className={styles.panelScroll}>
-        <div className={styles.emptyState}>
-          <span className={styles.emptyText}>Not a Git repository</span>
-        </div>
-      </div>
-    );
-  }
-
   // Parse staged/unstaged from raw files if the main process hasn't been restarted
   // git status --porcelain: first char = index (staged), second char = working tree (unstaged)
   const { staged, unstaged, conflicts } = useMemo(() => {
@@ -372,6 +362,16 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     }
     return { staged: s, unstaged: u, conflicts: c };
   }, [gitStatus, optimisticStaged, optimisticUnstaged]);
+
+  if (!gitStatus.isRepo) {
+    return (
+      <div className={styles.panelScroll}>
+        <div className={styles.emptyState}>
+          <span className={styles.emptyText}>Not a Git repository</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.gitPanelContent}>

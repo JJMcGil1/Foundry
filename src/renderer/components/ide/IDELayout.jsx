@@ -1160,6 +1160,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               <div className={styles.blobViolet} />
               <div className={styles.blobIndigo} />
               <div className={styles.blobRose} />
+              <div className={styles.blobCaustic} />
             </div>
             <div
               className={styles.canvasTransform}

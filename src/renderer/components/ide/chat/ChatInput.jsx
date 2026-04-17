@@ -1,6 +1,7 @@
 import React, { forwardRef, useRef, useCallback, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiChevronDown, FiCheck, FiSquare, FiPaperclip, FiX, FiZap } from 'react-icons/fi';
+import { FiChevronDown, FiSquare, FiPaperclip, FiX } from 'react-icons/fi';
+import { LuBrainCircuit } from 'react-icons/lu';
 import styles from './ChatInput.module.css';
 import MediaPreview from './MediaPreview';
 import { THINKING_LEVELS } from '../settings/settingsUtils';
@@ -282,12 +283,12 @@ const ChatInput = forwardRef(function ChatInput({
                   <>
                     <span className={styles.combinedPillDivider} />
                     <button
-                      className={`${styles.combinedPillSection} ${thinkingLevel && thinkingLevel !== 'off' ? styles.thinkingSectionActive : ''}`}
+                      className={styles.combinedPillSection}
                       onClick={() => { setShowThinkingDropdown(v => !v); setShowModelDropdown(false); }}
                       ref={thinkingSwitcherRef}
                     >
-                      <FiZap size={11} />
-                      <span>{(THINKING_LEVELS.find(t => t.key === thinkingLevel) || THINKING_LEVELS[2]).label}</span>
+                      <LuBrainCircuit size={14} />
+                      <span>{THINKING_LEVELS.find(t => t.key === thinkingLevel)?.label || 'Medium'}</span>
                       <FiChevronDown
                         size={10}
                         className={`${styles.modelBadgeChevron} ${showThinkingDropdown ? styles.modelBadgeChevronOpen : ''}`}
@@ -311,9 +312,6 @@ const ChatInput = forwardRef(function ChatInput({
                         className={`${styles.modelOption} ${modelKey === opt.id ? styles.modelOptionActive : ''}`}
                         onClick={() => onModelSwitch(opt.id)}
                       >
-                        <span className={styles.modelOptionCheck}>
-                          {modelKey === opt.id ? <FiCheck size={12} /> : null}
-                        </span>
                         <ClaudeLogo size={14} />
                         <span className={styles.modelOptionLabel}>{opt.label}</span>
                       </button>
@@ -336,9 +334,6 @@ const ChatInput = forwardRef(function ChatInput({
                         className={`${styles.modelOption} ${thinkingLevel === opt.key ? styles.modelOptionActive : ''}`}
                         onClick={() => { onThinkingLevelChange(opt.key); setShowThinkingDropdown(false); }}
                       >
-                        <span className={styles.modelOptionCheck}>
-                          {thinkingLevel === opt.key ? <FiCheck size={12} /> : null}
-                        </span>
                         <span className={styles.modelOptionLabel}>{opt.label}</span>
                       </button>
                     ))}
