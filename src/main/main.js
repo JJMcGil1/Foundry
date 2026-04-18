@@ -1848,6 +1848,22 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       };
     }
 
+    // Priority 5: Keychain OAuth but no CLI → direct Bearer auth. Best-effort
+    // fallback so users who previously logged in via the CLI don't lose access
+    // if the CLI was removed. The keychain token is short-lived (~1h), so this
+    // only works until the next refresh is needed, but it bridges the gap until
+    // the user re-installs the CLI or adds an API key.
+    if (keychainCreds?.accessToken) {
+      const isExpired = keychainCreds.expiresAt && (Date.now() > keychainCreds.expiresAt - 60000);
+      return {
+        token: keychainCreds.accessToken,
+        source: 'oauth_token_direct',
+        subscriptionType: keychainCreds.subscriptionType || 'subscription',
+        expired: isExpired,
+        authHeader: isExpired ? {} : { 'Authorization': `Bearer ${keychainCreds.accessToken}` },
+      };
+    }
+
     return null;
   }
 
@@ -2578,18 +2594,29 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
   }
 
   // Best-effort npm resolution — respects user's node/nvm installs.
+  // Resolve npm on the host system. Order:
+  //   1. Known explicit install paths (homebrew, /usr/local, volta, nvm).
+  //   2. The user's login shell (zsh/bash -lc "command -v npm"). This is how
+  //      VS Code solves the "GUI-launched Electron app has minimal PATH" problem
+  //      — we ask the login shell directly because it sources the user's profile
+  //      where `node`/`npm` from fnm, asdf, nodenv, or app-bundled installers live.
+  //   3. `which npm` with whatever PATH we inherited (last resort).
   async function resolveNpmBinary() {
-    const candidates = process.platform === 'win32'
-      ? ['npm.cmd']
-      : [
-          '/opt/homebrew/bin/npm',
-          '/usr/local/bin/npm',
-          path.join(os.homedir(), '.volta', 'bin', 'npm'),
-          path.join(os.homedir(), '.nvm', 'versions', 'node'),
-        ];
+    if (process.platform === 'win32') {
+      try {
+        const { stdout } = await execAsync('where npm 2>NUL', { timeout: 5000 });
+        return stdout.trim().split('\n')[0] || null;
+      } catch { return null; }
+    }
+
+    const candidates = [
+      '/opt/homebrew/bin/npm',
+      '/usr/local/bin/npm',
+      path.join(os.homedir(), '.volta', 'bin', 'npm'),
+      path.join(os.homedir(), '.nvm', 'versions', 'node'),
+    ];
     for (const p of candidates) {
       if (p.endsWith('.nvm/versions/node')) {
-        // nvm: pick highest version
         try {
           const versions = fs.readdirSync(p).filter(d => d.startsWith('v'));
           if (versions.length) {
@@ -2605,13 +2632,50 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
         if (stat.isFile()) return p;
       } catch { /* continue */ }
     }
+
+    // Ask the login shell — picks up npm from fnm/asdf/nodenv/custom installs.
     try {
+      const shell = process.env.SHELL || '/bin/zsh';
       const { stdout } = await execAsync(
-        process.platform === 'win32' ? 'where npm 2>NUL' : 'which npm 2>/dev/null',
-        { timeout: 5000 }
+        `"${shell}" -lc "command -v npm 2>/dev/null"`,
+        { timeout: 8000 }
       );
+      const found = stdout.trim().split('\n').pop();
+      if (found && fs.existsSync(found)) return found;
+    } catch { /* continue */ }
+
+    try {
+      const { stdout } = await execAsync('which npm 2>/dev/null', { timeout: 5000 });
       return stdout.trim().split('\n')[0] || null;
     } catch { return null; }
+  }
+
+  // Build a PATH suitable for running `npm` (or any node-based tool) as a child
+  // process from a packaged Electron app. The npm shebang is `#!/usr/bin/env node`,
+  // which requires `node` on PATH. In a GUI-launched .app, process.env.PATH is
+  // typically just `/usr/bin:/bin:/usr/sbin:/sbin`, so `env` can't find node.
+  //
+  // We prepend:
+  //   1. The directory containing the resolved npm (node lives next to it).
+  //   2. Standard macOS dev locations (`/opt/homebrew/bin`, `/usr/local/bin`).
+  //   3. The user's ~/.local/bin and nvm/volta shims, for completeness.
+  function buildNodeAwarePath(npmBin) {
+    const parts = [];
+    if (npmBin) parts.push(path.dirname(npmBin));
+    if (process.platform !== 'win32') {
+      parts.push('/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin');
+      parts.push(path.join(os.homedir(), '.local', 'bin'));
+      parts.push(path.join(os.homedir(), '.volta', 'bin'));
+    }
+    const existing = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+    const seen = new Set();
+    const merged = [];
+    for (const p of [...parts, ...existing]) {
+      if (!p || seen.has(p)) continue;
+      seen.add(p);
+      merged.push(p);
+    }
+    return merged.join(path.delimiter);
   }
 
   // Start in-app OAuth login. Spawns `claude setup-token` in a PTY.
@@ -2737,6 +2801,11 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       await fs.promises.mkdir(path.join(foundryPrefix, 'lib'), { recursive: true });
     } catch { /* ignore */ }
 
+    // Augment PATH so npm's `#!/usr/bin/env node` shebang can resolve `node`.
+    // GUI-launched Electron apps inherit a minimal PATH; without this, install
+    // dies with `env: node: No such file or directory` (exit code 127).
+    const nodeAwarePath = buildNodeAwarePath(npmBin);
+
     emit(`$ npm install -g --prefix="${foundryPrefix}" @anthropic-ai/claude-code@latest\n\n`);
 
     return new Promise((resolve) => {
@@ -2748,6 +2817,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
           {
             env: {
               ...process.env,
+              PATH: nodeAwarePath,
               npm_config_yes: 'true',
               // Override any user-level prefix config (e.g. from a stray ~/.npmrc)
               npm_config_prefix: foundryPrefix,
