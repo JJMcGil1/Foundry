@@ -1117,6 +1117,74 @@ function registerIPC() {
     }
   });
 
+  ipcMain.handle('git:stash', async (_event, dirPath, message) => {
+    try {
+      const { stdout: before } = await execFileAsync('git', ['stash', 'list'], { cwd: dirPath, timeout: 5000, env: { ...getGitEnv() } });
+      const beforeCount = before.split('\n').filter(Boolean).length;
+      const args = ['stash', 'push', '--include-untracked'];
+      if (message && message.trim()) args.push('-m', message.trim());
+      const { stdout, stderr } = await execFileAsync('git', args, { cwd: dirPath, timeout: 15000, env: { ...getGitEnv() } });
+      const combined = `${stdout || ''}\n${stderr || ''}`;
+      if (/No local changes to save/i.test(combined)) {
+        return { error: 'No local changes to stash' };
+      }
+      const { stdout: after } = await execFileAsync('git', ['stash', 'list'], { cwd: dirPath, timeout: 5000, env: { ...getGitEnv() } });
+      const afterCount = after.split('\n').filter(Boolean).length;
+      if (afterCount <= beforeCount) {
+        return { error: 'Stash did not create a new entry (nothing to stash?)' };
+      }
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:stashList', async (_event, dirPath) => {
+    try {
+      const { stdout } = await execFileAsync('git', ['stash', 'list', '--format=%gd%x09%cr%x09%s'], { cwd: dirPath, timeout: 5000, env: { ...getGitEnv() } });
+      const stashes = stdout.split('\n').filter(Boolean).map(line => {
+        const [ref, age, ...rest] = line.split('\t');
+        return { ref, age, message: rest.join('\t') };
+      });
+      return { stashes };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:stashPop', async (_event, dirPath, ref) => {
+    try {
+      const args = ['stash', 'pop'];
+      if (ref) args.push(ref);
+      await execFileAsync('git', args, { cwd: dirPath, timeout: 15000, env: { ...getGitEnv() } });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:stashApply', async (_event, dirPath, ref) => {
+    try {
+      const args = ['stash', 'apply'];
+      if (ref) args.push(ref);
+      await execFileAsync('git', args, { cwd: dirPath, timeout: 15000, env: { ...getGitEnv() } });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
+  ipcMain.handle('git:stashDrop', async (_event, dirPath, ref) => {
+    try {
+      const args = ['stash', 'drop'];
+      if (ref) args.push(ref);
+      await execFileAsync('git', args, { cwd: dirPath, timeout: 5000, env: { ...getGitEnv() } });
+      return { success: true };
+    } catch (err) {
+      return { error: err.message };
+    }
+  });
+
   // Commit & Sync: pull → stage → commit → push (single atomic-ish operation)
   ipcMain.handle('git:commitAndSync', async (_event, dirPath, message) => {
     try {

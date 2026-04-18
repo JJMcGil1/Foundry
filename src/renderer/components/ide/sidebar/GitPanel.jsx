@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import {
   FiRefreshCw, FiChevronRight,
   FiCheck, FiPlus, FiMinus, FiRotateCcw, FiUpload,
+  FiArchive, FiDownload, FiTrash2,
 } from 'react-icons/fi';
 import { IoSparkles } from 'react-icons/io5';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -83,6 +84,10 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   const [submodules, setSubmodules] = useState([]);
   const [selectedRepo, setSelectedRepo] = useState(''); // '' = root repo
 
+  // Stashes
+  const [stashes, setStashes] = useState([]);
+  const [stashesOpen, setStashesOpen] = useState(true);
+
   // Commit graph state
   const [commits, setCommits] = useState([]);
   const [totalCommits, setTotalCommits] = useState(0);
@@ -120,6 +125,48 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     })();
     return () => { cancelled = true; };
   }, [projectPath, gitStatus.isRepo, effectiveBranch, gitRefreshKey]);
+
+  // Fetch stash list
+  const refreshStashes = useCallback(async () => {
+    if (!projectPath || !gitStatus.isRepo) return;
+    const result = await window.foundry?.gitStashList?.(projectPath);
+    if (result && !result.error) setStashes(result.stashes || []);
+  }, [projectPath, gitStatus.isRepo]);
+
+  useEffect(() => { refreshStashes(); }, [refreshStashes, gitRefreshKey]);
+
+  const handleStash = async () => {
+    if (!projectPath) return;
+    const result = await window.foundry?.gitStash?.(projectPath);
+    if (result?.error) {
+      addToast({ message: result.error, type: 'error' });
+    } else {
+      addToast({ message: 'Changes stashed', type: 'success' });
+      refreshGit();
+      refreshStashes();
+    }
+  };
+
+  const handleStashPop = async (ref) => {
+    const result = await window.foundry?.gitStashPop?.(projectPath, ref);
+    if (result?.error) {
+      addToast({ message: `Pop failed: ${result.error.split('\n')[0]}`, type: 'error' });
+    } else {
+      addToast({ message: 'Stash applied', type: 'success' });
+      refreshGit();
+      refreshStashes();
+    }
+  };
+
+  const handleStashDrop = async (ref) => {
+    const result = await window.foundry?.gitStashDrop?.(projectPath, ref);
+    if (result?.error) {
+      addToast({ message: `Drop failed: ${result.error.split('\n')[0]}`, type: 'error' });
+    } else {
+      addToast({ message: 'Stash dropped', type: 'success' });
+      refreshStashes();
+    }
+  };
 
   const loadMoreCommits = useCallback(async () => {
     if (loadingMore || !hasMoreCommits || !projectPath) return;
@@ -492,6 +539,59 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
           </div>
         )}
 
+        {stashes.length > 0 && (
+          <div>
+            <div className={styles.sectionLabel}>
+              <div className={styles.sectionLabelLeft} onClick={() => setStashesOpen(o => !o)}>
+                <span className={styles.sectionChevron} style={{ transform: `rotate(${stashesOpen ? 90 : 0}deg)` }}>
+                  <FiChevronRight size={14} />
+                </span>
+                <span>Stashes</span>
+              </div>
+              <div className={styles.sectionActions}>
+                <span className={styles.badge}>{stashes.length}</span>
+              </div>
+            </div>
+            <AnimatePresence initial={false}>
+              {stashesOpen && (
+                <motion.div
+                  key="stashes-list"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
+                  style={{ overflow: 'hidden' }}
+                >
+                  <div className={styles.changesList}>
+                    {stashes.map((s) => (
+                      <div
+                        key={s.ref}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 6,
+                          padding: '4px 12px', fontSize: 12, color: 'var(--zinc-300)',
+                          minHeight: 24,
+                        }}
+                        title={`${s.ref} — ${s.age}`}
+                      >
+                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {s.message}
+                        </span>
+                        <span style={{ fontSize: 10, color: 'var(--zinc-500)', flexShrink: 0 }}>{s.age}</span>
+                        <button className={styles.changeActionBtn} onClick={() => handleStashPop(s.ref)} title="Pop (apply + drop)">
+                          <FiDownload size={13} />
+                        </button>
+                        <button className={styles.changeActionBtn} onClick={() => handleStashDrop(s.ref)} title="Drop">
+                          <FiTrash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+
         {staged.length > 0 && (
           <div>
             <div className={styles.sectionLabel}>
@@ -538,6 +638,16 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
               <span>Changes</span>
             </div>
             <div className={styles.sectionActions}>
+              {(unstaged.length > 0 || staged.length > 0) && (
+                <button className={styles.changeActionBtn} onClick={handleStash} title="Stash All Changes">
+                  <FiArchive size={13} />
+                </button>
+              )}
+              {stashes.length > 0 && (
+                <button className={styles.changeActionBtn} onClick={() => handleStashPop(stashes[0].ref)} title={`Pop latest stash (${stashes.length})`}>
+                  <FiDownload size={13} />
+                </button>
+              )}
               {unstaged.length > 0 && (
                 <>
                   <button className={styles.changeActionBtn} onClick={() => handleDiscardAll(unstaged)} title="Discard All Changes">

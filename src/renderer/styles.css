@@ -38,11 +38,14 @@
 
   --terminal-bg: #0D0D0F; /* terminal: darker than panels */
 
-  --user-bubble: #1a1a1e;
+  --user-bubble: rgba(28, 28, 31, 0.55);
   --user-bubble-border: rgba(255, 255, 255, 0.08);
+  --user-bubble-text: var(--zinc-100);
   --user-bubble-shadow:
-    0 1px 3px rgba(0, 0, 0, 0.24),
-    0 6px 16px rgba(0, 0, 0, 0.28);
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 16px 48px rgba(0, 0, 0, 0.06);
 
   --border: rgba(255, 255, 255, 0.06);
   --border-card: rgba(255, 255, 255, 0.1);
@@ -115,11 +118,14 @@
 
   --terminal-bg: #EEEEEF; /* terminal: distinct from panels */
 
-  --user-bubble: #E4E4E7;
+  --user-bubble: rgba(255, 255, 255, 0.55);
   --user-bubble-border: rgba(0, 0, 0, 0.08);
+  --user-bubble-text: #111827;
   --user-bubble-shadow:
     0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 12px rgba(0, 0, 0, 0.06);
+    0 4px 8px rgba(0, 0, 0, 0.06),
+    0 8px 24px rgba(0, 0, 0, 0.08),
+    0 16px 48px rgba(0, 0, 0, 0.06);
 
   --border: rgba(0, 0, 0, 0.06);
   --border-card: rgba(0, 0, 0, 0.12);

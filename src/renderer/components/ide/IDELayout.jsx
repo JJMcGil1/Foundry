@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useLayoutEffect, useRef } from
 import { VscFiles, VscSourceControl, VscSettingsGear } from 'react-icons/vsc';
 import { FiSun, FiMoon, FiPlus, FiMinus, FiGithub, FiTerminal, FiMessageSquare, FiFilePlus, FiFolderPlus, FiRefreshCw, FiMaximize2, FiLayout } from 'react-icons/fi';
 import { VscPlay, VscDebugStop } from 'react-icons/vsc';
-import { LuSquareCheckBig } from 'react-icons/lu';
+import { LuSquareCheckBig, LuLayoutDashboard } from 'react-icons/lu';
 import { useToast } from './ToastProvider';
 import { ActivityBar, FileTreeItem, GitPanel, WorkflowsPanel, MiniTooltipBtn } from './sidebar';
 import PanelHeader from './PanelHeader';
@@ -11,6 +11,7 @@ import ChatPanel from './ChatPanel';
 import { TerminalPanel } from './terminal';
 import { SettingsPage } from './settings';
 import WhatsDonePanel from './WhatsDonePanel';
+import DashboardPanel from './DashboardPanel';
 import { SearchBar, ProjectControls, AddPanelPanel, LayoutsPanel } from './titlebar';
 import styles from './IDELayout.module.css';
 import sidebarStyles from './Sidebar.module.css';
@@ -19,6 +20,7 @@ import foundryIconLight from '../../assets/foundry-icon-light.svg';
 
 // ── Panel type config ──
 const PANEL_TYPES = {
+  dashboard: { title: 'Dashboard',      icon: LuLayoutDashboard, defaultWidth: 720, defaultHeight: 560, minWidth: 400, minHeight: 300, singleton: true },
   files:     { title: 'Explorer',       icon: VscFiles,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
   git:       { title: 'Source Control',  icon: VscSourceControl,  defaultWidth: 300, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
   workflows: { title: 'GitHub Actions',       icon: FiGithub,          defaultWidth: 280, defaultHeight: 500, minWidth: 200, minHeight: 200, singleton: true },
@@ -1085,6 +1087,17 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           ),
         };
 
+      case 'dashboard':
+        return {
+          header: 'own',
+          content: (
+            <DashboardPanel
+              onClose={() => removePanel(panel.id)}
+              panelDragProps={dragProps}
+            />
+          ),
+        };
+
       case 'whatsDone':
         return {
           header: 'own',
@@ -1150,7 +1163,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                     }).catch(() => {});
                   }
                 }}
-                dragProps={dragProps}
+                onMouseDown={dragProps.onMouseDown}
               />
               <div style={{ flex: 1, overflow: 'hidden' }}>
                 <SettingsPage
@@ -1183,7 +1196,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   // ── Build add-panel menu items ──
   const addPanelItems = Object.entries(PANEL_TYPES)
     .filter(([type, config]) => {
-      if (type === 'editor' || type === 'settings') return false;
+      if (type === 'editor' || type === 'settings' || type === 'dashboard') return false;
       const activePanels = panels.filter(p => p.type === type);
       if (config.singleton && activePanels.length > 0) return false;
       if (type === 'chat' && activePanels.length >= 4) return false;
