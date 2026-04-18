@@ -1778,15 +1778,32 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
   /**
    * Resolve the best available credential. Returns { token, source, authHeader }.
-   * - source 'oauth_token':  Long-lived OAuth token captured from `claude setup-token`
-   * - source 'subscription': OAuth token from Claude Code subscription (keychain)
-   * - source 'api_key':      Direct Anthropic API key from settings
-   * authHeader is the correct header object to use for the Anthropic API.
+   *
+   * Source values:
+   * - 'oauth_token':        Long-lived OAuth from `claude setup-token` — routes via CLI.
+   * - 'subscription':       OAuth from macOS keychain — routes via CLI.
+   * - 'api_key':            Direct Anthropic API key — routes via HTTPS (x-api-key header).
+   * - 'oauth_token_direct': Same OAuth token as 'oauth_token' but CLI is missing,
+   *                         so we fall back to direct HTTPS with Bearer auth. This path
+   *                         keeps the app working when the user has an OAuth token
+   *                         saved but hasn't installed/kept the Claude CLI.
+   *
+   * Selection order: prefer a CLI-routed subscription credential ONLY if the CLI is
+   * actually installed. Otherwise fall through to direct-API credentials so chat
+   * continues to work instead of showing "Claude CLI not found" in production.
    */
   async function resolveClaudeCredential() {
-    // Priority 1: Captured long-lived OAuth token (set up via in-app login)
     const storedOauth = getSetting('claude_oauth_token');
-    if (storedOauth) {
+    const keychainCreds = await readClaudeKeychainCredentials();
+    const savedKey = getSetting('claude_api_key');
+
+    // Only probe the binary if we might need it (at least one OAuth source is present).
+    // Avoids a stat fan-out when the user only has an API key configured.
+    const needsCli = Boolean(storedOauth || keychainCreds?.accessToken);
+    const cliBin = needsCli ? await resolveClaudeBinary() : null;
+
+    // Priority 1: In-app captured OAuth token → CLI (when available)
+    if (storedOauth && cliBin) {
       return {
         token: storedOauth,
         source: 'oauth_token',
@@ -1795,33 +1812,39 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
       };
     }
 
-    // Priority 2: Claude Code subscription (OAuth from keychain)
-    const oauthCreds = await readClaudeKeychainCredentials();
-    if (oauthCreds?.accessToken) {
+    // Priority 2: Keychain OAuth → CLI (when available)
+    if (keychainCreds?.accessToken && cliBin) {
       // Check if token is expired (with 60s buffer)
-      const isExpired = oauthCreds.expiresAt && (Date.now() > oauthCreds.expiresAt - 60000);
-      // Always return subscription source when keychain credentials exist — even if
-      // the token is expired.  Chat routes through the CLI subprocess which handles
-      // its own OAuth token refresh internally.  Blocking here previously caused
-      // the UI to show "not authenticated" after idle periods even though the CLI
-      // would have refreshed the token on the next chat request.
+      const isExpired = keychainCreds.expiresAt && (Date.now() > keychainCreds.expiresAt - 60000);
+      // The CLI handles its own OAuth refresh internally, so returning an expired token
+      // here is still fine — it signals status to the UI but doesn't block chat.
       return {
-        token: oauthCreds.accessToken,
+        token: keychainCreds.accessToken,
         source: 'subscription',
         expired: isExpired,
-        subscriptionType: oauthCreds.subscriptionType,
-        authHeader: isExpired ? {} : { 'Authorization': `Bearer ${oauthCreds.accessToken}` },
+        subscriptionType: keychainCreds.subscriptionType,
+        authHeader: isExpired ? {} : { 'Authorization': `Bearer ${keychainCreds.accessToken}` },
       };
     }
 
-    // Priority 3: Manual API key
-    const savedKey = getSetting('claude_api_key');
+    // Priority 3: Direct API key → /v1/messages with x-api-key
     if (savedKey) {
       return {
         token: savedKey,
         source: 'api_key',
         subscriptionType: null,
         authHeader: { 'x-api-key': savedKey },
+      };
+    }
+
+    // Priority 4: OAuth token but no CLI → direct /v1/messages with Bearer auth.
+    // Keeps chat working when the user has signed in but hasn't installed the CLI.
+    if (storedOauth) {
+      return {
+        token: storedOauth,
+        source: 'oauth_token_direct',
+        subscriptionType: 'subscription',
+        authHeader: { 'Authorization': `Bearer ${storedOauth}` },
       };
     }
 
@@ -2220,7 +2243,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
    * - Older (Opus 4.5, etc):   manual thinking with `budget_tokens`. No `output_config.effort`.
    * - Haiku:                   no thinking, no effort, 200K context.
    */
-  function streamViaAPI(event, messages, model, streamId, apiKey, effortLevel) {
+  function streamViaAPI(event, messages, model, streamId, authHeader, effortLevel) {
     const abortController = new AbortController();
     const win = BrowserWindow.fromWebContents(event.sender);
     activeStreams.set(streamId, { abort: () => abortController.abort(), windowId: win?.id });
@@ -2287,10 +2310,13 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
 
     const postData = JSON.stringify(requestBody);
 
+    // authHeader is a pre-built object from resolveClaudeCredential — either
+    // `{ 'x-api-key': <key> }` for api_key, or `{ Authorization: 'Bearer <token>' }`
+    // for oauth_token_direct. Spread it so either works without branching here.
     const apiHeaders = {
       'Content-Type': 'application/json',
       'anthropic-version': '2023-06-01',
-      'x-api-key': apiKey,
+      ...(authHeader || {}),
     };
     if (use1M) {
       apiHeaders['anthropic-beta'] = 'context-1m-2025-08-07';
@@ -2409,11 +2435,14 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     }
 
     if (cred.source === 'subscription' || cred.source === 'oauth_token') {
-      // Subscription OAuth → use Claude CLI subprocess (handles auth internally)
+      // Subscription OAuth → use Claude CLI subprocess (handles auth internally).
+      // resolveClaudeCredential only returns these sources when the CLI binary exists.
       return streamViaCLI(event, messages, images, model, streamId, workspacePath, effort);
     } else {
-      // API key → direct HTTPS to Anthropic API
-      return streamViaAPI(event, messages, model, streamId, cred.token, effort);
+      // 'api_key' or 'oauth_token_direct' → direct HTTPS to Anthropic API.
+      // The authHeader built by resolveClaudeCredential already has the right header
+      // shape (x-api-key vs Authorization: Bearer).
+      return streamViaAPI(event, messages, model, streamId, cred.authHeader, effort);
     }
   });
 
