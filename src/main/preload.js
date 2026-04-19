@@ -60,6 +60,14 @@ contextBridge.exposeInMainWorld('foundry', {
   deleteFile: (filePath) => ipcRenderer.invoke('fs:deleteFile', filePath),
   renameFile: (oldPath, newName) => ipcRenderer.invoke('fs:rename', oldPath, newName),
 
+  // Workspace watcher (event-driven refresh)
+  watchWorkspace: (rootPath) => ipcRenderer.invoke('workspace:watch', rootPath),
+  onWorkspaceChanged: (callback) => {
+    const handler = (_event, info) => callback(info);
+    ipcRenderer.on('workspace:changed', handler);
+    return () => ipcRenderer.removeListener('workspace:changed', handler);
+  },
+
   // Git
   gitStatus: (dirPath) => ipcRenderer.invoke('git:status', dirPath),
   gitLog: (dirPath, count, skip, branch) => ipcRenderer.invoke('git:log', dirPath, count, skip, branch),

@@ -193,6 +193,59 @@ const iconPath = isDev
 // ---- Multi-window Management ---- //
 const allWindows = new Set();
 
+// ---- Workspace file watchers (per-window) ---- //
+// Each window watches at most one workspace root; events are debounced and
+// forwarded to the renderer as `workspace:changed` so the git/file tree can
+// refresh in near real-time instead of waiting on the 15s poll.
+const workspaceWatchers = new Map(); // windowId → { watcher, rootPath, timer }
+
+function stopWorkspaceWatch(winId) {
+  const entry = workspaceWatchers.get(winId);
+  if (!entry) return;
+  try { entry.watcher.close(); } catch {}
+  if (entry.timer) clearTimeout(entry.timer);
+  workspaceWatchers.delete(winId);
+}
+
+function startWorkspaceWatch(win, rootPath) {
+  if (!win || win.isDestroyed() || !rootPath) return;
+  const existing = workspaceWatchers.get(win.id);
+  if (existing && existing.rootPath === rootPath) return; // already watching
+  stopWorkspaceWatch(win.id);
+  try {
+    let timer = null;
+    const fire = () => {
+      timer = null;
+      if (win.isDestroyed()) return;
+      try { win.webContents.send('workspace:changed', { path: rootPath }); } catch {}
+    };
+    // fs.watch recursive is supported on macOS + Windows (our primary targets).
+    const watcher = fs.watch(rootPath, { recursive: true, persistent: false }, (_eventType, filename) => {
+      if (!filename) return;
+      const rel = String(filename).replace(/\\/g, '/');
+      // Filter out noise that would cause constant refresh churn.
+      if (
+        rel.startsWith('node_modules/') ||
+        rel.startsWith('.next/') ||
+        rel.startsWith('dist/') ||
+        rel.startsWith('build/') ||
+        rel.startsWith('.git/objects/') ||
+        rel.startsWith('.git/logs/') ||
+        rel === '.git/index.lock' ||
+        rel === '.git/COMMIT_EDITMSG' ||
+        rel.endsWith('.swp') || rel.endsWith('~')
+      ) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(fire, 250);
+    });
+    watcher.on('error', () => {});
+    workspaceWatchers.set(win.id, { watcher, rootPath, timer });
+  } catch {
+    // fs.watch may fail on unusual filesystems (network mounts, etc.). The
+    // existing 15s poll will still pick up changes as a fallback.
+  }
+}
+
 // ---- PTY Terminal Management ---- //
 const ptyProcesses = new Map(); // ptyId → { process, windowId }
 let ptyIdCounter = 0;
@@ -250,6 +303,7 @@ function createWindow(projectPath) {
     allWindows.delete(win);
     // Clean up any pending IPC batch queue for this window
     ipcBatchQueues.delete(closedWinId);
+    stopWorkspaceWatch(closedWinId);
   });
 
   // Forward window state changes to renderer (per-window closure)
@@ -1009,6 +1063,18 @@ function registerIPC() {
     } catch (err) {
       return { error: err.message };
     }
+  });
+
+  // Workspace watcher — event-driven refresh for git/file tree
+  ipcMain.handle('workspace:watch', (event, rootPath) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return { success: false };
+    if (!rootPath) {
+      stopWorkspaceWatch(win.id);
+      return { success: true, watching: false };
+    }
+    startWorkspaceWatch(win, rootPath);
+    return { success: true, watching: true };
   });
 
   // Git

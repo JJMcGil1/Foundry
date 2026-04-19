@@ -385,25 +385,52 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     setGitRefreshKey(k => k + 1);
   }, [project]);
 
-  // Poll git status — 15s interval, paused when window is hidden
+  // Event-driven workspace refresh. The main process watches the workspace
+  // (and .git) with fs.watch and emits `workspace:changed` whenever something
+  // on disk changes. A 15s poll remains as a safety net for filesystems where
+  // fs.watch is unreliable (network mounts, some Linux setups).
   useEffect(() => {
     if (!project) return;
     let running = false, cancelled = false;
-    let interval = null;
-    const poll = async () => {
-      if (running || document.hidden) return;
+    const refresh = async () => {
+      if (running || cancelled || document.hidden) return;
       running = true;
       try {
-        const status = await window.foundry?.gitStatus(project.path);
-        if (!cancelled && status) setGitStatus(status);
+        const [tree, status] = await Promise.all([
+          window.foundry?.readDir(project.path),
+          window.foundry?.gitStatus(project.path),
+        ]);
+        if (cancelled) return;
+        if (tree) setFileTree(tree);
+        if (status) setGitStatus(status);
+        setGitRefreshKey(k => k + 1);
       } finally { running = false; }
     };
-    const start = () => { if (!interval) interval = setInterval(poll, 15000); };
+
+    window.foundry?.watchWorkspace?.(project.path);
+    const unsubscribe = window.foundry?.onWorkspaceChanged?.((info) => {
+      if (!info || info.path !== project.path) return;
+      refresh();
+    });
+
+    // Fallback poll (much slower now that we have real-time events)
+    let interval = null;
+    const start = () => { if (!interval) interval = setInterval(refresh, 15000); };
     const stop = () => { clearInterval(interval); interval = null; };
-    const onVisibility = () => { document.hidden ? stop() : start(); };
+    const onVisibility = () => {
+      if (document.hidden) { stop(); }
+      else { start(); refresh(); }
+    };
     start();
     document.addEventListener('visibilitychange', onVisibility);
-    return () => { cancelled = true; stop(); document.removeEventListener('visibilitychange', onVisibility); };
+
+    return () => {
+      cancelled = true;
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (typeof unsubscribe === 'function') unsubscribe();
+      window.foundry?.watchWorkspace?.(null);
+    };
   }, [project]);
 
   // ── Panel management ──
