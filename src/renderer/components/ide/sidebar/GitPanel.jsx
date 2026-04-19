@@ -86,7 +86,6 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
 
   // Stashes
   const [stashes, setStashes] = useState([]);
-  const [stashesOpen, setStashesOpen] = useState(true);
 
   // Commit graph state
   const [commits, setCommits] = useState([]);
@@ -539,59 +538,6 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
           </div>
         )}
 
-        {stashes.length > 0 && (
-          <div>
-            <div className={styles.sectionLabel}>
-              <div className={styles.sectionLabelLeft} onClick={() => setStashesOpen(o => !o)}>
-                <span className={styles.sectionChevron} style={{ transform: `rotate(${stashesOpen ? 90 : 0}deg)` }}>
-                  <FiChevronRight size={14} />
-                </span>
-                <span>Stashes</span>
-              </div>
-              <div className={styles.sectionActions}>
-                <span className={styles.badge}>{stashes.length}</span>
-              </div>
-            </div>
-            <AnimatePresence initial={false}>
-              {stashesOpen && (
-                <motion.div
-                  key="stashes-list"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
-                  style={{ overflow: 'hidden' }}
-                >
-                  <div className={styles.changesList}>
-                    {stashes.map((s) => (
-                      <div
-                        key={s.ref}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 6,
-                          padding: '4px 12px', fontSize: 12, color: 'var(--zinc-300)',
-                          minHeight: 24,
-                        }}
-                        title={`${s.ref} — ${s.age}`}
-                      >
-                        <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {s.message}
-                        </span>
-                        <span style={{ fontSize: 10, color: 'var(--zinc-500)', flexShrink: 0 }}>{s.age}</span>
-                        <button className={styles.changeActionBtn} onClick={() => handleStashPop(s.ref)} title="Pop (apply + drop)">
-                          <FiDownload size={13} />
-                        </button>
-                        <button className={styles.changeActionBtn} onClick={() => handleStashDrop(s.ref)} title="Drop">
-                          <FiTrash2 size={13} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
         {staged.length > 0 && (
           <div>
             <div className={styles.sectionLabel}>
@@ -602,7 +548,7 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
                 <span>Staged Changes</span>
               </div>
               <div className={styles.sectionActions}>
-                <button className={styles.changeActionBtn} onClick={() => handleUnstageAll(staged)} title="Unstage All">
+                <button className={styles.changeActionBtn} onClick={() => handleUnstageAll(staged)} data-tooltip="Unstage All">
                   <FiMinus size={13} />
                 </button>
                 <span className={styles.badge}>{staged.length}</span>
@@ -639,21 +585,21 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
             </div>
             <div className={styles.sectionActions}>
               {(unstaged.length > 0 || staged.length > 0) && (
-                <button className={styles.changeActionBtn} onClick={handleStash} title="Stash All Changes">
+                <button className={styles.changeActionBtn} onClick={handleStash} data-tooltip="Stash All Changes">
                   <FiArchive size={13} />
                 </button>
               )}
               {stashes.length > 0 && (
-                <button className={styles.changeActionBtn} onClick={() => handleStashPop(stashes[0].ref)} title={`Pop latest stash (${stashes.length})`}>
+                <button className={styles.changeActionBtn} onClick={() => handleStashPop(stashes[0].ref)} data-tooltip={`Pop Latest Stash (${stashes.length})`}>
                   <FiDownload size={13} />
                 </button>
               )}
               {unstaged.length > 0 && (
                 <>
-                  <button className={styles.changeActionBtn} onClick={() => handleDiscardAll(unstaged)} title="Discard All Changes">
+                  <button className={styles.changeActionBtn} onClick={() => handleDiscardAll(unstaged)} data-tooltip="Discard All Changes">
                     <FiRotateCcw size={13} />
                   </button>
-                  <button className={styles.changeActionBtn} onClick={() => handleStageAll(unstaged)} title="Stage All">
+                  <button className={styles.changeActionBtn} onClick={() => handleStageAll(unstaged)} data-tooltip="Stage All">
                     <FiPlus size={13} />
                   </button>
                 </>
