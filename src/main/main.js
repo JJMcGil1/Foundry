@@ -214,29 +214,44 @@ function startWorkspaceWatch(win, rootPath) {
   stopWorkspaceWatch(win.id);
   try {
     let timer = null;
+    let pendingStructural = false;
+    let pendingGitMeta = false;
     const fire = () => {
       timer = null;
+      const structural = pendingStructural;
+      const gitMeta = pendingGitMeta;
+      pendingStructural = false;
+      pendingGitMeta = false;
       if (win.isDestroyed()) return;
-      try { win.webContents.send('workspace:changed', { path: rootPath }); } catch {}
+      try { win.webContents.send('workspace:changed', { path: rootPath, structural, gitMeta }); } catch {}
     };
     // fs.watch recursive is supported on macOS + Windows (our primary targets).
-    const watcher = fs.watch(rootPath, { recursive: true, persistent: false }, (_eventType, filename) => {
+    const watcher = fs.watch(rootPath, { recursive: true, persistent: false }, (eventType, filename) => {
       if (!filename) return;
       const rel = String(filename).replace(/\\/g, '/');
       // Filter out noise that would cause constant refresh churn.
       if (
-        rel.startsWith('node_modules/') ||
-        rel.startsWith('.next/') ||
-        rel.startsWith('dist/') ||
-        rel.startsWith('build/') ||
+        rel.startsWith('node_modules/') || rel.includes('/node_modules/') ||
+        rel.startsWith('.next/') || rel.includes('/.next/') ||
+        rel.startsWith('.turbo/') || rel.includes('/.turbo/') ||
+        rel.startsWith('.cache/') || rel.includes('/.cache/') ||
+        rel.startsWith('dist/') || rel.includes('/dist/') ||
+        rel.startsWith('build/') || rel.includes('/build/') ||
+        rel.startsWith('out/') ||
+        rel.startsWith('target/') ||
+        rel.startsWith('__pycache__/') || rel.includes('/__pycache__/') ||
         rel.startsWith('.git/objects/') ||
         rel.startsWith('.git/logs/') ||
         rel === '.git/index.lock' ||
         rel === '.git/COMMIT_EDITMSG' ||
-        rel.endsWith('.swp') || rel.endsWith('~')
+        rel.endsWith('.swp') || rel.endsWith('~') || rel.endsWith('.tmp')
       ) return;
+      // Classify so the renderer can avoid re-reading the tree when only file
+      // contents changed, and avoid re-spawning git log/stash for non-meta changes.
+      if (eventType === 'rename') pendingStructural = true;
+      if (rel.startsWith('.git/')) pendingGitMeta = true;
       if (timer) clearTimeout(timer);
-      timer = setTimeout(fire, 250);
+      timer = setTimeout(fire, 400);
     });
     watcher.on('error', () => {});
     workspaceWatchers.set(win.id, { watcher, rootPath, timer });
@@ -436,6 +451,15 @@ const HIDDEN = new Set([
   '.git', '.DS_Store', '.svn', '.hg', 'thumbs.db',
 ]);
 
+// These are shown in the tree (greyed out as "ignored") but we never recurse
+// into them — walking node_modules / .next etc. synchronously blocks the main
+// process for seconds on large projects.
+const NEVER_RECURSE = new Set([
+  'node_modules', '.next', '.nuxt', '.turbo', '.cache', '.parcel-cache',
+  'dist', 'build', 'out', 'target', '.venv', 'venv', '__pycache__',
+  '.gradle', '.idea', '.vscode',
+]);
+
 function loadGitignore(projectRoot) {
   const ig = ignore();
   try {
@@ -475,12 +499,13 @@ function readDirTree(dirPath, depth = 0, maxDepth = 4, projectRoot = null, ig = 
       const isIgnored = ig ? ig.ignores(testPath) : false;
 
       if (entry.isDirectory()) {
+        const skipRecurse = NEVER_RECURSE.has(entry.name) || isIgnored;
         result.push({
           name: entry.name,
           path: fullPath,
           type: 'directory',
           ignored: isIgnored,
-          children: readDirTree(fullPath, depth + 1, maxDepth, projectRoot, ig),
+          children: skipRecurse ? [] : readDirTree(fullPath, depth + 1, maxDepth, projectRoot, ig),
         });
       } else {
         result.push({

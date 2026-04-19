@@ -392,34 +392,42 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   useEffect(() => {
     if (!project) return;
     let running = false, cancelled = false;
-    const refresh = async () => {
+    // opts: { structural, gitMeta, full } — default is the cheap path
+    // (gitStatus only), which is what most file-save events produce.
+    const refresh = async (opts = {}) => {
       if (running || cancelled || document.hidden) return;
       running = true;
       try {
+        const { structural = false, gitMeta = false, full = false } = opts;
+        const wantTree = structural || full;
+        const wantMeta = gitMeta || full;
         const [tree, status] = await Promise.all([
-          window.foundry?.readDir(project.path),
+          wantTree ? window.foundry?.readDir(project.path) : Promise.resolve(null),
           window.foundry?.gitStatus(project.path),
         ]);
         if (cancelled) return;
         if (tree) setFileTree(tree);
         if (status) setGitStatus(status);
-        setGitRefreshKey(k => k + 1);
+        if (wantMeta) setGitRefreshKey(k => k + 1);
       } finally { running = false; }
     };
 
     window.foundry?.watchWorkspace?.(project.path);
     const unsubscribe = window.foundry?.onWorkspaceChanged?.((info) => {
       if (!info || info.path !== project.path) return;
-      refresh();
+      refresh({ structural: !!info.structural, gitMeta: !!info.gitMeta });
     });
 
-    // Fallback poll (much slower now that we have real-time events)
+    // Fallback poll (much slower now that we have real-time events). Use a
+    // full refresh on the poll so anything the watcher might have missed
+    // (network mounts, flaky fs events) still converges eventually.
     let interval = null;
-    const start = () => { if (!interval) interval = setInterval(refresh, 15000); };
+    const pollRefresh = () => refresh({ full: true });
+    const start = () => { if (!interval) interval = setInterval(pollRefresh, 15000); };
     const stop = () => { clearInterval(interval); interval = null; };
     const onVisibility = () => {
       if (document.hidden) { stop(); }
-      else { start(); refresh(); }
+      else { start(); pollRefresh(); }
     };
     start();
     document.addEventListener('visibilitychange', onVisibility);
