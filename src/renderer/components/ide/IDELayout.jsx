@@ -1200,12 +1200,15 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       <div className={styles.activityColumn}>
         <div className={`${styles.trafficLightSpacer} titlebar-drag`}>
           {isFullScreen && (
-            <img
-              src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
-              alt="Foundry"
-              className={styles.titlebarLogo}
-              draggable={false}
-            />
+            <div className={styles.logoVersionFullscreen}>
+              <img
+                src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
+                alt="Foundry"
+                className={styles.titlebarLogo}
+                draggable={false}
+              />
+              <span className={styles.titlebarVersion}>v{window.foundry?.version || ''}</span>
+            </div>
           )}
         </div>
         <ActivityBar
@@ -1222,15 +1225,19 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       <div className={styles.rightColumn}>
         {/* ── Titlebar ── */}
         <div className={`${styles.titlebar} titlebar-drag`}>
-          <div className={`${styles.titlebarLeft} titlebar-no-drag`}>
+          <div className={`${styles.titlebarLeft} ${isFullScreen ? styles.titlebarLeftFullscreen : ''} titlebar-no-drag`}>
             {!isFullScreen && (
-              <img
-                src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
-                alt="Foundry"
-                className={styles.titlebarLogo}
-                draggable={false}
-              />
+              <>
+                <img
+                  src={currentTheme === 'dark' ? foundryIconDark : foundryIconLight}
+                  alt="Foundry"
+                  className={styles.titlebarLogo}
+                  draggable={false}
+                />
+                <span className={styles.titlebarVersion}>v{window.foundry?.version || ''}</span>
+              </>
             )}
+            <span className={styles.projectControlsSpacer} aria-hidden="true" />
             <ProjectControls
               currentProject={project}
               onSwitchWorkspace={handleSwitchWorkspace}

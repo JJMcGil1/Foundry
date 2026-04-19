@@ -18,11 +18,23 @@
 .trafficLightSpacer {
   height: 52px;
   flex-shrink: 0;
+  background: var(--surface-0);
+  position: relative;
+}
+
+/* In fullscreen, the logo + version render here. Absolutely positioned so the
+   version text doesn't widen the activity column (which would push every
+   activity-bar icon to the right). */
+.logoVersionFullscreen {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding-left: 20px;
-  background: var(--surface-0);
+  gap: 6px;
+  pointer-events: none;
+  z-index: 101;
 }
 
 /* Right column: titlebar + content */
@@ -54,10 +66,34 @@
   min-width: 40px;
 }
 
+/* Extra breathing room before the workspace switcher / project controls */
+.projectControlsSpacer {
+  width: 8px;
+  flex-shrink: 0;
+}
+
+/* In fullscreen the logo+version render in the activity column's spacer and the
+   version text overflows past the activity column's right edge. Reserve room
+   here so the workspace switcher doesn't cover it. */
+.titlebarLeftFullscreen {
+  padding-left: 44px;
+}
+
 .titlebarLogo {
   height: 34px;
   width: auto;
   opacity: 0.85;
+}
+
+.titlebarVersion {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary, #8a8a8a);
+  opacity: 0.7;
+  margin-left: -4px;
+  letter-spacing: 0.02em;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
 }
 
 /* Center titlebar group — absolutely centered in titlebar */
