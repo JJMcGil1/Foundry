@@ -78,16 +78,35 @@ const TerminalPanel = forwardRef(function TerminalPanel({ projectPath, onClose, 
     setActiveTermId(id);
   }, [projectPath]);
 
-  // Watch for theme changes and update all terminals
+  // Watch for theme changes and update all terminals. Also watch the
+  // `app-idle` class on <html> — xterm's cursor blink forces a canvas
+  // redraw twice per second per terminal, so pausing it when the
+  // window isn't focused is a real battery win.
   useEffect(() => {
-    const observer = new MutationObserver(() => {
+    const applyIdleBlink = () => {
+      const idle = document.documentElement.classList.contains('app-idle');
+      for (const [, entry] of terminalsRef.current) {
+        entry.xterm.options.cursorBlink = !idle;
+      }
+    };
+    const applyTheme = () => {
       const theme = getTerminalTheme();
       for (const [, entry] of terminalsRef.current) {
         entry.xterm.options.theme = theme;
         if (entry.applyCursorStyle) entry.applyCursorStyle();
       }
+    };
+    const observer = new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.attributeName === 'data-theme') applyTheme();
+        else if (r.attributeName === 'class') applyIdleBlink();
+      }
     });
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'class'],
+    });
+    applyIdleBlink();
     return () => observer.disconnect();
   }, []);
 

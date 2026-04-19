@@ -197,13 +197,13 @@ const allWindows = new Set();
 // Each window watches at most one workspace root; events are debounced and
 // forwarded to the renderer as `workspace:changed` so the git/file tree can
 // refresh in near real-time instead of waiting on the 15s poll.
-const workspaceWatchers = new Map(); // windowId → { watcher, rootPath, timer }
+const workspaceWatchers = new Map(); // windowId → { watcher, rootPath, state, flushOnFocus }
 
 function stopWorkspaceWatch(winId) {
   const entry = workspaceWatchers.get(winId);
   if (!entry) return;
   try { entry.watcher.close(); } catch {}
-  if (entry.timer) clearTimeout(entry.timer);
+  if (entry.state?.timer) clearTimeout(entry.state.timer);
   workspaceWatchers.delete(winId);
 }
 
@@ -213,16 +213,19 @@ function startWorkspaceWatch(win, rootPath) {
   if (existing && existing.rootPath === rootPath) return; // already watching
   stopWorkspaceWatch(win.id);
   try {
-    let timer = null;
-    let pendingStructural = false;
-    let pendingGitMeta = false;
+    const state = { timer: null, pendingStructural: false, pendingGitMeta: false };
     const fire = () => {
-      timer = null;
-      const structural = pendingStructural;
-      const gitMeta = pendingGitMeta;
-      pendingStructural = false;
-      pendingGitMeta = false;
+      state.timer = null;
       if (win.isDestroyed()) return;
+      // Defer delivery when the window isn't focused. The renderer would
+      // otherwise spawn git-status subprocesses every debounce cycle while
+      // the user is in another app — a major battery drain during builds /
+      // hot reloads. Flags persist and are flushed on next `focus`.
+      if (!win.isFocused()) return;
+      const structural = state.pendingStructural;
+      const gitMeta = state.pendingGitMeta;
+      state.pendingStructural = false;
+      state.pendingGitMeta = false;
       try { win.webContents.send('workspace:changed', { path: rootPath, structural, gitMeta }); } catch {}
     };
     // fs.watch recursive is supported on macOS + Windows (our primary targets).
@@ -248,13 +251,17 @@ function startWorkspaceWatch(win, rootPath) {
       ) return;
       // Classify so the renderer can avoid re-reading the tree when only file
       // contents changed, and avoid re-spawning git log/stash for non-meta changes.
-      if (eventType === 'rename') pendingStructural = true;
-      if (rel.startsWith('.git/')) pendingGitMeta = true;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(fire, 400);
+      if (eventType === 'rename') state.pendingStructural = true;
+      if (rel.startsWith('.git/')) state.pendingGitMeta = true;
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = setTimeout(fire, 400);
     });
     watcher.on('error', () => {});
-    workspaceWatchers.set(win.id, { watcher, rootPath, timer });
+    // Called from win.on('focus') to flush any changes queued during blur.
+    const flushOnFocus = () => {
+      if (state.pendingStructural || state.pendingGitMeta) fire();
+    };
+    workspaceWatchers.set(win.id, { watcher, rootPath, state, flushOnFocus });
   } catch {
     // fs.watch may fail on unusual filesystems (network mounts, etc.). The
     // existing 15s poll will still pick up changes as a fallback.
@@ -334,6 +341,30 @@ function createWindow(projectPath) {
   win.on('maximize', sendWindowState);
   win.on('unmaximize', sendWindowState);
   win.on('resize', sendWindowState);
+
+  // Active-state signal powers renderer idle mode: pausing CSS animations,
+  // xterm cursor blink, and fallback polls when the window isn't the
+  // user's focus. Driven by OS events so it stays accurate even when
+  // another app sits on top of a still-visible Foundry window.
+  const sendActiveState = () => {
+    if (win.isDestroyed()) return;
+    try {
+      win.webContents.send('window:active-changed', {
+        focused: win.isFocused(),
+        visible: win.isVisible(),
+      });
+    } catch {}
+  };
+  win.on('focus', () => {
+    sendActiveState();
+    // Flush any workspace changes queued while the window was blurred.
+    workspaceWatchers.get(win.id)?.flushOnFocus?.();
+  });
+  win.on('blur', sendActiveState);
+  win.on('show', sendActiveState);
+  win.on('hide', sendActiveState);
+  win.on('minimize', sendActiveState);
+  win.on('restore', sendActiveState);
 
   if (isDev) {
     const url = new URL('http://localhost:5173');

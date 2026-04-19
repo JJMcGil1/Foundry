@@ -122,17 +122,32 @@ export default function WorkflowsPanel({ projectPath, isActive }) {
     return () => { stop(); document.removeEventListener('visibilitychange', onVisibility); };
   }, [repoInfo, fetchRuns]);
 
-  // 5-second tick for elapsed timers on in-progress runs
+  // 5-second tick for elapsed timers on in-progress runs. Paused when
+  // the window is idle so we aren't re-rendering counters nobody is
+  // looking at.
   useEffect(() => {
     const hasInProgress = runs.some(r => r.status === 'in_progress');
-    if (hasInProgress) {
+    if (!hasInProgress) { clearInterval(tickRef.current); return; }
+    const isIdle = () =>
+      document.documentElement.classList.contains('app-idle') ||
+      document.visibilityState === 'hidden';
+    const start = () => {
+      clearInterval(tickRef.current);
       tickRef.current = setInterval(() => {
         if (mountedRef.current) setTick(t => t + 1);
       }, 5000);
-    } else {
-      clearInterval(tickRef.current);
-    }
-    return () => clearInterval(tickRef.current);
+    };
+    const stop = () => clearInterval(tickRef.current);
+    const sync = () => { isIdle() ? stop() : start(); };
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    document.addEventListener('visibilitychange', sync);
+    return () => {
+      stop();
+      obs.disconnect();
+      document.removeEventListener('visibilitychange', sync);
+    };
   }, [runs]);
 
   const fetchJobs = useCallback(async (runId) => {

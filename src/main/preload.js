@@ -154,6 +154,13 @@ contextBridge.exposeInMainWorld('foundry', {
     ipcRenderer.on('window:state-changed', handler);
     return () => ipcRenderer.removeListener('window:state-changed', handler);
   },
+  // OS-level focus/visibility signal — renderer gates animations, timers,
+  // and xterm cursor blink off this to idle when another app is frontmost.
+  onAppActiveChanged: (callback) => {
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on('window:active-changed', handler);
+    return () => ipcRenderer.removeListener('window:active-changed', handler);
+  },
 
   // Claude Provider
   claudeDetectAuth: () => ipcRenderer.invoke('claude:detectAuth'),

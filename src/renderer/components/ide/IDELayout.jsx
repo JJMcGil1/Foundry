@@ -392,10 +392,15 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   useEffect(() => {
     if (!project) return;
     let running = false, cancelled = false;
+    const isIdle = () =>
+      document.documentElement.classList.contains('app-idle') ||
+      document.visibilityState === 'hidden';
     // opts: { structural, gitMeta, full } — default is the cheap path
     // (gitStatus only), which is what most file-save events produce.
+    // Skipping refresh while idle avoids spawning git-status subprocesses
+    // every debounce cycle while the user is in another app.
     const refresh = async (opts = {}) => {
-      if (running || cancelled || document.hidden) return;
+      if (running || cancelled || isIdle()) return;
       running = true;
       try {
         const { structural = false, gitMeta = false, full = false } = opts;
@@ -425,17 +430,20 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const pollRefresh = () => refresh({ full: true });
     const start = () => { if (!interval) interval = setInterval(pollRefresh, 15000); };
     const stop = () => { clearInterval(interval); interval = null; };
-    const onVisibility = () => {
-      if (document.hidden) { stop(); }
+    const sync = () => {
+      if (isIdle()) stop();
       else { start(); pollRefresh(); }
     };
-    start();
-    document.addEventListener('visibilitychange', onVisibility);
+    sync();
+    document.addEventListener('visibilitychange', sync);
+    const classObserver = new MutationObserver(sync);
+    classObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
     return () => {
       cancelled = true;
       stop();
-      document.removeEventListener('visibilitychange', onVisibility);
+      document.removeEventListener('visibilitychange', sync);
+      classObserver.disconnect();
       if (typeof unsubscribe === 'function') unsubscribe();
       window.foundry?.watchWorkspace?.(null);
     };

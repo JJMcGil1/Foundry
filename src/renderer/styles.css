@@ -241,3 +241,14 @@ html, body, #root {
 }
 
 /* subtlePulse, shimmer, gradientShift removed — unused dead keyframes */
+
+/* Pause every CSS animation when the window is blurred / hidden.
+   Spinners, pulses, shimmers etc. compose through backdrop-filter
+   blurs every frame — stopping them idle-s the GPU when the user
+   can't see the animations anyway. Animations resume instantly on
+   focus; transitions (non-@keyframes) are unaffected. */
+html.app-idle *,
+html.app-idle *::before,
+html.app-idle *::after {
+  animation-play-state: paused !important;
+}
