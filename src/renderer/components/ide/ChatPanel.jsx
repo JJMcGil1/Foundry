@@ -99,10 +99,18 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   // ---- Immediate message save to SQLite (no debounce) ---- //
   const currentThreadIdRef = useRef(null);
   const saveLockRef = useRef(Promise.resolve());
+  // Mirror of `messages` state — used by stream handlers so they can read the
+  // current list without going through `setMessages(prev => prev)`, which
+  // still runs through React's scheduler on every block boundary.
+  const messagesRef = useRef([]);
 
   useEffect(() => {
     currentThreadIdRef.current = currentThreadId;
   }, [currentThreadId]);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const saveMessageToDb = useCallback((msg) => {
     const threadId = currentThreadIdRef.current;
@@ -480,15 +488,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
 
           blocksRef.current = blocks;
 
-          // Incremental save: persist assistant message after each completed block
-          // so content survives crashes/disconnects
-          setMessages(prev => {
-            const lastIdx = prev.length - 1;
-            if (lastIdx >= 0 && prev[lastIdx].role === 'assistant') {
-              saveMessageToDb({ ...prev[lastIdx], blocks });
-            }
-            return prev;
-          });
+          // Incremental save via the ref mirror — reading setMessages(prev=>prev)
+          // on every block-stop forced React through its scheduler even though
+          // we weren't changing state.
+          const msgs = messagesRef.current;
+          const lastIdx = msgs.length - 1;
+          if (lastIdx >= 0 && msgs[lastIdx].role === 'assistant') {
+            saveMessageToDb({ ...msgs[lastIdx], blocks });
+          }
         }
         activeBlockIdxRef.current = -1;
       }
@@ -856,18 +863,23 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
           onOpenSettings={onOpenSettings}
           onSelectPrompt={handleSelectPrompt}
         />
-        {messages.map((msg, i) => (
-          msg.role === 'user' ? (
-            <UserMessage key={msg.id || i} msg={msg} />
-          ) : (
+        {messages.map((msg, i) => {
+          const isLast = i === messages.length - 1;
+          if (msg.role === 'user') {
+            return <UserMessage key={msg.id || i} msg={msg} />;
+          }
+          // Only forward isStreaming to the last message. Passing it to
+          // every message makes every AgentMessage memo miss on each
+          // streaming delta — re-rendering the full history 60x/second.
+          return (
             <AgentMessage
               key={msg.id || i}
               msg={msg}
-              isStreaming={isStreaming}
-              isLastMsg={i === messages.length - 1}
+              isStreaming={isLast && isStreaming}
+              isLastMsg={isLast}
             />
-          )
-        ))}
+          );
+        })}
         {error && (
           <div className={styles.errorBanner}>
             <FiAlertCircle size={13} />

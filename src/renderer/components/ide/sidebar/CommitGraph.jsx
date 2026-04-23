@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { memo, useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { FiChevronRight, FiRefreshCw } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -6,6 +6,17 @@ import GitAvatar from './GitAvatar';
 import CommitHoverCard from './CommitHoverCard';
 import { buildGraph, parseRefs, GRAPH_COLORS, COMMITS_PAGE_SIZE } from './gitUtils';
 import styles from './CommitGraph.module.css';
+
+const LANE_W = 12;
+const ROW_H = 52;
+const DOT_R = 3.5;
+const PAD_L = 6;
+
+const lx = (li) => PAD_L + li * LANE_W + LANE_W / 2;
+
+// Stable empty-array reference — avoids creating a new array on every render
+// for the first row's "no previous lanes" case, which would break memo.
+const EMPTY_LANES = Object.freeze([]);
 
 function formatRelativeTime(isoDate) {
   if (!isoDate) return '';
@@ -24,6 +35,217 @@ function formatRelativeTime(isoDate) {
   if (days < 365) return `${Math.floor(days / 30)}mo ago`;
   return `${Math.floor(days / 365)}y ago`;
 }
+
+// Per-row renderer, memoized so a hover on row N doesn't repaint the 200
+// other SVGs. Everything the row needs for drawing is precomputed and
+// passed in as primitive-ish props, so React.memo's shallow compare is
+// enough — only the two rows whose hover state flipped will re-render.
+const CommitRow = memo(function CommitRow({
+  row,
+  prevActiveLanes,
+  isFirst,
+  isLast,
+  isHovered,
+  avatarUrl,
+  onMouseEnter,
+  onMouseLeave,
+}) {
+  // Derive display info from row itself so callers don't have to pass
+  // fresh-each-render arrays (parseRefs allocates) that would break memo.
+  const color = GRAPH_COLORS[row.lane % GRAPH_COLORS.length];
+  const { branches: refBranches, tags, isHead } = useMemo(
+    () => parseRefs(row.refs),
+    [row.refs]
+  );
+
+  const curActiveLanes = row.activeLanes;
+  const mergingFrom = row.mergingFromLanes && row.mergingFromLanes.length
+    ? new Set(row.mergingFromLanes)
+    : null;
+  const allMergeParentLanes = row.parentLanes.length > 1
+    ? new Set(row.parentLanes.slice(1).filter(pl => pl !== row.lane))
+    : null;
+
+  let maxLane = Math.max(curActiveLanes.length, prevActiveLanes.length, row.lane + 1);
+  for (const p of row.parentLanes) if (p + 1 > maxLane) maxLane = p + 1;
+  for (const m of row.mergingFromLanes) if (m + 1 > maxLane) maxLane = m + 1;
+  const rowGraphW = PAD_L + maxLane * LANE_W + 4;
+
+  const svgElements = [];
+  for (let li = 0; li < maxLane; li++) {
+    if (li === row.lane) continue;
+    const aliveAbove = li < prevActiveLanes.length && prevActiveLanes[li] != null;
+    const aliveBelow = li < curActiveLanes.length && curActiveLanes[li] != null;
+    const laneColor = GRAPH_COLORS[li % GRAPH_COLORS.length];
+    const isMergingIn = mergingFrom?.has(li);
+    const isMergeParent = allMergeParentLanes?.has(li);
+
+    if (isMergingIn) {
+      svgElements.push(
+        <path
+          key={`join-${li}`}
+          d={`M ${lx(li)} 0 C ${lx(li)} ${ROW_H * 0.45}, ${lx(row.lane)} ${ROW_H * 0.15}, ${lx(row.lane)} ${ROW_H / 2}`}
+          stroke={laneColor}
+          strokeWidth={2}
+          fill="none"
+          opacity={0.7}
+        />
+      );
+    } else if (isMergeParent && aliveAbove) {
+      svgElements.push(
+        <path
+          key={`merge-in-${li}`}
+          d={`M ${lx(li)} 0 C ${lx(li)} ${ROW_H * 0.45}, ${lx(row.lane)} ${ROW_H * 0.15}, ${lx(row.lane)} ${ROW_H / 2}`}
+          stroke={laneColor}
+          strokeWidth={2}
+          fill="none"
+          opacity={0.7}
+        />
+      );
+    } else if (isMergeParent) {
+      // merge-out curve handles it below
+    } else if (aliveAbove && aliveBelow) {
+      svgElements.push(
+        <line key={`pass-${li}`} x1={lx(li)} y1={0} x2={lx(li)} y2={ROW_H} stroke={laneColor} strokeWidth={2} opacity={0.6} />
+      );
+    } else if (aliveAbove && !aliveBelow) {
+      svgElements.push(
+        <line key={`end-${li}`} x1={lx(li)} y1={0} x2={lx(li)} y2={ROW_H / 2} stroke={laneColor} strokeWidth={2} opacity={0.6} />
+      );
+    } else if (!aliveAbove && aliveBelow) {
+      svgElements.push(
+        <line key={`start-${li}`} x1={lx(li)} y1={ROW_H / 2} x2={lx(li)} y2={ROW_H} stroke={laneColor} strokeWidth={2} opacity={0.6} />
+      );
+    }
+  }
+
+  const hasRefs = refBranches.length > 0 || tags.length > 0;
+
+  return (
+    <div
+      className={`${styles.graphRow} ${isHovered ? styles.graphRowHovered : ''} ${isHead ? styles.graphRowHead : ''}`}
+      onMouseEnter={(e) => onMouseEnter(e, row.hash)}
+      onMouseLeave={onMouseLeave}
+    >
+      <svg className={styles.graphSvg} width={rowGraphW} height={ROW_H}>
+        <defs>
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+        {svgElements}
+
+        {!isFirst && (
+          <line x1={lx(row.lane)} y1={0} x2={lx(row.lane)} y2={ROW_H / 2} stroke={color} strokeWidth={2} opacity={0.85} />
+        )}
+
+        {row.parents.length > 0 && (() => {
+          const x1 = lx(row.lane);
+          const x2 = lx(row.parentLanes[0]);
+          if (x1 === x2) {
+            return (
+              <line x1={x1} y1={ROW_H / 2} x2={x2} y2={isLast ? ROW_H / 2 : ROW_H} stroke={color} strokeWidth={2} opacity={0.85} />
+            );
+          }
+          return (
+            <path d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.8}, ${x2} ${ROW_H * 0.55}, ${x2} ${ROW_H}`} stroke={color} strokeWidth={2} fill="none" opacity={0.85} />
+          );
+        })()}
+
+        {row.parentLanes.slice(1).map((pLane, pi) => {
+          const x1 = lx(row.lane);
+          const x2 = lx(pLane);
+          const pColor = GRAPH_COLORS[pLane % GRAPH_COLORS.length];
+          return (
+            <path
+              key={`merge-${pi}`}
+              d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.7}, ${x2} ${ROW_H * 0.65}, ${x2} ${ROW_H}`}
+              stroke={pColor}
+              strokeWidth={2}
+              fill="none"
+              opacity={0.7}
+            />
+          );
+        })}
+
+        {(() => {
+          const cx = lx(row.lane);
+          const cy = ROW_H / 2;
+          const isMerge = row.parents.length > 1;
+
+          if (isHead) {
+            const outerR = isHovered ? DOT_R + 3 : DOT_R + 2.5;
+            const innerR = isHovered ? DOT_R + 0.5 : DOT_R;
+            return (
+              <>
+                {isHovered && (
+                  <circle className={styles.graphDotGlow} cx={cx} cy={cy} r={outerR + 3} fill={color} opacity={0.15} filter="url(#glow)" />
+                )}
+                <circle cx={cx} cy={cy} r={outerR} fill={color} stroke={color} strokeWidth={2} />
+                <circle className={styles.graphDot} cx={cx} cy={cy} r={innerR} fill="var(--surface-1)" stroke={color} strokeWidth={2} />
+              </>
+            );
+          } else if (isMerge) {
+            const outerR = isHovered ? DOT_R + 2 : DOT_R + 1.5;
+            const innerR = isHovered ? DOT_R : DOT_R - 0.5;
+            return (
+              <>
+                {isHovered && (
+                  <circle className={styles.graphDotGlow} cx={cx} cy={cy} r={outerR + 3} fill={color} opacity={0.15} filter="url(#glow)" />
+                )}
+                <circle cx={cx} cy={cy} r={outerR} fill={color} stroke={color} strokeWidth={1.5} />
+                <circle className={styles.graphDot} cx={cx} cy={cy} r={innerR} fill={color} stroke="none" />
+              </>
+            );
+          } else {
+            const baseR = DOT_R;
+            const hoverR = baseR + 1;
+            return (
+              <>
+                {isHovered && (
+                  <circle className={styles.graphDotGlow} cx={cx} cy={cy} r={hoverR + 3} fill={color} opacity={0.15} filter="url(#glow)" />
+                )}
+                <circle
+                  className={styles.graphDot}
+                  cx={cx}
+                  cy={cy}
+                  r={isHovered ? hoverR : baseR}
+                  fill={isHovered ? color : 'var(--surface-1)'}
+                  stroke={color}
+                  strokeWidth={isHovered ? 2 : 1.5}
+                />
+              </>
+            );
+          }
+        })()}
+      </svg>
+      <div className={styles.graphContent}>
+        <div className={styles.graphLine1}>
+          <span className={`${styles.graphMsg} ${isHead ? styles.graphMsgHead : ''}`}>{row.message}</span>
+        </div>
+        <div className={styles.graphLine2}>
+          <GitAvatar author={row.author} avatarUrl={avatarUrl} size={18} />
+          <span className={styles.graphAuthor}>{row.author}</span>
+          <span className={styles.graphDate}>{formatRelativeTime(row.isoDate)}</span>
+          {hasRefs && (
+            <div className={styles.graphRefs}>
+              {refBranches.map(b => (
+                <span key={b} className={`${styles.refBadgeInline} ${styles.refBranchInline}`}>{b}</span>
+              ))}
+              {tags.map(t => (
+                <span key={t} className={`${styles.refBadgeInline} ${styles.refTagInline}`}>{t}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+});
 
 export default function CommitGraph({
   commits, projectPath, onLoadMore, hasMore, loadingMore, totalCommits,
@@ -170,334 +392,40 @@ export default function CommitGraph({
 
   if (commits.length === 0 && !loadingMore) return null;
 
-  const LANE_W = 12;
-  const ROW_H = 52;
-  const DOT_R = 3.5;
-  const PAD_L = 6;
-
-  const lx = (li) => PAD_L + li * LANE_W + LANE_W / 2;
-
   const getAvatarUrl = (row) => avatarMap[`${row.email || ''}||${row.author || ''}`] || null;
   const cardRow = cardHash ? rows.find(r => r.hash === cardHash) : null;
   const cardLaneColor = cardRow ? GRAPH_COLORS[cardRow.lane % GRAPH_COLORS.length] : null;
 
-  const mergingFromSet = (row) => new Set(row.mergingFromLanes || []);
-
   const rowsContent = (
     <>
       {rows.map((row, ri) => {
-                const color = GRAPH_COLORS[row.lane % GRAPH_COLORS.length];
-                const { branches: refBranches, tags, isHead } = parseRefs(row.refs);
-                const hasRefs = refBranches.length > 0 || tags.length > 0;
-                const isLast = ri === rows.length - 1;
-                const isFirst = ri === 0;
-                const prevActiveLanes = ri > 0 ? rows[ri - 1].activeLanes : [];
-                const curActiveLanes = row.activeLanes;
-                const mergingFrom = mergingFromSet(row);
-                // ALL merge parent lanes (both new and existing) — merge-out curves handle outgoing
-                const allMergeParentLanes = new Set(
-                  row.parentLanes.slice(1).filter(pl => pl !== row.lane)
-                );
+        const prevActiveLanes = ri > 0 ? rows[ri - 1].activeLanes : EMPTY_LANES;
+        return (
+          <CommitRow
+            key={row.hash}
+            row={row}
+            prevActiveLanes={prevActiveLanes}
+            isFirst={ri === 0}
+            isLast={ri === rows.length - 1}
+            isHovered={hoveredHash === row.hash}
+            avatarUrl={getAvatarUrl(row)}
+            onMouseEnter={handleRowMouseEnter}
+            onMouseLeave={handleRowMouseLeave}
+          />
+        );
+      })}
 
-                const maxLane = Math.max(
-                  curActiveLanes.length,
-                  prevActiveLanes.length,
-                  row.lane + 1,
-                  ...row.parentLanes.map(p => p + 1),
-                  ...row.mergingFromLanes.map(m => m + 1)
-                );
-                const rowGraphW = PAD_L + maxLane * LANE_W + 4;
-
-                const svgElements = [];
-
-                for (let li = 0; li < maxLane; li++) {
-                  if (li === row.lane) continue;
-
-                  const aliveAbove = li < prevActiveLanes.length && prevActiveLanes[li] != null;
-                  const aliveBelow = li < curActiveLanes.length && curActiveLanes[li] != null;
-                  const laneColor = GRAPH_COLORS[li % GRAPH_COLORS.length];
-                  const isMergingIn = mergingFrom.has(li);
-                  const isMergeParent = allMergeParentLanes.has(li);
-
-                  if (isMergingIn) {
-                    // Lane was expecting THIS commit — curve into the dot
-                    svgElements.push(
-                      <path
-                        key={`join-${li}`}
-                        d={`M ${lx(li)} 0 C ${lx(li)} ${ROW_H * 0.45}, ${lx(row.lane)} ${ROW_H * 0.15}, ${lx(row.lane)} ${ROW_H / 2}`}
-                        stroke={laneColor}
-                        strokeWidth={2}
-                        fill="none"
-                        opacity={0.7}
-                      />
-                    );
-                  } else if (isMergeParent && aliveAbove) {
-                    // Existing merge parent — curve from above into the dot.
-                    // The merge-out curve (below) handles the outgoing connection.
-                    // Do NOT draw a passthrough — the branch terminates at the merge.
-                    svgElements.push(
-                      <path
-                        key={`merge-in-${li}`}
-                        d={`M ${lx(li)} 0 C ${lx(li)} ${ROW_H * 0.45}, ${lx(row.lane)} ${ROW_H * 0.15}, ${lx(row.lane)} ${ROW_H / 2}`}
-                        stroke={laneColor}
-                        strokeWidth={2}
-                        fill="none"
-                        opacity={0.7}
-                      />
-                    );
-                  } else if (isMergeParent) {
-                    // New merge parent lane — merge-out curve handles it entirely.
-                    // Draw nothing here to avoid a redundant straight line.
-                  } else if (aliveAbove && aliveBelow) {
-                    svgElements.push(
-                      <line
-                        key={`pass-${li}`}
-                        x1={lx(li)} y1={0}
-                        x2={lx(li)} y2={ROW_H}
-                        stroke={laneColor}
-                        strokeWidth={2}
-                        opacity={0.6}
-                      />
-                    );
-                  } else if (aliveAbove && !aliveBelow) {
-                    svgElements.push(
-                      <line
-                        key={`end-${li}`}
-                        x1={lx(li)} y1={0}
-                        x2={lx(li)} y2={ROW_H / 2}
-                        stroke={laneColor}
-                        strokeWidth={2}
-                        opacity={0.6}
-                      />
-                    );
-                  } else if (!aliveAbove && aliveBelow) {
-                    svgElements.push(
-                      <line
-                        key={`start-${li}`}
-                        x1={lx(li)} y1={ROW_H / 2}
-                        x2={lx(li)} y2={ROW_H}
-                        stroke={laneColor}
-                        strokeWidth={2}
-                        opacity={0.6}
-                      />
-                    );
-                  }
-                }
-
-                return (
-                  <div
-                    key={row.hash}
-                    className={`${styles.graphRow} ${hoveredHash === row.hash ? styles.graphRowHovered : ''} ${isHead ? styles.graphRowHead : ''}`}
-                    onMouseEnter={(e) => handleRowMouseEnter(e, row.hash)}
-                    onMouseLeave={handleRowMouseLeave}
-                  >
-                    <svg className={styles.graphSvg} width={rowGraphW} height={ROW_H}>
-                      <defs>
-                        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-                          <feGaussianBlur stdDeviation="3" result="blur" />
-                          <feMerge>
-                            <feMergeNode in="blur" />
-                            <feMergeNode in="SourceGraphic" />
-                          </feMerge>
-                        </filter>
-                      </defs>
-                      {svgElements}
-
-                      {/* Commit's own lane — incoming line from top to dot */}
-                      {!isFirst && (
-                        <line
-                          x1={lx(row.lane)} y1={0}
-                          x2={lx(row.lane)} y2={ROW_H / 2}
-                          stroke={color}
-                          strokeWidth={2}
-                          opacity={0.85}
-                        />
-                      )}
-
-                      {/* Outgoing: dot to first parent */}
-                      {row.parents.length > 0 && (() => {
-                        const x1 = lx(row.lane);
-                        const x2 = lx(row.parentLanes[0]);
-                        if (x1 === x2) {
-                          return (
-                            <line
-                              x1={x1} y1={ROW_H / 2}
-                              x2={x2} y2={isLast ? ROW_H / 2 : ROW_H}
-                              stroke={color}
-                              strokeWidth={2}
-                              opacity={0.85}
-                            />
-                          );
-                        }
-                        return (
-                          <path
-                            d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.8}, ${x2} ${ROW_H * 0.55}, ${x2} ${ROW_H}`}
-                            stroke={color}
-                            strokeWidth={2}
-                            fill="none"
-                            opacity={0.85}
-                          />
-                        );
-                      })()}
-
-                      {/* Merge-out curves: dot to additional parent lanes */}
-                      {row.parentLanes.slice(1).map((pLane, pi) => {
-                        const x1 = lx(row.lane);
-                        const x2 = lx(pLane);
-                        const pColor = GRAPH_COLORS[pLane % GRAPH_COLORS.length];
-                        return (
-                          <path
-                            key={`merge-${pi}`}
-                            d={`M ${x1} ${ROW_H / 2} C ${x1} ${ROW_H * 0.7}, ${x2} ${ROW_H * 0.65}, ${x2} ${ROW_H}`}
-                            stroke={pColor}
-                            strokeWidth={2}
-                            fill="none"
-                            opacity={0.7}
-                          />
-                        );
-                      })}
-
-                      {/* Commit dot — distinct visuals for HEAD, merge, and regular */}
-                      {(() => {
-                        const isHovered = hoveredHash === row.hash;
-                        const cx = lx(row.lane);
-                        const cy = ROW_H / 2;
-                        const isMerge = row.parents.length > 1;
-
-                        if (isHead) {
-                          // HEAD: double circle with cutout effect
-                          const outerR = isHovered ? DOT_R + 3 : DOT_R + 2.5;
-                          const innerR = isHovered ? DOT_R + 0.5 : DOT_R;
-                          return (
-                            <>
-                              {isHovered && (
-                                <circle
-                                  className={styles.graphDotGlow}
-                                  cx={cx} cy={cy}
-                                  r={outerR + 3}
-                                  fill={color}
-                                  opacity={0.15}
-                                  filter="url(#glow)"
-                                />
-                              )}
-                              <circle
-                                cx={cx} cy={cy}
-                                r={outerR}
-                                fill={color}
-                                stroke={color}
-                                strokeWidth={2}
-                              />
-                              <circle
-                                className={styles.graphDot}
-                                cx={cx} cy={cy}
-                                r={innerR}
-                                fill="var(--surface-1)"
-                                stroke={color}
-                                strokeWidth={2}
-                              />
-                            </>
-                          );
-                        } else if (isMerge) {
-                          // Merge: double filled circle
-                          const outerR = isHovered ? DOT_R + 2 : DOT_R + 1.5;
-                          const innerR = isHovered ? DOT_R : DOT_R - 0.5;
-                          return (
-                            <>
-                              {isHovered && (
-                                <circle
-                                  className={styles.graphDotGlow}
-                                  cx={cx} cy={cy}
-                                  r={outerR + 3}
-                                  fill={color}
-                                  opacity={0.15}
-                                  filter="url(#glow)"
-                                />
-                              )}
-                              <circle
-                                cx={cx} cy={cy}
-                                r={outerR}
-                                fill={color}
-                                stroke={color}
-                                strokeWidth={1.5}
-                              />
-                              <circle
-                                className={styles.graphDot}
-                                cx={cx} cy={cy}
-                                r={innerR}
-                                fill={color}
-                                stroke="none"
-                              />
-                            </>
-                          );
-                        } else {
-                          // Regular: single filled circle
-                          const baseR = DOT_R;
-                          const hoverR = baseR + 1;
-                          return (
-                            <>
-                              {isHovered && (
-                                <circle
-                                  className={styles.graphDotGlow}
-                                  cx={cx} cy={cy}
-                                  r={hoverR + 3}
-                                  fill={color}
-                                  opacity={0.15}
-                                  filter="url(#glow)"
-                                />
-                              )}
-                              <circle
-                                className={styles.graphDot}
-                                cx={cx} cy={cy}
-                                r={isHovered ? hoverR : baseR}
-                                fill={isHovered ? color : 'var(--surface-1)'}
-                                stroke={color}
-                                strokeWidth={isHovered ? 2 : 1.5}
-                              />
-                            </>
-                          );
-                        }
-                      })()}
-                    </svg>
-                    <div className={styles.graphContent}>
-                      <div className={styles.graphLine1}>
-                        <span className={`${styles.graphMsg} ${isHead ? styles.graphMsgHead : ''}`}>{row.message}</span>
-                      </div>
-                      <div className={styles.graphLine2}>
-                        <GitAvatar author={row.author} avatarUrl={getAvatarUrl(row)} size={18} />
-                        <span className={styles.graphAuthor}>{row.author}</span>
-                        <span className={styles.graphDate}>{formatRelativeTime(row.isoDate)}</span>
-                        {hasRefs && (
-                          <div className={styles.graphRefs}>
-                            {refBranches.map(b => (
-                              <span key={b} className={`${styles.refBadgeInline} ${styles.refBranchInline}`}>
-                                {b}
-                              </span>
-                            ))}
-                            {tags.map(t => (
-                              <span key={t} className={`${styles.refBadgeInline} ${styles.refTagInline}`}>
-                                {t}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-
-              {/* Infinite scroll loading indicator */}
-              {loadingMore && (
-                <div className={styles.graphLoadMore}>
-                  <FiRefreshCw size={12} className={styles.spinning} />
-                  <span>Loading…</span>
-                </div>
-              )}
-              {!hasMore && commits.length > COMMITS_PAGE_SIZE && (
-                <div className={styles.graphLoadMore}>
-                  <span>All commits loaded</span>
-                </div>
-              )}
+      {loadingMore && (
+        <div className={styles.graphLoadMore}>
+          <FiRefreshCw size={12} className={styles.spinning} />
+          <span>Loading…</span>
+        </div>
+      )}
+      {!hasMore && commits.length > COMMITS_PAGE_SIZE && (
+        <div className={styles.graphLoadMore}>
+          <span>All commits loaded</span>
+        </div>
+      )}
     </>
   );
 

@@ -42,11 +42,56 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const canvasZoomRef = useRef(1);
   const nextZIndexRef = useRef(2);
   const canvasRef = useRef(null);
+  const canvasTransformRef = useRef(null);
   const panelsRef = useRef([]);
   const initialLayoutDone = useRef(false);
+  // Tracks the panel currently being dragged/resized imperatively, plus the
+  // live DOM position. Used to re-apply the imperative style after any React
+  // render mid-drag (which would otherwise reset style.left/top to stale
+  // state values and cause a visible snap-back).
+  const activeDragRef = useRef(null);
 
   useEffect(() => { canvasOffsetRef.current = canvasOffset; }, [canvasOffset]);
   useEffect(() => { canvasZoomRef.current = canvasZoom; }, [canvasZoom]);
+
+  // Safety net: after any render, if a drag/resize is in-flight, re-apply
+  // the imperative DOM style so React's reconciliation doesn't snap the
+  // panel back to its stale state position mid-drag.
+  useLayoutEffect(() => {
+    const d = activeDragRef.current;
+    if (!d) return;
+    const el = document.querySelector(`[data-panel-id="${d.panelId}"]`);
+    if (!el) return;
+    el.style.left = `${d.x}px`;
+    el.style.top = `${d.y}px`;
+    el.style.width = `${d.width}px`;
+    el.style.height = `${d.height}px`;
+  });
+
+  // Toggle a class on the canvas root during any drag/pan/resize/wheel-pan.
+  // CSS uses this to strip backdrop-filter, transitions and heavy shadows
+  // while the user is moving things, then restores them on release.
+  const interactingTimerRef = useRef(null);
+  const wheelCommitTimerRef = useRef(null);
+  const beginCanvasInteraction = useCallback(() => {
+    if (interactingTimerRef.current) {
+      clearTimeout(interactingTimerRef.current);
+      interactingTimerRef.current = null;
+    }
+    if (canvasRef.current) canvasRef.current.classList.add(styles.canvasInteracting);
+  }, []);
+  const endCanvasInteraction = useCallback((debounceMs = 0) => {
+    const stop = () => {
+      interactingTimerRef.current = null;
+      if (canvasRef.current) canvasRef.current.classList.remove(styles.canvasInteracting);
+    };
+    if (debounceMs > 0) {
+      if (interactingTimerRef.current) clearTimeout(interactingTimerRef.current);
+      interactingTimerRef.current = setTimeout(stop, debounceMs);
+    } else {
+      stop();
+    }
+  }, []);
 
   // ── Panel state ──
   const [panels, setPanels] = useState(() => [
@@ -387,11 +432,12 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
 
   // Event-driven workspace refresh. The main process watches the workspace
   // (and .git) with fs.watch and emits `workspace:changed` whenever something
-  // on disk changes. A 15s poll remains as a safety net for filesystems where
+  // on disk changes. A slow poll remains as a safety net for filesystems where
   // fs.watch is unreliable (network mounts, some Linux setups).
   useEffect(() => {
     if (!project) return;
     let running = false, cancelled = false;
+    let lastRefreshAt = 0;
     const isIdle = () =>
       document.documentElement.classList.contains('app-idle') ||
       document.visibilityState === 'hidden';
@@ -414,6 +460,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         if (tree) setFileTree(tree);
         if (status) setGitStatus(status);
         if (wantMeta) setGitRefreshKey(k => k + 1);
+        lastRefreshAt = Date.now();
       } finally { running = false; }
     };
 
@@ -423,12 +470,18 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       refresh({ structural: !!info.structural, gitMeta: !!info.gitMeta });
     });
 
-    // Fallback poll (much slower now that we have real-time events). Use a
-    // full refresh on the poll so anything the watcher might have missed
-    // (network mounts, flaky fs events) still converges eventually.
+    // Fallback poll — spawns `git status` + `git log`, which is the single
+    // biggest steady-state battery cost for an idle project. Skip when a
+    // watcher-driven refresh already ran recently. Bumped to 60s now that
+    // events are reliable; watcher failures still converge within a minute.
+    const POLL_INTERVAL_MS = 60_000;
+    const POLL_SKIP_IF_REFRESHED_WITHIN_MS = 30_000;
     let interval = null;
-    const pollRefresh = () => refresh({ full: true });
-    const start = () => { if (!interval) interval = setInterval(pollRefresh, 15000); };
+    const pollRefresh = () => {
+      if (Date.now() - lastRefreshAt < POLL_SKIP_IF_REFRESHED_WITHIN_MS) return;
+      refresh({ full: true });
+    };
+    const start = () => { if (!interval) interval = setInterval(pollRefresh, POLL_INTERVAL_MS); };
     const stop = () => { clearInterval(interval); interval = null; };
     const sync = () => {
       if (isIdle()) stop();
@@ -539,9 +592,14 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const panelHeight = panel.height;
     const panelEl = document.querySelector(`[data-panel-id="${panelId}"]`);
     if (panelEl) panelEl.classList.add(styles.canvasPanelDragging);
+    beginCanvasInteraction();
     const controller = new AbortController();
     dragAbortRef.current = controller;
     const opts = { signal: controller.signal };
+    // Live drag position; committed to React state once on mouseup.
+    let lastX = startPanelX;
+    let lastY = startPanelY;
+    activeDragRef.current = { panelId, x: lastX, y: lastY, width: panelWidth, height: panelHeight };
     const handleMove = (ev) => {
       const zoom = canvasZoomRef.current;
       const offset = canvasOffsetRef.current;
@@ -608,11 +666,25 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         }
       }
 
-      setPanels(prev => prev.map(p =>
-        p.id === panelId ? { ...p, x: snappedX, y: snappedY } : p
-      ));
+      // Imperative DOM update — avoids a 60fps React re-render of the
+      // entire canvas (every panel's content) during a drag.
+      lastX = snappedX;
+      lastY = snappedY;
+      if (panelEl) {
+        panelEl.style.left = `${snappedX}px`;
+        panelEl.style.top = `${snappedY}px`;
+      }
+      activeDragRef.current = { panelId, x: lastX, y: lastY, width: panelWidth, height: panelHeight };
     };
     const finish = () => {
+      activeDragRef.current = null;
+      endCanvasInteraction();
+      // Commit the final position to React state once, on release.
+      if (lastX !== startPanelX || lastY !== startPanelY) {
+        setPanels(prev => prev.map(p =>
+          p.id === panelId ? { ...p, x: lastX, y: lastY } : p
+        ));
+      }
       abortActiveDrag();
     };
     document.body.style.cursor = 'grabbing';
@@ -620,7 +692,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     document.addEventListener('mousemove', handleMove, opts);
     document.addEventListener('mouseup', finish, opts);
     window.addEventListener('blur', finish, opts);
-  }, [bringToFront, abortActiveDrag]);
+  }, [bringToFront, abortActiveDrag, beginCanvasInteraction, endCanvasInteraction]);
 
   // ── Canvas: panel resize ──
   const handlePanelResize = useCallback((e, panelId, direction) => {
@@ -635,6 +707,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (!panel) return;
     const panelEl = document.querySelector(`[data-panel-id="${panelId}"]`);
     if (panelEl) panelEl.classList.add(styles.canvasPanelDragging);
+    beginCanvasInteraction();
     const startPanel = { x: panel.x, y: panel.y, width: panel.width, height: panel.height };
     const config = PANEL_TYPES[panel.type] || {};
     const minW = config.minWidth || 200;
@@ -642,21 +715,38 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     const controller = new AbortController();
     dragAbortRef.current = controller;
     const opts = { signal: controller.signal };
+    // Live values updated by the move handler; committed on mouseup.
+    let liveX = startPanel.x;
+    let liveY = startPanel.y;
+    let liveW = startPanel.width;
+    let liveH = startPanel.height;
+    activeDragRef.current = { panelId, x: liveX, y: liveY, width: liveW, height: liveH };
     const handleMove = (ev) => {
       const zoom = canvasZoomRef.current;
       const dx = (ev.clientX - startX) / zoom;
       const dy = (ev.clientY - startY) / zoom;
-      setPanels(prev => prev.map(p => {
-        if (p.id !== panelId) return p;
-        let { x, y, width, height } = startPanel;
-        if (direction.includes('e')) width = Math.max(minW, width + dx);
-        if (direction.includes('s')) height = Math.max(minH, height + dy);
-        if (direction.includes('w')) { const nw = Math.max(minW, width - dx); x += width - nw; width = nw; }
-        if (direction.includes('n')) { const nh = Math.max(minH, height - dy); y += height - nh; height = nh; }
-        return { ...p, x, y, width, height };
-      }));
+      let { x, y, width, height } = startPanel;
+      if (direction.includes('e')) width = Math.max(minW, width + dx);
+      if (direction.includes('s')) height = Math.max(minH, height + dy);
+      if (direction.includes('w')) { const nw = Math.max(minW, width - dx); x += width - nw; width = nw; }
+      if (direction.includes('n')) { const nh = Math.max(minH, height - dy); y += height - nh; height = nh; }
+      liveX = x; liveY = y; liveW = width; liveH = height;
+      if (panelEl) {
+        panelEl.style.left = `${x}px`;
+        panelEl.style.top = `${y}px`;
+        panelEl.style.width = `${width}px`;
+        panelEl.style.height = `${height}px`;
+      }
+      activeDragRef.current = { panelId, x: liveX, y: liveY, width: liveW, height: liveH };
     };
     const finish = () => {
+      activeDragRef.current = null;
+      endCanvasInteraction();
+      if (liveX !== startPanel.x || liveY !== startPanel.y || liveW !== startPanel.width || liveH !== startPanel.height) {
+        setPanels(prev => prev.map(p =>
+          p.id === panelId ? { ...p, x: liveX, y: liveY, width: liveW, height: liveH } : p
+        ));
+      }
       abortActiveDrag();
     };
     document.body.style.cursor = `${direction}-resize`;
@@ -664,7 +754,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     document.addEventListener('mousemove', handleMove, opts);
     document.addEventListener('mouseup', finish, opts);
     window.addEventListener('blur', finish, opts);
-  }, [bringToFront, abortActiveDrag]);
+  }, [bringToFront, abortActiveDrag, beginCanvasInteraction, endCanvasInteraction]);
 
   // ── Canvas: pan (drag background) ──
   const handleCanvasMouseDown = useCallback((e) => {
@@ -672,26 +762,39 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     if (e.button !== 0) return;
     e.preventDefault();
     abortActiveDrag();
+    beginCanvasInteraction();
     const startX = e.clientX;
     const startY = e.clientY;
     const startOffset = { ...canvasOffsetRef.current };
     const controller = new AbortController();
     dragAbortRef.current = controller;
     const opts = { signal: controller.signal };
+    let liveOffset = startOffset;
     const handleMove = (ev) => {
-      setCanvasOffset({
+      liveOffset = {
         x: startOffset.x + (ev.clientX - startX),
         y: startOffset.y + (ev.clientY - startY),
-      });
+      };
+      // Imperative transform update — React state is only committed on release,
+      // avoiding a full canvas re-render on every mousemove.
+      const el = canvasTransformRef.current;
+      if (el) {
+        el.style.transform = `translate(${liveOffset.x}px, ${liveOffset.y}px) scale(${canvasZoomRef.current})`;
+      }
+      canvasOffsetRef.current = liveOffset;
     };
     const finish = () => {
+      endCanvasInteraction();
+      if (liveOffset.x !== startOffset.x || liveOffset.y !== startOffset.y) {
+        setCanvasOffset(liveOffset);
+      }
       abortActiveDrag();
     };
     document.body.style.cursor = 'grabbing';
     document.addEventListener('mousemove', handleMove, opts);
     document.addEventListener('mouseup', finish, opts);
     window.addEventListener('blur', finish, opts);
-  }, [abortActiveDrag]);
+  }, [abortActiveDrag, beginCanvasInteraction, endCanvasInteraction]);
 
   // ── Canvas: zoom (wheel/pinch) ──
   const handleCanvasWheel = useCallback((e) => {
@@ -725,6 +828,10 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       }
     }
     e.preventDefault();
+    // Imperative transform updates during wheel bursts, debounced state
+    // commit. Trackpad wheel fires ~60–120 events/sec; calling setState
+    // each time used to trigger a full canvas re-render per tick.
+    beginCanvasInteraction();
     const rect = canvasRef.current.getBoundingClientRect();
     if (isZoom) {
       const mouseX = e.clientX - rect.left;
@@ -735,18 +842,31 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
       const newZoom = Math.min(3, Math.max(0.1, currentZoom * zoomFactor));
       const scale = newZoom / currentZoom;
       const currentOffset = canvasOffsetRef.current;
-      setCanvasZoom(newZoom);
-      setCanvasOffset({
+      const newOffset = {
         x: mouseX - (mouseX - currentOffset.x) * scale,
         y: mouseY - (mouseY - currentOffset.y) * scale,
-      });
+      };
+      canvasZoomRef.current = newZoom;
+      canvasOffsetRef.current = newOffset;
     } else {
-      setCanvasOffset(prev => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY,
-      }));
+      canvasOffsetRef.current = {
+        x: canvasOffsetRef.current.x - e.deltaX,
+        y: canvasOffsetRef.current.y - e.deltaY,
+      };
     }
-  }, []);
+    const el = canvasTransformRef.current;
+    if (el) {
+      el.style.transform = `translate(${canvasOffsetRef.current.x}px, ${canvasOffsetRef.current.y}px) scale(${canvasZoomRef.current})`;
+    }
+    // Debounce the React commit: burst ends ~150ms after last wheel event.
+    if (wheelCommitTimerRef.current) clearTimeout(wheelCommitTimerRef.current);
+    wheelCommitTimerRef.current = setTimeout(() => {
+      wheelCommitTimerRef.current = null;
+      setCanvasZoom(canvasZoomRef.current);
+      setCanvasOffset(canvasOffsetRef.current);
+      endCanvasInteraction();
+    }, 160);
+  }, [beginCanvasInteraction, endCanvasInteraction]);
 
   useEffect(() => {
     const el = canvasRef.current;
@@ -1378,6 +1498,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           >
             <div className={styles.canvasBg} aria-hidden="true" />
             <div
+              ref={canvasTransformRef}
               className={styles.canvasTransform}
               style={{ transform: `translate(${canvasOffset.x}px, ${canvasOffset.y}px) scale(${canvasZoom})` }}
             >

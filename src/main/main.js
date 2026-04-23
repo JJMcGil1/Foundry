@@ -1,6 +1,7 @@
 const { app, BrowserWindow, Menu, nativeImage, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const fsp = fs.promises;
 const os = require('os');
 const { execSync, exec, execFile, spawn } = require('child_process');
 const { promisify } = require('util');
@@ -482,6 +483,16 @@ const HIDDEN = new Set([
   '.git', '.DS_Store', '.svn', '.hg', 'thumbs.db',
 ]);
 
+// Largest file we'll load into the editor. Reading bigger files locks the
+// renderer (Monaco) and wastes IPC bandwidth. Search and replace have their
+// own, smaller 1 MB cap already.
+const MAX_EDITABLE_FILE_BYTES = 10 * 1024 * 1024;
+
+// Helper: yield to the event loop. Long async walks should call this every
+// few hundred items so IPC messages, focus events, and UI work stay responsive
+// while the walk is in flight.
+const yieldToEventLoop = () => new Promise(resolve => setImmediate(resolve));
+
 // These are shown in the tree (greyed out as "ignored") but we never recurse
 // into them — walking node_modules / .next etc. synchronously blocks the main
 // process for seconds on large projects.
@@ -491,66 +502,67 @@ const NEVER_RECURSE = new Set([
   '.gradle', '.idea', '.vscode',
 ]);
 
-function loadGitignore(projectRoot) {
+async function loadGitignore(projectRoot) {
   const ig = ignore();
   try {
     const gitignorePath = path.join(projectRoot, '.gitignore');
-    if (fs.existsSync(gitignorePath)) {
-      const content = fs.readFileSync(gitignorePath, 'utf8');
-      ig.add(content);
-    }
-  } catch { /* ignore errors */ }
+    const content = await fsp.readFile(gitignorePath, 'utf8');
+    ig.add(content);
+  } catch { /* missing .gitignore or read error — fine, use empty matcher */ }
   return ig;
 }
 
-function readDirTree(dirPath, depth = 0, maxDepth = 4, projectRoot = null, ig = null) {
+// Async tree walk. Sync fs.*Sync calls here would block the Electron main
+// process — blocking IPC, pty keystrokes, and stream delivery for every window
+// until the walk completes. On large monorepos that stall is user-visible
+// (multi-second freezes). Sequential await lets the event loop service other
+// work between directories.
+async function readDirTree(dirPath, depth = 0, maxDepth = 4, projectRoot = null, ig = null) {
   if (depth === 0) {
     projectRoot = projectRoot || dirPath;
-    ig = loadGitignore(projectRoot);
+    ig = await loadGitignore(projectRoot);
   }
   if (depth > maxDepth) return [];
+  let entries;
   try {
-    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-    const result = [];
-    // Sort: folders first, then files, alphabetical
-    const sorted = entries
-      .filter(e => !HIDDEN.has(e.name))
-      .sort((a, b) => {
-        if (a.isDirectory() && !b.isDirectory()) return -1;
-        if (!a.isDirectory() && b.isDirectory()) return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-    for (const entry of sorted) {
-      const fullPath = path.join(dirPath, entry.name);
-      // Get path relative to project root for gitignore matching
-      // Append '/' for directories so patterns like "node_modules/" match correctly
-      const relativePath = path.relative(projectRoot, fullPath);
-      const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
-      const isIgnored = ig ? ig.ignores(testPath) : false;
-
-      if (entry.isDirectory()) {
-        const skipRecurse = NEVER_RECURSE.has(entry.name) || isIgnored;
-        result.push({
-          name: entry.name,
-          path: fullPath,
-          type: 'directory',
-          ignored: isIgnored,
-          children: skipRecurse ? [] : readDirTree(fullPath, depth + 1, maxDepth, projectRoot, ig),
-        });
-      } else {
-        result.push({
-          name: entry.name,
-          path: fullPath,
-          type: 'file',
-          ignored: isIgnored,
-        });
-      }
-    }
-    return result;
+    entries = await fsp.readdir(dirPath, { withFileTypes: true });
   } catch {
     return [];
   }
+  const sorted = entries
+    .filter(e => !HIDDEN.has(e.name))
+    .sort((a, b) => {
+      if (a.isDirectory() && !b.isDirectory()) return -1;
+      if (!a.isDirectory() && b.isDirectory()) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+  const result = [];
+  for (const entry of sorted) {
+    const fullPath = path.join(dirPath, entry.name);
+    const relativePath = path.relative(projectRoot, fullPath);
+    const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+    const isIgnored = ig ? ig.ignores(testPath) : false;
+
+    if (entry.isDirectory()) {
+      const skipRecurse = NEVER_RECURSE.has(entry.name) || isIgnored;
+      result.push({
+        name: entry.name,
+        path: fullPath,
+        type: 'directory',
+        ignored: isIgnored,
+        children: skipRecurse ? [] : await readDirTree(fullPath, depth + 1, maxDepth, projectRoot, ig),
+      });
+    } else {
+      result.push({
+        name: entry.name,
+        path: fullPath,
+        type: 'file',
+        ignored: isIgnored,
+      });
+    }
+  }
+  return result;
 }
 
 function getFileLanguage(filePath) {
@@ -962,7 +974,7 @@ function registerIPC() {
         success: true,
         path: destPath,
         name: repoName,
-        tree: readDirTree(destPath),
+        tree: await readDirTree(destPath),
       };
     } catch (err) {
       return { error: err.message };
@@ -1047,18 +1059,29 @@ function registerIPC() {
     return {
       path: dirPath,
       name: path.basename(dirPath),
-      tree: readDirTree(dirPath),
+      tree: await readDirTree(dirPath),
     };
   });
 
   ipcMain.handle('fs:readDir', async (_event, dirPath) => {
-    return readDirTree(dirPath);
+    return await readDirTree(dirPath);
   });
 
   ipcMain.handle('fs:readFile', async (_event, filePath) => {
     try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      const stats = fs.statSync(filePath);
+      const stats = await fsp.stat(filePath);
+      // Large files blow up the renderer (Monaco chokes past a few MB) and the
+      // read itself streams through the main process. Bail early with a
+      // structured error so the editor shows a "file too large" notice
+      // instead of locking the UI for seconds.
+      if (stats.size > MAX_EDITABLE_FILE_BYTES) {
+        return {
+          error: `File is too large to open (${(stats.size / 1024 / 1024).toFixed(1)} MB, limit ${MAX_EDITABLE_FILE_BYTES / 1024 / 1024} MB).`,
+          tooLarge: true,
+          size: stats.size,
+        };
+      }
+      const content = await fsp.readFile(filePath, 'utf8');
       return {
         content,
         language: getFileLanguage(filePath),
@@ -1074,7 +1097,7 @@ function registerIPC() {
 
   ipcMain.handle('fs:writeFile', async (_event, filePath, content) => {
     try {
-      fs.writeFileSync(filePath, content, 'utf8');
+      await fsp.writeFile(filePath, content, 'utf8');
       return { success: true };
     } catch (err) {
       return { error: err.message };
@@ -1084,7 +1107,7 @@ function registerIPC() {
   ipcMain.handle('fs:createFile', async (_event, dirPath, fileName) => {
     try {
       const filePath = path.join(dirPath, fileName);
-      fs.writeFileSync(filePath, '', 'utf8');
+      await fsp.writeFile(filePath, '', 'utf8');
       return { success: true, path: filePath };
     } catch (err) {
       return { error: err.message };
@@ -1094,7 +1117,7 @@ function registerIPC() {
   ipcMain.handle('fs:createFolder', async (_event, dirPath, folderName) => {
     try {
       const folderPath = path.join(dirPath, folderName);
-      fs.mkdirSync(folderPath, { recursive: true });
+      await fsp.mkdir(folderPath, { recursive: true });
       return { success: true, path: folderPath };
     } catch (err) {
       return { error: err.message };
@@ -1114,7 +1137,7 @@ function registerIPC() {
     try {
       const dir = path.dirname(oldPath);
       const newPath = path.join(dir, newName);
-      fs.renameSync(oldPath, newPath);
+      await fsp.rename(oldPath, newPath);
       return { success: true, path: newPath };
     } catch (err) {
       return { error: err.message };
@@ -1641,34 +1664,38 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
   });
 
   // ---- Workspace Search ---- //
+  // Each walker below is async and yields to the event loop periodically so a
+  // long search doesn't block IPC, pty keystrokes, or stream delivery.
   ipcMain.handle('search:files', async (_event, dirPath, query) => {
     if (!dirPath || !query) return [];
     const results = [];
     const lowerQuery = query.toLowerCase();
-    const ig = loadGitignore(dirPath);
-    function walkDir(dir, depth = 0) {
+    const ig = await loadGitignore(dirPath);
+    let dirsScanned = 0;
+    async function walkDir(dir, depth = 0) {
       if (depth > 6 || results.length >= 50) return;
+      if (++dirsScanned % 64 === 0) await yieldToEventLoop();
+      let entries;
       try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
-          const fullPath = path.join(dir, entry.name);
-          const relativePath = path.relative(dirPath, fullPath);
-          const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
-          if (ig.ignores(testPath)) continue;
-          if (entry.isDirectory()) {
-            walkDir(fullPath, depth + 1);
-          } else {
-            if (entry.name.toLowerCase().includes(lowerQuery) || relativePath.toLowerCase().includes(lowerQuery)) {
-              results.push({ name: entry.name, path: fullPath, relativePath });
-            }
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch { return; }
+      for (const entry of entries) {
+        if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
+        const fullPath = path.join(dir, entry.name);
+        const relativePath = path.relative(dirPath, fullPath);
+        const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+        if (ig.ignores(testPath)) continue;
+        if (entry.isDirectory()) {
+          await walkDir(fullPath, depth + 1);
+        } else {
+          if (entry.name.toLowerCase().includes(lowerQuery) || relativePath.toLowerCase().includes(lowerQuery)) {
+            results.push({ name: entry.name, path: fullPath, relativePath });
           }
-          if (results.length >= 50) return;
         }
-      } catch {}
+        if (results.length >= 50) return;
+      }
     }
-    walkDir(dirPath);
-    // Sort: prefer starts-with matches, then by path length
+    await walkDir(dirPath);
     results.sort((a, b) => {
       const aStarts = a.name.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
       const bStarts = b.name.toLowerCase().startsWith(lowerQuery) ? 0 : 1;
@@ -1694,60 +1721,58 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     } catch {
       return [];
     }
-    // Parse include/exclude glob patterns (comma-separated)
     const includeGlobs = includePattern ? includePattern.split(',').map(s => s.trim()).filter(Boolean) : [];
     const excludeGlobs = excludePattern ? excludePattern.split(',').map(s => s.trim()).filter(Boolean) : [];
     function matchesGlobs(relPath, globs) {
       return globs.some(g => minimatch(relPath, g, { matchBase: true, dot: false }));
     }
-    const ig = loadGitignore(dirPath);
-    function walkDir(dir, depth = 0) {
+    const ig = await loadGitignore(dirPath);
+    let filesRead = 0;
+    async function walkDir(dir, depth = 0) {
       if (depth > 8 || results.length >= 200) return;
+      let entries;
       try {
-        const entries = fs.readdirSync(dir, { withFileTypes: true });
-        for (const entry of entries) {
-          if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
-          const fullPath = path.join(dir, entry.name);
-          const relativePath = path.relative(dirPath, fullPath);
-          const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
-          if (ig.ignores(testPath)) continue;
-          if (entry.isDirectory()) {
-            walkDir(fullPath, depth + 1);
-          } else {
-            // Apply include/exclude filters
-            if (includeGlobs.length > 0 && !matchesGlobs(relativePath, includeGlobs)) continue;
-            if (excludeGlobs.length > 0 && matchesGlobs(relativePath, excludeGlobs)) continue;
-            // Skip binary / large files
-            try {
-              const stats = fs.statSync(fullPath);
-              if (stats.size > 1024 * 1024) continue; // skip > 1MB
-            } catch { continue; }
-            try {
-              const content = fs.readFileSync(fullPath, 'utf8');
-              const lines = content.split('\n');
-              const fileMatches = [];
-              for (let i = 0; i < lines.length; i++) {
-                pattern.lastIndex = 0;
-                if (pattern.test(lines[i])) {
-                  fileMatches.push({ line: i + 1, text: lines[i].substring(0, 500) });
-                  if (fileMatches.length >= 50) break;
-                }
-              }
-              if (fileMatches.length > 0) {
-                results.push({
-                  path: fullPath,
-                  relativePath,
-                  name: path.basename(fullPath),
-                  matches: fileMatches,
-                });
-              }
-            } catch {}
+        entries = await fsp.readdir(dir, { withFileTypes: true });
+      } catch { return; }
+      for (const entry of entries) {
+        if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
+        const fullPath = path.join(dir, entry.name);
+        const relativePath = path.relative(dirPath, fullPath);
+        const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+        if (ig.ignores(testPath)) continue;
+        if (entry.isDirectory()) {
+          await walkDir(fullPath, depth + 1);
+        } else {
+          if (includeGlobs.length > 0 && !matchesGlobs(relativePath, includeGlobs)) continue;
+          if (excludeGlobs.length > 0 && matchesGlobs(relativePath, excludeGlobs)) continue;
+          let stats;
+          try { stats = await fsp.stat(fullPath); } catch { continue; }
+          if (stats.size > 1024 * 1024) continue;
+          let content;
+          try { content = await fsp.readFile(fullPath, 'utf8'); } catch { continue; }
+          if (++filesRead % 16 === 0) await yieldToEventLoop();
+          const lines = content.split('\n');
+          const fileMatches = [];
+          for (let i = 0; i < lines.length; i++) {
+            pattern.lastIndex = 0;
+            if (pattern.test(lines[i])) {
+              fileMatches.push({ line: i + 1, text: lines[i].substring(0, 500) });
+              if (fileMatches.length >= 50) break;
+            }
           }
-          if (results.length >= 200) return;
+          if (fileMatches.length > 0) {
+            results.push({
+              path: fullPath,
+              relativePath,
+              name: path.basename(fullPath),
+              matches: fileMatches,
+            });
+          }
         }
-      } catch {}
+        if (results.length >= 200) return;
+      }
     }
-    walkDir(dirPath);
+    await walkDir(dirPath);
     return results;
   });
 
@@ -1756,7 +1781,7 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     const caseSensitive = options.caseSensitive || false;
     const isRegex = options.isRegex || false;
     const wholeWord = options.wholeWord || false;
-    const filePaths = options.filePaths || null; // optional: limit to specific files
+    const filePaths = options.filePaths || null;
     let pattern;
     try {
       let src = isRegex ? searchQuery : searchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1767,43 +1792,44 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     }
     let totalReplacements = 0;
     let filesModified = 0;
-    function processFile(filePath) {
+    let filesProcessed = 0;
+    async function processFile(filePath) {
       try {
-        const stats = fs.statSync(filePath);
-        if (stats.size > 1024 * 1024) return; // skip > 1MB
-        const content = fs.readFileSync(filePath, 'utf8');
+        const stats = await fsp.stat(filePath);
+        if (stats.size > 1024 * 1024) return;
+        const content = await fsp.readFile(filePath, 'utf8');
         pattern.lastIndex = 0;
         if (!pattern.test(content)) return;
         pattern.lastIndex = 0;
         let count = 0;
-        const newContent = content.replace(pattern, (match) => { count++; return replaceText; });
+        const newContent = content.replace(pattern, () => { count++; return replaceText; });
         if (count > 0) {
-          fs.writeFileSync(filePath, newContent, 'utf8');
+          await fsp.writeFile(filePath, newContent, 'utf8');
           totalReplacements += count;
           filesModified++;
         }
       } catch {}
+      if (++filesProcessed % 16 === 0) await yieldToEventLoop();
     }
     if (filePaths && filePaths.length > 0) {
-      for (const fp of filePaths) processFile(fp);
+      for (const fp of filePaths) await processFile(fp);
     } else {
-      const ig = loadGitignore(dirPath);
-      function walkDir(dir, depth = 0) {
+      const ig = await loadGitignore(dirPath);
+      async function walkDir(dir, depth = 0) {
         if (depth > 6) return;
-        try {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const entry of entries) {
-            if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
-            const fullPath = path.join(dir, entry.name);
-            const relativePath = path.relative(dirPath, fullPath);
-            const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
-            if (ig.ignores(testPath)) continue;
-            if (entry.isDirectory()) walkDir(fullPath, depth + 1);
-            else processFile(fullPath);
-          }
-        } catch {}
+        let entries;
+        try { entries = await fsp.readdir(dir, { withFileTypes: true }); } catch { return; }
+        for (const entry of entries) {
+          if (HIDDEN.has(entry.name) || entry.name.startsWith('.')) continue;
+          const fullPath = path.join(dir, entry.name);
+          const relativePath = path.relative(dirPath, fullPath);
+          const testPath = entry.isDirectory() ? relativePath + '/' : relativePath;
+          if (ig.ignores(testPath)) continue;
+          if (entry.isDirectory()) await walkDir(fullPath, depth + 1);
+          else await processFile(fullPath);
+        }
       }
-      walkDir(dirPath);
+      await walkDir(dirPath);
     }
     return { success: true, totalReplacements, filesModified };
   });
@@ -2247,11 +2273,11 @@ ${truncatedDiff ? `Diff content:\n${truncatedDiff}` : ''}`;
     const tempImagePaths = [];
     if (images && images.length > 0) {
       const tmpDir = path.join(os.tmpdir(), 'foundry-images');
-      if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir, { recursive: true });
+      await fsp.mkdir(tmpDir, { recursive: true }).catch(() => {});
       for (const img of images) {
         const ext = img.mediaType?.split('/')[1] || 'png';
         const tmpPath = path.join(tmpDir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`);
-        fs.writeFileSync(tmpPath, Buffer.from(img.base64, 'base64'));
+        await fsp.writeFile(tmpPath, Buffer.from(img.base64, 'base64'));
         tempImagePaths.push(tmpPath);
       }
     }
