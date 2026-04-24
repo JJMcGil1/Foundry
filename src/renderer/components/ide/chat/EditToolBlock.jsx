@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import { FiChevronDown } from 'react-icons/fi';
 import { LuChevronsUpDown, LuFileCode } from 'react-icons/lu';
 import styles from './EditToolBlock.module.css';
@@ -9,7 +9,7 @@ import sharedStyles from './shared.module.css';
 // Streaming Edits skip the cap so the user sees progress in real time.
 const COLLAPSED_LINE_PREVIEW = 6;
 
-export default function EditToolBlock({ input, isStreaming }) {
+function EditToolBlock({ input, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
   const data = useMemo(() => {
     if (!input) return {};
@@ -94,3 +94,5 @@ export default function EditToolBlock({ input, isStreaming }) {
     </div>
   );
 }
+
+export default memo(EditToolBlock);

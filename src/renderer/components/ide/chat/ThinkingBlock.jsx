@@ -1,10 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LuBrainCircuit } from 'react-icons/lu';
 import styles from './ThinkingBlock.module.css';
 import sharedStyles from './shared.module.css';
 
-export default function ThinkingBlock({ content, isStreaming }) {
+function ThinkingBlock({ content, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
 
   const preview = useMemo(() => {
@@ -52,3 +52,7 @@ export default function ThinkingBlock({ content, isStreaming }) {
     </div>
   );
 }
+
+// Parent AgentMessage re-renders on every streaming delta. Memo keeps
+// finished thinking blocks from re-rendering when a later tool block streams.
+export default memo(ThinkingBlock);

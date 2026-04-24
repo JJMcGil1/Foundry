@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { memo, useState } from 'react';
 import { FiCopy, FiCheck } from 'react-icons/fi';
 import styles from './CodeBlock.module.css';
 
-export default function CodeBlock({ language, code }) {
+function CodeBlock({ language, code }) {
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard.writeText(code);
@@ -21,3 +21,5 @@ export default function CodeBlock({ language, code }) {
     </div>
   );
 }
+
+export default memo(CodeBlock);

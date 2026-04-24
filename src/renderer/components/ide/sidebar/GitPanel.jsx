@@ -185,29 +185,32 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
   // The effective path for git operations (root or submodule)
   const effectivePath = selectedRepo ? selectedRepo : projectPath;
 
-  const refreshGit = async () => {
+  const refreshGit = useCallback(() => {
     onRefreshGit?.();
-  };
+  }, [onRefreshGit]);
 
-  const handleStageFile = (filePath) => {
+  // Callbacks are stabilized so memoized ChangeItem rows stay parked
+  // when gitStatus updates (which happens on every file save via the
+  // file-watcher).
+  const handleStageFile = useCallback((filePath) => {
     setOptimisticStaged(prev => new Set(prev).add(filePath));
     gitQueueRef.current = gitQueueRef.current
       .then(() => window.foundry?.gitStage(projectPath, filePath))
       .then(() => refreshGit())
       .catch(() => refreshGit());
-  };
+  }, [projectPath, refreshGit]);
 
-  const handleUnstageFile = (filePath) => {
+  const handleUnstageFile = useCallback((filePath) => {
     setOptimisticUnstaged(prev => new Set(prev).add(filePath));
     gitQueueRef.current = gitQueueRef.current
       .then(() => window.foundry?.gitUnstage(projectPath, filePath))
       .then(() => refreshGit())
       .catch(() => refreshGit());
-  };
+  }, [projectPath, refreshGit]);
 
-  const handleDiscardFile = (filePath) => {
+  const handleDiscardFile = useCallback((filePath) => {
     setDiscardConfirm({ type: 'file', path: filePath });
-  };
+  }, []);
 
   const executeDiscard = async () => {
     if (!discardConfirm) return;
@@ -222,22 +225,14 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     refreshGit();
   };
 
-  const handleOpenFile = (filePath) => {
+  const handleOpenFile = useCallback((filePath) => {
     const fullPath = projectPath + '/' + filePath;
     onOpenFile?.(fullPath);
-  };
+  }, [projectPath, onOpenFile]);
 
-  // Auto-resize textarea
-  const autoResize = useCallback((el) => {
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 240) + 'px';
-  }, []);
-
-  // Auto-resize whenever commitMsg changes (covers AI generation + typing)
-  useEffect(() => {
-    autoResize(commitInputRef.current);
-  }, [commitMsg, autoResize]);
+  // Auto-sizing is CSS-only (`field-sizing: content` on .commitInput).
+  // Previous JS implementation fired a layout read on every keystroke
+  // and after every AI-generated character.
 
   const handleCommitMsgChange = useCallback((e) => {
     setCommitMsg(e.target.value);

@@ -57,10 +57,10 @@
   font-size: 14px;
   resize: none;
   line-height: 1.5;
-  height: auto;
+  field-sizing: content;
   min-height: 44px;
   max-height: 200px;
-  overflow-y: hidden;
+  overflow-y: auto;
   border-radius: 16px;
   box-sizing: border-box;
 }

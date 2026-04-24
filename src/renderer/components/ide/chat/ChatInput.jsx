@@ -123,13 +123,11 @@ const ChatInput = forwardRef(function ChatInput({
     }
   };
 
+  // Auto-size is CSS-only (`field-sizing: content` on .input).
+  // Previous JS implementation forced two synchronous scrollHeight reads
+  // per keystroke, which thrashed layout on fast typing.
   const handleChange = (e) => {
     setInput(e.target.value);
-    const el = e.target;
-    el.style.height = '0';
-    const newHeight = Math.min(el.scrollHeight, 200);
-    el.style.height = newHeight + 'px';
-    el.style.overflowY = el.scrollHeight > 200 ? 'auto' : 'hidden';
   };
 
   const handlePaste = useCallback((e) => {

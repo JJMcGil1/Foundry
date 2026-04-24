@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiEdit2, FiDownload, FiTerminal, FiSearch, FiTool, FiGlobe } from 'react-icons/fi';
 import { FaEye } from 'react-icons/fa';
@@ -41,7 +41,7 @@ function extractToolContext(name, input) {
   return null;
 }
 
-export default function ToolUseBlock({ name, input, isStreaming }) {
+function ToolUseBlock({ name, input, isStreaming }) {
   // Bash gets its own terminal UI
   if (name === 'Bash') {
     return <BashToolBlock input={input} isStreaming={isStreaming} />;
@@ -97,3 +97,7 @@ export default function ToolUseBlock({ name, input, isStreaming }) {
     </div>
   );
 }
+
+// Parent AgentMessage re-renders on every streaming delta; memo stops
+// finished tool blocks from re-running while a later block streams.
+export default memo(ToolUseBlock);

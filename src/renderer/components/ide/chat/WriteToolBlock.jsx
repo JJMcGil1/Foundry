@@ -1,11 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import { LuChevronsUpDown, LuFilePlus } from 'react-icons/lu';
 import styles from './WriteToolBlock.module.css';
 import sharedStyles from './shared.module.css';
 
 const COLLAPSED_LINE_PREVIEW = 6;
 
-export default function WriteToolBlock({ input, isStreaming }) {
+function WriteToolBlock({ input, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
   const data = useMemo(() => {
     if (!input) return {};
@@ -69,3 +69,5 @@ export default function WriteToolBlock({ input, isStreaming }) {
     </div>
   );
 }
+
+export default memo(WriteToolBlock);

@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
+import React, { memo, useState, useMemo } from 'react';
 import { FiCopy, FiCheck } from 'react-icons/fi';
 import { HiTerminal } from 'react-icons/hi';
 import styles from './BashToolBlock.module.css';
 
-export default function BashToolBlock({ input, isStreaming }) {
+function BashToolBlock({ input, isStreaming }) {
   const [copied, setCopied] = useState(false);
   const data = useMemo(() => {
     if (!input) return {};
@@ -63,3 +63,5 @@ export default function BashToolBlock({ input, isStreaming }) {
     </div>
   );
 }
+
+export default memo(BashToolBlock);

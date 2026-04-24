@@ -488,6 +488,7 @@
 
 .commitInput {
   width: 100%;
+  min-height: 42px;
   max-height: 120px;
   padding: 7px 32px 7px 10px;
   background: var(--surface-2);
@@ -499,6 +500,7 @@
   outline: none;
   resize: none;
   line-height: 1.4;
+  field-sizing: content;
   overflow-y: auto;
   scrollbar-width: none;
   transition: border-color 0.15s ease;
