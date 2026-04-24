@@ -3,6 +3,8 @@ import { LuChevronsUpDown, LuFilePlus } from 'react-icons/lu';
 import styles from './WriteToolBlock.module.css';
 import sharedStyles from './shared.module.css';
 
+const COLLAPSED_LINE_PREVIEW = 6;
+
 export default function WriteToolBlock({ input, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
   const data = useMemo(() => {
@@ -14,8 +16,17 @@ export default function WriteToolBlock({ input, isStreaming }) {
   const filePath = data.file_path || '';
   const fileName = filePath ? filePath.split('/').pop() : 'unknown';
   const content = data.content || '';
-  const lines = content ? content.split('\n') : [];
+  // Memoize the split — written files can be hundreds of lines, and the
+  // parent re-renders on every streaming flush even when this block hasn't
+  // changed.
+  const lines = useMemo(() => (content ? content.split('\n') : []), [content]);
   const needsCollapse = lines.length > 4;
+
+  // Collapsed renders only the preview slice, so an unexpanded 1000-line
+  // Write costs ~6 DOM nodes instead of 1000.
+  const showCollapsed = !expanded && needsCollapse && !isStreaming;
+  const visibleLines = showCollapsed ? lines.slice(0, COLLAPSED_LINE_PREVIEW) : lines;
+  const hiddenCount = lines.length - visibleLines.length;
 
   return (
     <div className={styles.writeBlock}>
@@ -44,12 +55,15 @@ export default function WriteToolBlock({ input, isStreaming }) {
       </div>
       {lines.length > 0 && (
         <div className={`${styles.writeBody} ${!expanded && needsCollapse ? styles.writeBodyCollapsed : ''}`}>
-          {lines.map((line, i) => (
+          {visibleLines.map((line, i) => (
             <div key={i} className={styles.writeLine}>
               <span className={styles.writeLineNum}>{i + 1}</span>
               <span className={styles.writeLineText}>{line}</span>
             </div>
           ))}
+          {showCollapsed && hiddenCount > 0 && (
+            <div className={styles.writeMoreHint}>… {hiddenCount} more lines</div>
+          )}
         </div>
       )}
     </div>

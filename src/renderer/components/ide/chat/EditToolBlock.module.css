@@ -178,6 +178,14 @@
   color: var(--zinc-200);
 }
 
+.diffMoreHint {
+  padding: 4px 8px;
+  color: var(--zinc-600);
+  font-size: 11px;
+  font-style: italic;
+  user-select: none;
+}
+
 /* ── Light mode ── */
 :global([data-theme="light"]) .diffBlock {
   background: rgba(255, 255, 255, 0.55);

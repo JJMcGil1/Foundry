@@ -53,6 +53,39 @@
   background: var(--zinc-600);
 }
 
+/* ---- Per-message render-skip wrapper ---- */
+/* content-visibility: auto tells the browser to skip layout, style, and
+   paint for off-screen elements entirely — modern Chromium's answer to
+   virtualization that needs no scroll-anchoring gymnastics.
+   contain-intrinsic-size: pre-reserves a rough box so scroll position is
+   stable before the real height is measured. The browser swaps in real
+   dimensions as items scroll near the viewport. */
+.messageSlot {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}
+
+/* ---- Load older banner ---- */
+.loadOlderBanner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--zinc-500, #71717a);
+  opacity: 0.7;
+}
+
+.loadOlderSpin {
+  animation: loadOlderSpin 0.8s linear infinite;
+}
+
+@keyframes loadOlderSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 /* ---- Error Banner ---- */
 .errorBanner {
   display: flex;

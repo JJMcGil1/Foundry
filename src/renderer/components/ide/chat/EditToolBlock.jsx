@@ -4,6 +4,11 @@ import { LuChevronsUpDown, LuFileCode } from 'react-icons/lu';
 import styles from './EditToolBlock.module.css';
 import sharedStyles from './shared.module.css';
 
+// When collapsed, render at most this many lines. Anything beyond was hidden
+// by CSS overflow before — this keeps the DOM cost of each block bounded.
+// Streaming Edits skip the cap so the user sees progress in real time.
+const COLLAPSED_LINE_PREVIEW = 6;
+
 export default function EditToolBlock({ input, isStreaming }) {
   const [expanded, setExpanded] = useState(false);
   const data = useMemo(() => {
@@ -16,10 +21,22 @@ export default function EditToolBlock({ input, isStreaming }) {
   const fileName = filePath ? filePath.split('/').pop() : 'unknown';
   const oldStr = data.old_string || '';
   const newStr = data.new_string || '';
-  const oldLines = oldStr ? oldStr.split('\n') : [];
-  const newLines = newStr ? newStr.split('\n') : [];
+  // Memoize line splitting so unchanged blocks don't re-split on every parent
+  // re-render (the streaming flush re-renders AgentMessage on every flush
+  // even though most blocks haven't changed).
+  const oldLines = useMemo(() => (oldStr ? oldStr.split('\n') : []), [oldStr]);
+  const newLines = useMemo(() => (newStr ? newStr.split('\n') : []), [newStr]);
   const totalLines = oldLines.length + newLines.length;
   const needsCollapse = totalLines > 4;
+
+  // When collapsed and not streaming, only render the preview slice. This
+  // keeps the DOM cost of an unexpanded 500-line edit at ~6 nodes instead
+  // of 500.
+  const showCollapsed = !expanded && needsCollapse && !isStreaming;
+  const visibleOld = showCollapsed ? oldLines.slice(0, COLLAPSED_LINE_PREVIEW) : oldLines;
+  const visibleNew = showCollapsed
+    ? newLines.slice(0, Math.max(0, COLLAPSED_LINE_PREVIEW - visibleOld.length))
+    : newLines;
 
   return (
     <div className={styles.diffBlock}>
@@ -53,20 +70,25 @@ export default function EditToolBlock({ input, isStreaming }) {
       </div>
       {(oldStr || newStr) && (
         <div className={`${styles.diffBody} ${!expanded && needsCollapse ? styles.diffBodyCollapsed : ''}`}>
-          {oldLines.map((line, i) => (
+          {visibleOld.map((line, i) => (
             <div key={`old-${i}`} className={styles.diffLineRemoved}>
               <span className={styles.diffLineNum}>{i + 1}</span>
               <span className={styles.diffLinePrefix}>−</span>
               <span className={styles.diffLineText}>{line}</span>
             </div>
           ))}
-          {newLines.map((line, i) => (
+          {visibleNew.map((line, i) => (
             <div key={`new-${i}`} className={styles.diffLineAdded}>
               <span className={styles.diffLineNum}>{oldLines.length + i + 1}</span>
               <span className={styles.diffLinePrefix}>+</span>
               <span className={styles.diffLineText}>{line}</span>
             </div>
           ))}
+          {showCollapsed && totalLines > visibleOld.length + visibleNew.length && (
+            <div className={styles.diffMoreHint}>
+              … {totalLines - (visibleOld.length + visibleNew.length)} more lines
+            </div>
+          )}
         </div>
       )}
     </div>

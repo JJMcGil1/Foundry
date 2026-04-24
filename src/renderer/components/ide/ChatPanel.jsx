@@ -1,6 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { FiAlertCircle } from 'react-icons/fi';
+import { FiAlertCircle, FiLoader } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
+
+// ---- Pagination tunables ---- //
+// Initial load: latest N messages on thread switch. Older pages fetch the same
+// chunk size. 30 keeps initial render under ~150 DOM nodes for typical sessions.
+const MESSAGE_PAGE_SIZE = 30;
+// How close to the top (in px) before we trigger an older-page load.
+const LOAD_OLDER_THRESHOLD_PX = 200;
+// How close to the bottom (in px) we consider "at the bottom" for auto-scroll.
+const AT_BOTTOM_THRESHOLD_PX = 80;
+// Debounce window for partial-message DB saves during streaming (ms). The
+// final save still fires synchronously on stream_end so nothing is lost.
+const STREAM_SAVE_DEBOUNCE_MS = 1500;
 
 // ---- Modular chat components ---- //
 import { generateId, messageToStored, storedToMessage } from './chat/chatHelpers';
@@ -56,9 +68,26 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   const [error, setError] = useState(null);
   const modelSwitcherRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
   const cleanupRef = useRef([]);
   const lastUserMsgRef = useRef('');
+
+  // ---- Pagination state ---- //
+  // hasMoreOlder: true if the DB still has older messages we haven't loaded.
+  // loadingOlder: prevents concurrent fetches when scroll fires repeatedly.
+  // Tracked as refs because the scroll handler reads them on every event and
+  // we don't need re-renders for changes.
+  const [hasMoreOlder, setHasMoreOlder] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const hasMoreOlderRef = useRef(false);
+  const loadingOlderRef = useRef(false);
+  const oldestCreatedAtRef = useRef(null);
+
+  // Tracks whether the user has scrolled away from the bottom. While true,
+  // streaming deltas must not yank them back down — a major source of "lag"
+  // perception comes from auto-scroll fighting the user.
+  const isAtBottomRef = useRef(true);
 
   // ---- Thread state ---- //
   const [threads, setThreads] = useState([]);
@@ -96,13 +125,23 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     setCurrentStreamId(id);
   }, []);
 
-  // ---- Immediate message save to SQLite (no debounce) ---- //
+  // ---- Message save to SQLite ---- //
+  // Two paths:
+  //   saveMessageToDb(msg)             — full save: writes msg + recalculates
+  //                                      thread message_count. Use for user
+  //                                      messages and the FINAL assistant save.
+  //   scheduleStreamingSave(msg)       — debounced incremental save during
+  //                                      streaming. Skips the count/thread
+  //                                      update IPC roundtrips since the count
+  //                                      hasn't changed mid-message.
   const currentThreadIdRef = useRef(null);
   const saveLockRef = useRef(Promise.resolve());
   // Mirror of `messages` state — used by stream handlers so they can read the
   // current list without going through `setMessages(prev => prev)`, which
   // still runs through React's scheduler on every block boundary.
   const messagesRef = useRef([]);
+  const streamSaveTimerRef = useRef(null);
+  const streamSavePendingRef = useRef(null);
 
   useEffect(() => {
     currentThreadIdRef.current = currentThreadId;
@@ -112,7 +151,10 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     messagesRef.current = messages;
   }, [messages]);
 
-  const saveMessageToDb = useCallback((msg) => {
+  // Internal: send one message to the DB. If `withCount` is true, also fetch
+  // the new count and update the thread row — only needed when a message is
+  // first inserted (not on every streaming delta save).
+  const writeMessage = useCallback((msg, withCount) => {
     const threadId = currentThreadIdRef.current;
     if (!threadId) return;
 
@@ -120,9 +162,11 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       const storedMsg = messageToStored(msg, threadId);
       try {
         await window.foundry?.chatSaveMessages([storedMsg]);
-        const count = await window.foundry?.chatGetMessageCount(threadId);
-        if (count != null) {
-          await window.foundry?.chatUpdateThread(threadId, { message_count: count });
+        if (withCount) {
+          const count = await window.foundry?.chatGetMessageCount(threadId);
+          if (count != null) {
+            await window.foundry?.chatUpdateThread(threadId, { message_count: count });
+          }
         }
       } catch (err) {
         console.error('[Chat] Failed to save message:', err);
@@ -131,6 +175,37 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       console.error('[Chat] Save chain error:', err);
     });
   }, []);
+
+  const saveMessageToDb = useCallback((msg) => writeMessage(msg, true), [writeMessage]);
+
+  // Flushes any pending streaming-save snapshot immediately (without count).
+  const flushStreamingSave = useCallback(() => {
+    if (streamSaveTimerRef.current) {
+      clearTimeout(streamSaveTimerRef.current);
+      streamSaveTimerRef.current = null;
+    }
+    const pending = streamSavePendingRef.current;
+    if (pending) {
+      streamSavePendingRef.current = null;
+      writeMessage(pending, false);
+    }
+  }, [writeMessage]);
+
+  // Schedules a debounced save of the latest streaming snapshot. Coalesces
+  // many block_stop events into one DB write per debounce window. Drops the
+  // count/thread-update IPC pair for incremental saves since the message id
+  // hasn't changed mid-stream.
+  const scheduleStreamingSave = useCallback((msg) => {
+    streamSavePendingRef.current = msg;
+    if (streamSaveTimerRef.current) return;
+    streamSaveTimerRef.current = setTimeout(() => {
+      streamSaveTimerRef.current = null;
+      const pending = streamSavePendingRef.current;
+      if (!pending) return;
+      streamSavePendingRef.current = null;
+      writeMessage(pending, false);
+    }, STREAM_SAVE_DEBOUNCE_MS);
+  }, [writeMessage]);
 
   // Request notification permission on mount
   useEffect(() => {
@@ -150,6 +225,9 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         if (startFresh) {
           setCurrentThreadId(null);
           setMessages([]);
+          hasMoreOlderRef.current = false;
+          setHasMoreOlder(false);
+          oldestCreatedAtRef.current = null;
           return;
         }
 
@@ -163,6 +241,9 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         } else {
           setCurrentThreadId(null);
           setMessages([]);
+          hasMoreOlderRef.current = false;
+          setHasMoreOlder(false);
+          oldestCreatedAtRef.current = null;
         }
       } catch (err) {
         console.error('[Chat] Failed to load threads:', err);
@@ -177,9 +258,11 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
   const switchToThread = useCallback(async (threadId) => {
     if (!threadId) return;
     await saveLockRef.current;
+    flushStreamingSave();
 
     try {
-      const result = await window.foundry?.chatGetMessages(threadId, 100, null);
+      // Only load the most recent page; older pages stream in via infinite-scroll.
+      const result = await window.foundry?.chatGetMessages(threadId, MESSAGE_PAGE_SIZE, null);
       const loadedMessages = (result?.messages || [])
         .map(storedToMessage)
         .filter(Boolean);
@@ -187,6 +270,15 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       setMessages(loadedMessages);
       setCurrentThreadId(threadId);
       setShowThreadList(false);
+      // Track pagination cursor: the createdAt of the oldest loaded message
+      // is what we pass back as `beforeTimestamp` to fetch the previous page.
+      const oldest = loadedMessages[0];
+      oldestCreatedAtRef.current = oldest?.createdAt || null;
+      const hasMore = !!result?.hasMore;
+      hasMoreOlderRef.current = hasMore;
+      setHasMoreOlder(hasMore);
+      // Reset scroll-position tracking — fresh thread, jump to bottom on next paint.
+      isAtBottomRef.current = true;
       // Clear message queue when switching threads
       messageQueueRef.current = [];
       setQueueSize(0);
@@ -194,6 +286,69 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     } catch (err) {
       console.error('[Chat] Failed to load messages for thread:', threadId, err);
     }
+  }, [flushStreamingSave]);
+
+  // ---- Load older page (infinite scroll up) ---- //
+  // Triggered when the user scrolls near the top of the message list. Prepends
+  // the previous page and restores scroll position so the user's view doesn't
+  // jump.
+  const loadOlderMessages = useCallback(async () => {
+    if (loadingOlderRef.current) return;
+    if (!hasMoreOlderRef.current) return;
+    const threadId = currentThreadIdRef.current;
+    if (!threadId) return;
+    const cursor = oldestCreatedAtRef.current;
+    if (!cursor) return;
+
+    loadingOlderRef.current = true;
+    setLoadingOlder(true);
+    const container = messagesContainerRef.current;
+    // Capture the distance from the bottom so we can restore exactly where
+    // the user was after the prepend grows the scrollable area.
+    const prevScrollHeight = container?.scrollHeight ?? 0;
+    const prevScrollTop = container?.scrollTop ?? 0;
+
+    try {
+      const result = await window.foundry?.chatGetMessages(threadId, MESSAGE_PAGE_SIZE, cursor);
+      const olderMessages = (result?.messages || [])
+        .map(storedToMessage)
+        .filter(Boolean);
+
+      if (olderMessages.length > 0) {
+        setMessages(prev => [...olderMessages, ...prev]);
+        oldestCreatedAtRef.current = olderMessages[0]?.createdAt || cursor;
+      }
+      const hasMore = !!result?.hasMore;
+      hasMoreOlderRef.current = hasMore;
+      setHasMoreOlder(hasMore);
+
+      // Restore scroll position: after prepend, scrollHeight grew. Keep the
+      // user's viewport on the same content by adding the height delta to
+      // their previous scrollTop. Use rAF so we measure after layout.
+      if (container && olderMessages.length > 0) {
+        requestAnimationFrame(() => {
+          const newScrollHeight = container.scrollHeight;
+          container.scrollTop = prevScrollTop + (newScrollHeight - prevScrollHeight);
+        });
+      }
+    } catch (err) {
+      console.error('[Chat] Failed to load older messages:', err);
+    } finally {
+      loadingOlderRef.current = false;
+      setLoadingOlder(false);
+    }
+  }, []);
+
+  // ---- Shared: reset pagination state when entering an empty/fresh chat ---- //
+  // Without this, the "Scroll up to load older messages" banner can leak from
+  // a previous thread into a new or emptied one.
+  const resetPaginationState = useCallback(() => {
+    hasMoreOlderRef.current = false;
+    setHasMoreOlder(false);
+    loadingOlderRef.current = false;
+    setLoadingOlder(false);
+    oldestCreatedAtRef.current = null;
+    isAtBottomRef.current = true;
   }, []);
 
   // ---- Create a new thread ---- //
@@ -209,6 +364,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         setThreads(prev => [thread, ...prev]);
         setCurrentThreadId(id);
         setMessages([]);
+        resetPaginationState();
         setShowThreadList(false);
         await window.foundry?.setSetting('last_chat_thread_id', id);
         return id;
@@ -217,7 +373,7 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       console.error('[Chat] Failed to create thread:', err);
     }
     return null;
-  }, [projectPath]);
+  }, [projectPath, resetPaginationState]);
 
   // ---- Delete a thread ---- //
   const handleDeleteThread = useCallback(async (threadId, e) => {
@@ -233,23 +389,25 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         } else {
           setCurrentThreadId(null);
           setMessages([]);
+          resetPaginationState();
         }
       }
     } catch (err) {
       console.error('[Chat] Failed to delete thread:', err);
     }
-  }, [currentThreadId, threads, switchToThread]);
+  }, [currentThreadId, threads, switchToThread, resetPaginationState]);
 
   // ---- New chat handler ---- //
   const handleNewChat = useCallback(async (closeDropdown) => {
     await saveLockRef.current;
     setCurrentThreadId(null);
     setMessages([]);
+    resetPaginationState();
     // Clear message queue on new chat
     messageQueueRef.current = [];
     setQueueSize(0);
     if (closeDropdown) setShowThreadList(false);
-  }, []);
+  }, [resetPaginationState]);
 
   // ---- Check provider ---- //
   const reconnectRef = useRef(null);
@@ -491,10 +649,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
           // Incremental save via the ref mirror — reading setMessages(prev=>prev)
           // on every block-stop forced React through its scheduler even though
           // we weren't changing state.
+          // Use the debounced streaming save: a 30-block tool-heavy message
+          // used to fire 30 IPC chains (each: saveMessages + getMessageCount +
+          // updateThread = 3 round-trips). Coalesces to one write per debounce
+          // window without count/thread updates.
           const msgs = messagesRef.current;
           const lastIdx = msgs.length - 1;
           if (lastIdx >= 0 && msgs[lastIdx].role === 'assistant') {
-            saveMessageToDb({ ...msgs[lastIdx], blocks });
+            scheduleStreamingSave({ ...msgs[lastIdx], blocks });
           }
         }
         activeBlockIdxRef.current = -1;
@@ -529,6 +691,13 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         rafRef.current = null;
         pendingBlocksRef.current = null;
       }
+      // Cancel any pending debounced streaming save — the final save below
+      // supersedes it (and does include the count/thread-update pair).
+      if (streamSaveTimerRef.current) {
+        clearTimeout(streamSaveTimerRef.current);
+        streamSaveTimerRef.current = null;
+      }
+      streamSavePendingRef.current = null;
       // Only play sound/notify if no more queued messages
       if (messageQueueRef.current.length === 0) {
         playChatCompleteSound();
@@ -567,6 +736,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       setIsStreaming(false);
       setStreamId(null);
       setError(error);
+      // Drop the pending partial-save snapshot; the final save below supersedes it.
+      // If we don't clear, a trailing partial write could land AFTER the final
+      // write in the save-lock chain and overwrite it with stale content.
+      if (streamSaveTimerRef.current) {
+        clearTimeout(streamSaveTimerRef.current);
+        streamSaveTimerRef.current = null;
+      }
+      streamSavePendingRef.current = null;
       // If the error looks auth-related, re-check provider to trigger auto-reconnect
       const errLower = (error || '').toLowerCase();
       if (errLower.includes('auth') || errLower.includes('401') || errLower.includes('unauthorized') || errLower.includes('token') || errLower.includes('credential')) {
@@ -600,21 +777,59 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+      // Flush (don't lose) any pending streaming save if the panel unmounts
+      // mid-stream — e.g. closing a split panel while it's still generating.
+      if (streamSaveTimerRef.current) {
+        clearTimeout(streamSaveTimerRef.current);
+        streamSaveTimerRef.current = null;
+        const pending = streamSavePendingRef.current;
+        streamSavePendingRef.current = null;
+        if (pending) writeMessage(pending, false);
+      }
     };
-  }, [updateAssistantBlocks, saveMessageToDb, checkProvider]);
+  }, [updateAssistantBlocks, saveMessageToDb, scheduleStreamingSave, writeMessage, checkProvider]);
 
-  // Throttled auto-scroll: avoids layout thrash during streaming
+  // Throttled auto-scroll: only sticks to the bottom if the user is already
+  // at (or near) the bottom. If they've scrolled up to read history, we must
+  // not yank them back down on every streaming delta — that fighting was one
+  // of the worst perceived-lag sources in split-panel sessions.
   const scrollRafRef = useRef(null);
   useEffect(() => {
+    if (!isAtBottomRef.current) return; // respect user scroll position
     if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
     scrollRafRef.current = requestAnimationFrame(() => {
       scrollRafRef.current = null;
-      messagesEndRef.current?.scrollIntoView({ behavior: isStreaming ? 'auto' : 'smooth' });
+      // scrollTop assignment is cheaper than scrollIntoView (no geometry calc
+      // for a target element) and doesn't trigger nested scroll-container
+      // adjustments elsewhere in the IDE shell.
+      const container = messagesContainerRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
     });
     return () => {
       if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current);
     };
   }, [messages, isStreaming]);
+
+  // ---- Scroll listener: infinite-scroll-up + at-bottom tracking ---- //
+  const scrollHandlerRafRef = useRef(null);
+  const handleMessagesScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    // Coalesce rapid scroll events through rAF — browsers can fire scroll
+    // at wheel rate (100+ Hz on trackpads) and we only need one check per
+    // frame.
+    if (scrollHandlerRafRef.current) return;
+    scrollHandlerRafRef.current = requestAnimationFrame(() => {
+      scrollHandlerRafRef.current = null;
+      const c = messagesContainerRef.current;
+      if (!c) return;
+      const distanceFromBottom = c.scrollHeight - c.scrollTop - c.clientHeight;
+      isAtBottomRef.current = distanceFromBottom <= AT_BOTTOM_THRESHOLD_PX;
+      if (c.scrollTop <= LOAD_OLDER_THRESHOLD_PX) {
+        loadOlderMessages();
+      }
+    });
+  }, [loadOlderMessages]);
 
   // ---- Core send logic (takes explicit content + images) ---- //
   const handleSendDirect = async (contentText, contentImages) => {
@@ -695,6 +910,10 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     };
 
     setMessages(prev => [...prev, userMsg, assistantPlaceholder]);
+    // Sending a message is an explicit user action — they expect to see the
+    // outgoing message and the response. Re-stick to bottom even if they had
+    // scrolled up reading history.
+    isAtBottomRef.current = true;
     // Revoke object URLs for images that had previews
     attachedImages.forEach(img => { if (img.preview) URL.revokeObjectURL(img.preview); });
     setIsStreaming(true);
@@ -804,6 +1023,14 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
       await window.foundry?.claudeStopStream(currentStreamId);
       setIsStreaming(false);
       setStreamId(null);
+      // Drop any pending partial save — the full save below is the truth.
+      // Without this, a trailing partial write could land after the full
+      // save and revert it to a pre-stop snapshot.
+      if (streamSaveTimerRef.current) {
+        clearTimeout(streamSaveTimerRef.current);
+        streamSaveTimerRef.current = null;
+      }
+      streamSavePendingRef.current = null;
       const blocks = blocksRef.current.map(b => ({ ...b, streaming: false }));
       blocksRef.current = blocks;
       setMessages(prev => {
@@ -856,28 +1083,55 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
         onPanelClose={onPanelClose}
       />
 
-      <div className={styles.messages}>
+      <div
+        className={styles.messages}
+        ref={messagesContainerRef}
+        onScroll={handleMessagesScroll}
+      >
         <ChatEmptyState
           hasProvider={hasProvider}
           hasMessages={messages.length > 0}
           onOpenSettings={onOpenSettings}
           onSelectPrompt={handleSelectPrompt}
         />
+        {hasMoreOlder && (
+          <div className={styles.loadOlderBanner}>
+            {loadingOlder ? (
+              <>
+                <FiLoader size={12} className={styles.loadOlderSpin} />
+                <span>Loading older messages…</span>
+              </>
+            ) : (
+              <span>Scroll up to load older messages</span>
+            )}
+          </div>
+        )}
         {messages.map((msg, i) => {
           const isLast = i === messages.length - 1;
+          // Each message wrapped in a CSS content-visibility container so the
+          // browser can skip layout/paint for off-screen messages entirely.
+          // contain-intrinsic-size gives it a placeholder box so scroll
+          // height stays stable — without it, scrollbars jitter as items
+          // enter/leave the viewport. `auto` lets the browser measure on
+          // first paint, and the value we pass in is just an initial hint.
           if (msg.role === 'user') {
-            return <UserMessage key={msg.id || i} msg={msg} />;
+            return (
+              <div key={msg.id || i} className={styles.messageSlot}>
+                <UserMessage msg={msg} />
+              </div>
+            );
           }
           // Only forward isStreaming to the last message. Passing it to
           // every message makes every AgentMessage memo miss on each
           // streaming delta — re-rendering the full history 60x/second.
           return (
-            <AgentMessage
-              key={msg.id || i}
-              msg={msg}
-              isStreaming={isLast && isStreaming}
-              isLastMsg={isLast}
-            />
+            <div key={msg.id || i} className={styles.messageSlot}>
+              <AgentMessage
+                msg={msg}
+                isStreaming={isLast && isStreaming}
+                isLastMsg={isLast}
+              />
+            </div>
           );
         })}
         {error && (

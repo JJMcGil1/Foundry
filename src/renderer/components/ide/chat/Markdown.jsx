@@ -6,7 +6,43 @@ import styles from './Markdown.module.css';
 // Handles: code blocks, tables, headers (h1-h6), lists (ul/ol/task),
 // blockquotes, HR, bold, italic, bold-italic, strikethrough, inline code, links
 
+// Module-scoped LRU cache for parsed markdown.
+// Why: the streaming flush rebuilds the assistant `msg` object on every block
+// boundary, which makes AgentMessage re-render and re-call renderMarkdown for
+// every text block in the message — even text blocks that came before a tool
+// call and never change. With 5+ tool blocks interleaved between text blocks,
+// each streaming delta was re-parsing all of them. Cache stable text blocks
+// by exact content; the actively-streaming tail still parses fresh each time
+// because its content keeps growing.
+// Cap: 500 entries is enough for a few hundred messages worth of text blocks
+// and keeps the cache memory bounded (~a few MB even with long blocks).
+const MD_CACHE_LIMIT = 500;
+const mdCache = new Map();
+
+function cachedRenderMarkdown(text) {
+  if (mdCache.has(text)) {
+    // Refresh recency: delete + re-insert so Map iteration order = LRU order.
+    const cached = mdCache.get(text);
+    mdCache.delete(text);
+    mdCache.set(text, cached);
+    return cached;
+  }
+  const result = renderMarkdownImpl(text);
+  mdCache.set(text, result);
+  if (mdCache.size > MD_CACHE_LIMIT) {
+    // Evict oldest entry (first inserted via Map iteration order).
+    const oldest = mdCache.keys().next().value;
+    if (oldest !== undefined) mdCache.delete(oldest);
+  }
+  return result;
+}
+
 export function renderMarkdown(text) {
+  if (!text) return null;
+  return cachedRenderMarkdown(text);
+}
+
+function renderMarkdownImpl(text) {
   if (!text) return null;
 
   // Split into code blocks and non-code segments
