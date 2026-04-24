@@ -12,37 +12,21 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  background: rgba(28, 28, 31, 0.55);
+  background: rgba(24, 24, 27, 0.9);
   border: 1px solid rgba(249, 115, 22, 0.25);
   border-radius: 16px;
   overflow: visible;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 8px rgba(0, 0, 0, 0.06),
-    0 8px 24px rgba(0, 0, 0, 0.08),
-    0 16px 48px rgba(0, 0, 0, 0.06);
+  transition: border-color 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  contain: layout paint;
 }
 
 .inputWrapper:hover:not(:focus-within) {
   border-color: rgba(249, 115, 22, 0.4);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 8px rgba(0, 0, 0, 0.06),
-    0 8px 24px rgba(0, 0, 0, 0.08),
-    inset 0 0 0 0.5px rgba(249, 115, 22, 0.35),
-    0 0 6px rgba(249, 115, 22, 0.1),
-    0 0 16px rgba(249, 115, 22, 0.05);
 }
 
 .inputWrapper:focus-within {
   border-color: rgba(249, 115, 22, 0.55);
-  box-shadow:
-    0 1px 2px rgba(0, 0, 0, 0.04),
-    0 4px 8px rgba(0, 0, 0, 0.06),
-    inset 0 0 0 1px rgba(249, 115, 22, 0.4),
-    0 0 10px rgba(249, 115, 22, 0.12),
-    0 0 28px rgba(249, 115, 22, 0.06);
 }
 
 .input {
@@ -483,7 +467,7 @@
 }
 
 :global([data-theme="light"]) .inputWrapper {
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(252, 252, 253, 0.95);
 }
 
 :global([data-theme="light"]) .combinedPill {

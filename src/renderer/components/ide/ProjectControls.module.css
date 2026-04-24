@@ -11,14 +11,12 @@
   gap: 0;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.15s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
 }
 
 .pill:hover {
-  background: rgba(255, 255, 255, 0.10);
   border-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
 }
 
 :global([data-theme="light"]) .pill {
@@ -28,9 +26,7 @@
 }
 
 :global([data-theme="light"]) .pill:hover {
-  background: rgba(255, 255, 255, 0.85);
   border-color: rgba(0, 0, 0, 0.15);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 0.5px 0 rgba(255, 255, 255, 0.9);
 }
 
 /* ── Segment button ── */

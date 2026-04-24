@@ -81,13 +81,12 @@
   align-self: flex-end;
   max-width: 78%;
   background: var(--user-bubble);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
   border-radius: 14px 14px 4px 14px;
   padding: 10px 14px;
   border: 1px solid var(--user-bubble-border);
   position: relative;
   box-shadow: var(--user-bubble-shadow);
+  contain: layout paint;
 }
 
 /* tail removed in favor of asymmetric corner radius */

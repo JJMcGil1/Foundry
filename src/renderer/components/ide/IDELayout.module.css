@@ -296,16 +296,16 @@
   overflow: hidden;
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.25),
-    0 1px 4px rgba(0, 0, 0, 0.12),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
   pointer-events: auto;
-  transition: box-shadow 0.25s ease, border-color 0.25s ease;
+  transition: border-color 0.15s ease;
   animation: panelIn 0.42s cubic-bezier(0.34, 1.5, 0.5, 1) both;
   transform-origin: center center;
   will-change: transform, opacity;
   background: rgba(17, 17, 19, 0.48);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
+  contain: layout paint;
 }
 
 /* While the user is dragging, resizing, panning or wheel-scrolling the
@@ -388,11 +388,6 @@
 
 .canvasPanel:hover {
   border-color: rgba(255, 255, 255, 0.15);
-  box-shadow:
-    0 8px 28px rgba(0, 0, 0, 0.3),
-    0 2px 8px rgba(0, 0, 0, 0.15),
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.06),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04);
 }
 
 .canvasPanelDragging {
@@ -410,17 +405,11 @@
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow:
     0 4px 20px rgba(0, 0, 0, 0.06),
-    0 1px 4px rgba(0, 0, 0, 0.04),
     inset 0 0.5px 0 rgba(255, 255, 255, 0.5);
 }
 
 :global([data-theme="light"]) .canvasPanel:hover {
   border-color: rgba(0, 0, 0, 0.30);
-  box-shadow:
-    0 8px 28px rgba(0, 0, 0, 0.1),
-    0 2px 8px rgba(0, 0, 0, 0.05),
-    inset 0 0.5px 0 rgba(255, 255, 255, 0.6),
-    inset 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
 
 :global([data-theme="light"]) .canvasPanelDragging {
@@ -529,12 +518,11 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.15s ease;
 }
 
 .centerGroup:hover {
   border-color: rgba(255, 255, 255, 0.16);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
 }
 
 :global([data-theme="light"]) .centerGroup {
@@ -625,14 +613,12 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), inset 0 0.5px 0 rgba(255, 255, 255, 0.06);
-  transition: background 0.2s ease, border-color 0.2s ease, color 0.15s ease, box-shadow 0.2s ease;
+  transition: border-color 0.15s ease, color 0.15s ease;
 }
 
 .addPanelBtn:hover {
-  background: rgba(255, 255, 255, 0.10);
   border-color: rgba(255, 255, 255, 0.16);
   color: var(--zinc-100);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18), inset 0 0.5px 0 rgba(255, 255, 255, 0.08);
 }
 
 .addPanelBtn:active,
