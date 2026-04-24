@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState, useImperativeHandle, forwardRef } from 'react';
+import React, { useRef, useEffect, useCallback, useState, useImperativeHandle, forwardRef, memo } from 'react';
 import { FiPlus, FiX } from 'react-icons/fi';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -172,18 +172,37 @@ const TerminalPanel = forwardRef(function TerminalPanel({ projectPath, onClose, 
     return () => clearTimeout(timer);
   }, [activeTermId]);
 
-  // ResizeObserver for container size changes
+  // ResizeObserver for container size changes. During panel drag/resize we
+  // update style.width/height imperatively every frame, which fires the
+  // observer every frame — fitAddon.fit() reads layout and spawns an IPC
+  // round-trip, so left unthrottled it turns panel drag into layout thrash.
+  // rAF-coalesce to at most one fit per frame, and only fit if dimensions
+  // actually changed since the last run.
   useEffect(() => {
     if (!containerRef.current) return;
 
-    resizeObserverRef.current = new ResizeObserver(() => {
+    let pending = false;
+    let lastW = 0;
+    let lastH = 0;
+    resizeObserverRef.current = new ResizeObserver((entries) => {
       if (!activeTermId) return;
-      const entry = terminalsRef.current.get(activeTermId);
-      if (!entry) return;
-      try {
-        entry.fitAddon.fit();
-        window.foundry?.terminalResize(entry.ptyId, entry.xterm.cols, entry.xterm.rows);
-      } catch {}
+      const cr = entries[0]?.contentRect;
+      if (cr) {
+        if (Math.abs(cr.width - lastW) < 1 && Math.abs(cr.height - lastH) < 1) return;
+        lastW = cr.width;
+        lastH = cr.height;
+      }
+      if (pending) return;
+      pending = true;
+      requestAnimationFrame(() => {
+        pending = false;
+        const entry = terminalsRef.current.get(activeTermId);
+        if (!entry) return;
+        try {
+          entry.fitAddon.fit();
+          window.foundry?.terminalResize(entry.ptyId, entry.xterm.cols, entry.xterm.rows);
+        } catch {}
+      });
     });
 
     resizeObserverRef.current.observe(containerRef.current);
@@ -361,4 +380,4 @@ const TerminalPanel = forwardRef(function TerminalPanel({ projectPath, onClose, 
   );
 });
 
-export default TerminalPanel;
+export default memo(TerminalPanel);

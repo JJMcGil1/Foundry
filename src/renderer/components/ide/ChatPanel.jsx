@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { FiAlertCircle, FiLoader } from 'react-icons/fi';
 import styles from './ChatPanel.module.css';
 
@@ -42,7 +42,11 @@ function playChatCompleteSound() {
 }
 
 // ---- Main ChatPanel Component ---- //
-export default function ChatPanel({ onOpenSettings, projectPath, startFresh = false, panelDragProps, onPanelClose, initialThreadId, onThreadChange }) {
+// Memoized: every IDELayout re-render would otherwise rebuild this entire tree
+// (streaming state, blocks, messages, pagination). IDELayout now passes stable
+// per-panel callbacks so shallow-compare memo shorts-circuits when nothing the
+// panel cares about has changed.
+function ChatPanel({ onOpenSettings, projectPath, startFresh = false, panelDragProps, onPanelClose, initialThreadId, onThreadChange }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [images, setImages] = useState([]);
@@ -1176,3 +1180,5 @@ export default function ChatPanel({ onOpenSettings, projectPath, startFresh = fa
     </div>
   );
 }
+
+export default memo(ChatPanel);

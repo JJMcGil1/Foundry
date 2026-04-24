@@ -107,10 +107,15 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const isResizingRef = useRef(false);
   const dragAbortRef = useRef(null);
   const [closingPanelIds, setClosingPanelIds] = useState(new Set());
+  // Ref-backed mirror of closingPanelIds — lets callbacks check membership
+  // without depending on state (which would make them unstable and re-create
+  // every inline per-panel `() => removePanel(id)` on every root re-render).
+  const closingPanelIdsRef = useRef(new Set());
   const layoutRestoredRef = useRef(false);
   const layoutSaveTimer = useRef(null);
 
   useEffect(() => { panelsRef.current = panels; }, [panels]);
+  useEffect(() => { closingPanelIdsRef.current = closingPanelIds; }, [closingPanelIds]);
 
   // ── Restore saved panel layout on mount ──
   useEffect(() => {
@@ -229,6 +234,16 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   const [activeTab, setActiveTab] = useState(null);
   const [gitStatus, setGitStatus] = useState({ branch: '', files: [], isRepo: false });
   const [gitRefreshKey, setGitRefreshKey] = useState(0);
+
+  // Ref-backed mirrors so callbacks can read the latest value without
+  // having state in their deps. Keeping callbacks stable is what lets
+  // React.memo on child panels actually short-circuit re-renders.
+  const projectRef = useRef(null);
+  const openTabsRef = useRef([]);
+  const activeTabRef = useRef(null);
+  useEffect(() => { projectRef.current = project; }, [project]);
+  useEffect(() => { openTabsRef.current = openTabs; }, [openTabs]);
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
 
   // File tree expanded paths
   const [expandedPaths, setExpandedPaths] = useState(new Set());
@@ -351,8 +366,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, []);
 
   // ── File operations ──
+  // Stable callbacks: use refs instead of state deps so identity doesn't
+  // change on every parent re-render. This is required for React.memo on
+  // child panels (ChatPanel, EditorArea, …) to short-circuit renders.
   const handleOpenFile = useCallback(async (filePath) => {
-    const existing = openTabs.find(t => t.path === filePath);
+    const existing = openTabsRef.current.find(t => t.path === filePath);
     if (existing) { setActiveTab(filePath); return; }
     const file = await window.foundry?.readFile(filePath);
     if (file && !file.error) {
@@ -361,22 +379,21 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         language: file.language, modified: false, originalContent: file.content,
       }]);
       setActiveTab(filePath);
-      // Ensure editor panel exists
       setPanels(prev => {
         if (prev.some(p => p.type === 'editor')) return prev;
         const pos = getNewPanelPosition('editor', prev);
         return [...prev, { id: makePanelId(), type: 'editor', ...pos, zIndex: nextZIndexRef.current++ }];
       });
     }
-  }, [openTabs, getNewPanelPosition]);
+  }, [getNewPanelPosition]);
 
   const handleCloseTab = useCallback((filePath) => {
     setOpenTabs(prev => {
       const next = prev.filter(t => t.path !== filePath);
-      if (activeTab === filePath) setActiveTab(next.length > 0 ? next[next.length - 1].path : null);
+      if (activeTabRef.current === filePath) setActiveTab(next.length > 0 ? next[next.length - 1].path : null);
       return next;
     });
-  }, [activeTab]);
+  }, []);
 
   const handleContentChange = useCallback((filePath, newContent) => {
     setOpenTabs(prev => prev.map(t =>
@@ -385,7 +402,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, []);
 
   const handleSaveFile = useCallback(async (filePath) => {
-    const tab = openTabs.find(t => t.path === filePath);
+    const tab = openTabsRef.current.find(t => t.path === filePath);
     if (!tab) return;
     const result = await window.foundry?.writeFile(filePath, tab.content);
     if (result?.success) {
@@ -393,7 +410,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         t.path === filePath ? { ...t, modified: false, originalContent: tab.content } : t
       ));
     }
-  }, [openTabs]);
+  }, []);
 
   // Remove editor panel when all tabs close
   useEffect(() => {
@@ -422,13 +439,14 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, []);
 
   const refreshTree = useCallback(async () => {
-    if (!project) return;
-    const tree = await window.foundry?.readDir(project.path);
+    const p = projectRef.current;
+    if (!p) return;
+    const tree = await window.foundry?.readDir(p.path);
     if (tree) setFileTree(tree);
-    const status = await window.foundry?.gitStatus(project.path);
+    const status = await window.foundry?.gitStatus(p.path);
     if (status) setGitStatus(status);
     setGitRefreshKey(k => k + 1);
-  }, [project]);
+  }, []);
 
   // Event-driven workspace refresh. The main process watches the workspace
   // (and .git) with fs.watch and emits `workspace:changed` whenever something
@@ -465,9 +483,26 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     };
 
     window.foundry?.watchWorkspace?.(project.path);
+    // Coalesce bursts of fs.watch events (a single save can emit 3–5 events;
+    // Claude editing many files emits dozens in a tight window). Without this
+    // debounce every event spawns `git status` + re-renders the IDELayout root,
+    // which in turn re-renders every panel. 180ms keeps the UI responsive to
+    // real changes while collapsing same-operation bursts into one refresh.
+    const WATCH_DEBOUNCE_MS = 180;
+    let pendingOpts = null;
+    let debounceTimer = null;
     const unsubscribe = window.foundry?.onWorkspaceChanged?.((info) => {
       if (!info || info.path !== project.path) return;
-      refresh({ structural: !!info.structural, gitMeta: !!info.gitMeta });
+      if (!pendingOpts) pendingOpts = { structural: false, gitMeta: false };
+      if (info.structural) pendingOpts.structural = true;
+      if (info.gitMeta) pendingOpts.gitMeta = true;
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        const opts = pendingOpts;
+        pendingOpts = null;
+        debounceTimer = null;
+        refresh(opts);
+      }, WATCH_DEBOUNCE_MS);
     });
 
     // Fallback poll — spawns `git status` + `git log`, which is the single
@@ -495,6 +530,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     return () => {
       cancelled = true;
       stop();
+      clearTimeout(debounceTimer);
       document.removeEventListener('visibilitychange', sync);
       classObserver.disconnect();
       if (typeof unsubscribe === 'function') unsubscribe();
@@ -503,26 +539,29 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, [project]);
 
   // ── Panel management ──
+  // Stable callbacks (empty state deps; read via refs). Cascading per-panel
+  // bindings below rely on these being referentially stable across renders.
   const addPanel = useCallback((type) => {
     const config = PANEL_TYPES[type];
     if (!config) return;
+    const currentPanels = panelsRef.current;
     if (config.singleton) {
-      const existing = panels.find(p => p.type === type);
+      const existing = currentPanels.find(p => p.type === type);
       if (existing) return existing.id;
     }
-    if (type === 'chat' && panels.filter(p => p.type === 'chat').length >= 4) return;
+    if (type === 'chat' && currentPanels.filter(p => p.type === 'chat').length >= 4) return;
     const id = makePanelId();
-    const isFirstOfType = !panels.some(p => p.type === type);
-    const pos = getNewPanelPosition(type, panels);
+    const isFirstOfType = !currentPanels.some(p => p.type === type);
+    const pos = getNewPanelPosition(type, currentPanels);
     const zIndex = nextZIndexRef.current++;
     const newPanel = { id, type, ...pos, zIndex, startFresh: !isFirstOfType };
     setPanels(prev => [...prev, newPanel]);
     return id;
-  }, [panels, getNewPanelPosition]);
+  }, [getNewPanelPosition]);
 
   const removePanel = useCallback((panelId) => {
-    const panel = panels.find(p => p.id === panelId);
-    if (!panel || closingPanelIds.has(panelId)) return;
+    const panel = panelsRef.current.find(p => p.id === panelId);
+    if (!panel || closingPanelIdsRef.current.has(panelId)) return;
     if (panel.type === 'editor') {
       setOpenTabs([]);
       setActiveTab(null);
@@ -536,7 +575,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
         return next;
       });
     }, 260);
-  }, [panels, closingPanelIds]);
+  }, []);
 
   // ── Canvas: bring panel to front ──
   const bringToFront = useCallback((panelId) => {
@@ -551,13 +590,13 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, []);
 
   const togglePanel = useCallback((type) => {
-    const existing = panels.find(p => p.type === type && !closingPanelIds.has(p.id));
+    const existing = panelsRef.current.find(p => p.type === type && !closingPanelIdsRef.current.has(p.id));
     if (existing) {
       bringToFront(existing.id);
     } else {
       addPanel(type);
     }
-  }, [panels, addPanel, bringToFront, closingPanelIds]);
+  }, [addPanel, bringToFront]);
 
   // ── Canvas: abort any active drag/resize/pan operation ──
   const abortActiveDrag = useCallback(() => {
@@ -755,6 +794,56 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
     document.addEventListener('mouseup', finish, opts);
     window.addEventListener('blur', finish, opts);
   }, [bringToFront, abortActiveDrag, beginCanvasInteraction, endCanvasInteraction]);
+
+  // ── Per-panel callback cache ──
+  // The JSX for each panel used to create fresh inline callbacks on every
+  // render (`() => removePanel(panel.id)`, `(e) => handlePanelDrag(e, panel.id)`,
+  // …). Every root re-render — which happens on every file-save, git update,
+  // toast, theme toggle — handed every panel new prop identities, which
+  // defeated every React.memo on the tree. This cache builds one binding set
+  // per panel.id, reused for the panel's entire lifetime.
+  const panelBindingsRef = useRef(new Map());
+  const getPanelBindings = useCallback((panelId) => {
+    let b = panelBindingsRef.current.get(panelId);
+    if (!b) {
+      b = {
+        onPanelClose: () => removePanel(panelId),
+        onBringToFront: () => bringToFront(panelId),
+        onThreadChange: (threadId) => handleChatThreadChange(panelId, threadId),
+        panelDragProps: { onMouseDown: (e) => handlePanelDrag(e, panelId) },
+        onSettingsClose: () => {
+          removePanel(panelId);
+          setSettingsInitialSection(null);
+          const p = projectRef.current;
+          if (p?.path) {
+            window.foundry?.getSetting(`start_command_${p.path}`).then((cmd) => {
+              if (cmd !== undefined) setStartCommand(cmd || '');
+            }).catch(() => {});
+          }
+        },
+        resize: {
+          n:  (e) => handlePanelResize(e, panelId, 'n'),
+          s:  (e) => handlePanelResize(e, panelId, 's'),
+          e:  (e) => handlePanelResize(e, panelId, 'e'),
+          w:  (e) => handlePanelResize(e, panelId, 'w'),
+          ne: (e) => handlePanelResize(e, panelId, 'ne'),
+          nw: (e) => handlePanelResize(e, panelId, 'nw'),
+          se: (e) => handlePanelResize(e, panelId, 'se'),
+          sw: (e) => handlePanelResize(e, panelId, 'sw'),
+        },
+      };
+      panelBindingsRef.current.set(panelId, b);
+    }
+    return b;
+  }, [removePanel, bringToFront, handleChatThreadChange, handlePanelDrag, handlePanelResize]);
+
+  // Garbage-collect bindings for panels that no longer exist
+  useEffect(() => {
+    const ids = new Set(panels.map(p => p.id));
+    for (const k of panelBindingsRef.current.keys()) {
+      if (!ids.has(k)) panelBindingsRef.current.delete(k);
+    }
+  }, [panels]);
 
   // ── Canvas: pan (drag background) ──
   const handleCanvasMouseDown = useCallback((e) => {
@@ -1162,7 +1251,13 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
   }, [togglePanel]);
 
   // ── Panel content renderer ──
-  const renderPanelContent = (panel, dragProps) => {
+  // `bindings` carries the stable per-panel callbacks (onPanelClose, drag,
+  // resize, thread-change) from `getPanelBindings(panel.id)`. Using them here
+  // instead of inline `() => …` wrappers is what lets React.memo on ChatPanel,
+  // TerminalPanel, EditorArea, WhatsDonePanel actually short-circuit renders
+  // when the IDELayout root re-renders for unrelated reasons.
+  const renderPanelContent = (panel, bindings) => {
+    const dragProps = bindings.panelDragProps;
     switch (panel.type) {
       case 'files':
         return {
@@ -1242,7 +1337,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             <TerminalPanel
               ref={terminalPanelRef}
               projectPath={project?.path}
-              onClose={() => removePanel(panel.id)}
+              onClose={bindings.onPanelClose}
               panelDragProps={dragProps}
             />
           ),
@@ -1254,7 +1349,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
           content: (
             <WhatsDonePanel
               projectPath={project?.path}
-              onClose={() => removePanel(panel.id)}
+              onClose={bindings.onPanelClose}
               panelDragProps={dragProps}
             />
           ),
@@ -1267,11 +1362,11 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
             <ChatPanel
               projectPath={project?.path}
               onOpenSettings={handleOpenSettings}
-              onPanelClose={() => removePanel(panel.id)}
+              onPanelClose={bindings.onPanelClose}
               panelDragProps={dragProps}
               startFresh={!!panel.startFresh}
               initialThreadId={panel.threadId}
-              onThreadChange={(threadId) => handleChatThreadChange(panel.id, threadId)}
+              onThreadChange={bindings.onThreadChange}
             />
           ),
         };
@@ -1290,7 +1385,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               onOpenFolder={handleOpenFolder}
               project={project}
               onReorderTabs={setOpenTabs}
-              onPanelClose={() => removePanel(panel.id)}
+              onPanelClose={bindings.onPanelClose}
               panelDragProps={dragProps}
             />
           ),
@@ -1304,15 +1399,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               <PanelHeader
                 title="Settings"
                 icon={VscSettingsGear}
-                onClose={() => {
-                  removePanel(panel.id);
-                  setSettingsInitialSection(null);
-                  if (project?.path) {
-                    window.foundry?.getSetting(`start_command_${project.path}`).then((cmd) => {
-                      if (cmd !== undefined) setStartCommand(cmd || '');
-                    }).catch(() => {});
-                  }
-                }}
+                onClose={bindings.onSettingsClose}
                 onMouseDown={dragProps.onMouseDown}
               />
               <div style={{ flex: 1, overflow: 'hidden' }}>
@@ -1505,10 +1592,8 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
               {panels.map((panel) => {
                 const config = PANEL_TYPES[panel.type] || {};
                 const Icon = config.icon;
-                const dragProps = {
-                  onMouseDown: (e) => handlePanelDrag(e, panel.id),
-                };
-                const rendered = renderPanelContent(panel, dragProps);
+                const bindings = getPanelBindings(panel.id);
+                const rendered = renderPanelContent(panel, bindings);
 
                 return (
                   <div
@@ -1522,14 +1607,14 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                       height: panel.height,
                       zIndex: panel.zIndex,
                     }}
-                    onMouseDown={() => bringToFront(panel.id)}
+                    onMouseDown={bindings.onBringToFront}
                   >
                     {rendered.header === 'panelHeader' && (
                       <PanelHeader
                         title={config.title || panel.type}
                         icon={Icon}
-                        onClose={() => removePanel(panel.id)}
-                        onMouseDown={dragProps.onMouseDown}
+                        onClose={bindings.onPanelClose}
+                        onMouseDown={bindings.panelDragProps.onMouseDown}
                       >
                         {rendered.headerActions}
                       </PanelHeader>
@@ -1545,7 +1630,7 @@ export default function IDELayout({ profile, onProfileChange, initialProjectPath
                       <div
                         key={dir}
                         className={`${styles.resizeHandle} ${styles['resize' + dir.charAt(0).toUpperCase() + dir.slice(1)]}`}
-                        onMouseDown={(e) => handlePanelResize(e, panel.id, dir)}
+                        onMouseDown={bindings.resize[dir]}
                       />
                     ))}
                   </div>

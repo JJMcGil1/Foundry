@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { LuSquareCheckBig } from 'react-icons/lu';
 import { FiPlus, FiX, FiTrash2, FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import PanelHeader from './PanelHeader';
@@ -59,7 +59,7 @@ function formatTime(iso) {
   return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase();
 }
 
-export default function WhatsDonePanel({ projectPath, onClose, panelDragProps }) {
+function WhatsDonePanel({ projectPath, onClose, panelDragProps }) {
   const [entries, setEntries] = useState([]);
   const [customLabels, setCustomLabels] = useState({});
   const [title, setTitle] = useState('');
@@ -398,3 +398,5 @@ export default function WhatsDonePanel({ projectPath, onClose, panelDragProps })
     </div>
   );
 }
+
+export default memo(WhatsDonePanel);

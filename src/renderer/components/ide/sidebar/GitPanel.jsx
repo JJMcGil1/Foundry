@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, memo } from 'react';
 import {
   FiRefreshCw, FiChevronRight,
   FiCheck, FiPlus, FiMinus, FiRotateCcw, FiUpload,
@@ -37,7 +37,7 @@ function parsePullOutput(output) {
   return null;
 }
 
-export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile, isActive, gitRefreshKey }) {
+function GitPanel({ gitStatus, projectPath, onOpenFile, onRefreshGit, activeFile, isActive, gitRefreshKey }) {
   const addToast = useToast();
   const [commitMsg, setCommitMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -655,3 +655,5 @@ export default function GitPanel({ gitStatus, projectPath, onOpenFile, onRefresh
     </div>
   );
 }
+
+export default memo(GitPanel);

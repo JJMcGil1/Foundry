@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { memo } from 'react';
 import TabBar from './TabBar';
 import CodeEditor from './CodeEditor';
 import styles from '../EditorArea.module.css';
 
-export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, onContentChange, onSaveFile, onOpenFolder, project, onReorderTabs, onPanelClose, panelDragProps }) {
+function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, onContentChange, onSaveFile, onOpenFolder, project, onReorderTabs, onPanelClose, panelDragProps }) {
   const currentTab = tabs.find(t => t.path === activeTab);
 
   return (
@@ -36,3 +36,5 @@ export default function EditorArea({ tabs, activeTab, onSelectTab, onCloseTab, o
     </div>
   );
 }
+
+export default memo(EditorArea);
